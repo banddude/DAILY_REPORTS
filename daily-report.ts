@@ -624,8 +624,8 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
         // Throw error instead of just warning if critical for S3 path
          throw new Error("Customer or Project name missing in profile.json. Cannot determine S3 path.");
       }
-      const customerFolder = reportJson.customer.replace(/[^a-zA-Z0-9\-\/_.]/g, '_').toLowerCase(); // Force lowercase
-      const projectFolder = reportJson.project.replace(/[^a-zA-Z0-9\-\/_.]/g, '_').toLowerCase(); // Force lowercase
+      const customerFolder = reportJson.customer.replace(/[^a-zA-Z0-9\-\/_.]/g, '_'); // Reverted: Removed .toLowerCase()
+      const projectFolder = reportJson.project.replace(/[^a-zA-Z0-9\-\/_.]/g, '_'); // Reverted: Removed .toLowerCase()
       const reportDirName = path.basename(outputBaseDir); 
 
       let baseS3Url: string | null = null;
