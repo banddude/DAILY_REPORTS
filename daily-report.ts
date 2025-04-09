@@ -706,7 +706,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
           try { // Wrap entire upload/cleanup logic to ensure cleanup happens on error
               if (!awsAccessKeyId || !awsSecretAccessKey) {
                   console.warn("\nAWS keys not found in .env, using default CLI config...");
-                  const uploadCommand = `aws s3 cp "${localSourcePath}" "${s3TargetPath}" --recursive`;
+                  const uploadCommand = `aws s3 cp "${localSourcePath}" "${s3TargetPath}" --recursive --acl public-read`;
                   await execAsync(uploadCommand); // Throws on error
                   uploadSuccess = true;
               } else {
@@ -715,7 +715,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
                   const stsCommand = `${envPrefix} aws sts get-caller-identity`;
                   await execAsync(stsCommand); // Verify credentials
                   console.log("AWS Credentials appear valid.");
-                  const uploadCommand = `${envPrefix} aws s3 cp "${localSourcePath}" "${s3TargetPath}" --recursive`;
+                  const uploadCommand = `${envPrefix} aws s3 cp "${localSourcePath}" "${s3TargetPath}" --recursive --acl public-read`;
                   await execAsync(uploadCommand); // Throws on error
                   uploadSuccess = true;
               }
