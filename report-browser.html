@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Browser</title>
+    <style>
+        :root {
+            --primary-text-color: #1f2328;
+            --secondary-text-color: #656d76;
+            --accent-color: #007aff;
+            --background-color: #ffffff;
+            --section-background-color: #f6f8fa;
+            --border-color: #d0d7de;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+            --border-radius: 6px;
+        }
+        body { font-family: var(--font-family); margin: 0; padding: 0; background-color: #f1f1f1; color: var(--primary-text-color); line-height: 1.6; }
+        .container { max-width: 900px; margin: 40px auto; padding: 30px; background-color: var(--background-color); border: 1px solid var(--border-color); border-radius: var(--border-radius); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        h1 { text-align: center; margin-bottom: 30px; } 
+        .controls { display: flex; gap: 20px; margin-bottom: 30px; align-items: flex-end; }
+        .control-group { flex: 1; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; }
+        select { width: 100%; padding: 10px; border-radius: var(--border-radius); border: 1px solid var(--border-color); background-color: #fff; font-size: 1em; }
+        select:disabled { background-color: #f0f0f0; cursor: not-allowed; }
+        #reportList { margin-top: 20px; list-style: none; padding: 0; }
+        #reportList li { background-color: var(--section-background-color); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        #reportList span { font-weight: 500; }
+        #reportList .links a { margin-left: 15px; color: var(--accent-color); text-decoration: none; font-size: 0.9em; }
+        #reportList .links a:hover { text-decoration: underline; }
+        .status { margin-top: 15px; color: var(--secondary-text-color); font-style: italic; }
+         .error-message { color: red; font-weight: bold; }
+        #generationControls { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-color); background-color: var(--section-background-color); padding: 20px; border-radius: var(--border-radius); }
+        #generationControls label { margin-right: 10px; }
+        #generateReportBtn { padding: 10px 15px; background-color: var(--accent-color); color: white; border: none; border-radius: var(--border-radius); cursor: pointer; font-size: 1em; margin-left: 10px; }
+        #generateReportBtn:disabled { background-color: #ccc; cursor: not-allowed; }
+        #generationStatus { margin-top: 15px; font-weight: 500; }
+        #generationStatus.success { color: var(--success-color); }
+        #generationStatus.error { color: var(--danger-color); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Report Browser</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="customerSelect">Customer:</label>
+                <select id="customerSelect">
+                    <option value="">-- Select Customer --</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="projectSelect">Project:</label>
+                <select id="projectSelect" disabled>
+                    <option value="">-- Select Project --</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="status" id="loadingStatus"></div>
+
+        <ul id="reportList"></ul>
+        <hr style="margin: 40px 0;">
+        <div id="generationControls">
+            <h2>Generate New Report</h2>
+            <div>
+                <label for="videoUpload">Select Video:</label>
+                <input type="file" id="videoUpload" name="video" accept="video/*"/>
+                <button id="generateReportBtn" disabled>Generate Report</button>
+            </div>
+            <div id="generationStatus"></div>
+        </div>
+    </div>
+
+    <script>
+        const customerSelect = document.getElementById('customerSelect');
+        const projectSelect = document.getElementById('projectSelect');
+        const reportList = document.getElementById('reportList');
+        const loadingStatus = document.getElementById('loadingStatus');
+        const videoUpload = document.getElementById('videoUpload');
+        const generateReportBtn = document.getElementById('generateReportBtn');
+        const generationStatus = document.getElementById('generationStatus');
+
+        let s3BucketName = 'shaffer-reports'; // Default, consider fetching if dynamic
+        let awsRegion = 'us-east-1'; // Default, consider fetching if dynamic
+
+        async function fetchItems(customer, project) {
+            let url = '/api/browse-reports';
+            const params = new URLSearchParams();
+            if (customer) params.append('customer', customer);
+            if (project) params.append('project', project);
+            
+            const queryString = params.toString();
+            if (queryString) {
+                url += `?${queryString}`;
+            }
+
+            loadingStatus.textContent = 'Loading...';
+            reportList.innerHTML = ''; // Clear previous list
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(errData.error || `HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                loadingStatus.textContent = ''; // Clear loading status
+                return data.items || [];
+            } catch (error) {
+                console.error("Error fetching items:", error);
+                loadingStatus.innerHTML = `<span class="error-message">Error loading data: ${error.message}</span>`;
+                return []; // Return empty array on error
+            }
+        }
+
+        function populateSelect(selectElement, items, defaultOptionText) {
+            selectElement.innerHTML = `<option value="">${defaultOptionText}</option>`; // Reset
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                selectElement.appendChild(option);
+            });
+            selectElement.disabled = false;
+        }
+
+        function populateReportList(reports, customer, project) {
+            reportList.innerHTML = ''; // Clear list
+            if (reports.length === 0) {
+                reportList.innerHTML = '<li>No reports found for this selection.</li>';
+                return;
+            }
+            
+            reports.forEach(reportFolder => {
+                const li = document.createElement('li');
+                const reportDate = reportFolder.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || reportFolder;
+                li.innerHTML = `<span>Report: ${reportDate}</span>`;
+
+                // Construct S3 Key and URLs
+                const baseKey = `${customer}/${project}/${reportFolder}`;
+                const viewerKey = `${baseKey}/report-viewer.html`;
+                const jsonKey = `${baseKey}/daily_report.json`;
+                
+                // Determine S3 base URL (assumes standard structure - adjust if needed)
+                // This is a simplification; a robust solution might get base URL from backend
+                const s3BaseUrl = `https://s3.amazonaws.com/${encodeURIComponent(s3BucketName)}/`; 
+                const viewerUrl = `https://${s3BucketName}.s3.${awsRegion}.amazonaws.com/${viewerKey}`; // Assuming virtual-hosted style
+                const editorUrl = `/edit-report?key=${encodeURIComponent(jsonKey)}`; // Local editor URL
+
+                const linksDiv = document.createElement('div');
+                linksDiv.className = 'links';
+                linksDiv.innerHTML = `
+                    <a href="${viewerUrl}" target="_blank">View Report</a>
+                    <a href="${editorUrl}" target="_blank">Edit Report</a>
+                `;
+                li.appendChild(linksDiv);
+                reportList.appendChild(li);
+            });
+        }
+
+        // --- Event Listeners ---
+        customerSelect.addEventListener('change', async (event) => {
+            const selectedCustomer = event.target.value;
+            projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
+            projectSelect.disabled = true;
+            reportList.innerHTML = ''; // Clear reports
+            
+            if (selectedCustomer) {
+                const projects = await fetchItems(selectedCustomer);
+                populateSelect(projectSelect, projects, '-- Select Project --');
+            } 
+        });
+
+        projectSelect.addEventListener('change', async (event) => {
+            const selectedProject = event.target.value;
+            const selectedCustomer = customerSelect.value;
+            reportList.innerHTML = ''; // Clear reports
+
+            if (selectedCustomer && selectedProject) {
+                const reports = await fetchItems(selectedCustomer, selectedProject);
+                 // We need bucket and region for constructing S3 URLs. Get from env or config?
+                 // Let's assume they are available globally for now (simplification)
+                 window.s3BucketName = s3BucketName; // Make available globally for populateReportList
+                 window.awsRegion = awsRegion;
+                populateReportList(reports, selectedCustomer, selectedProject);
+            }
+        });
+
+        // Enable Generate button when a file is selected
+        videoUpload.addEventListener('change', () => {
+            generateReportBtn.disabled = !videoUpload.files || videoUpload.files.length === 0;
+        });
+
+        // Generate Report button click handler
+        generateReportBtn.addEventListener('click', async () => {
+            if (!videoUpload.files || videoUpload.files.length === 0) {
+                setGenerationStatus('Please select a video file first.', 'error');
+                return;
+            }
+            const file = videoUpload.files[0];
+            const formData = new FormData();
+            formData.append('video', file); // Key must match upload.single('video') in server
+
+            setGenerationStatus('Uploading video and starting report generation... This may take a few minutes.', 'info');
+            generateReportBtn.disabled = true;
+            videoUpload.disabled = true; // Disable file input during processing
+
+            try {
+                const response = await fetch('/generate-report', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json(); // Always try to parse JSON
+
+                if (!response.ok) {
+                    throw new Error(result.error || `Generation failed! Status: ${response.status}`);
+                }
+                if (result.editorUrl) {
+                    setGenerationStatus('Report generated successfully! Opening editor...', 'success');
+                    window.open(result.editorUrl, '_blank'); // Open editor in new tab
+                    // Optionally clear the file input after success
+                    videoUpload.value = ''; 
+                } else {
+                    throw new Error('API response did not include editor URL.');
+                }
+            } catch (error) {
+                console.error('Error generating report:', error);
+                setGenerationStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                // Re-enable button and input unless cleared
+                if (videoUpload.value) { 
+                    generateReportBtn.disabled = false; 
+                    videoUpload.disabled = false; 
+                } else {
+                    generateReportBtn.disabled = true; // Keep disabled if cleared
+                    videoUpload.disabled = false; 
+                }
+            }
+        });
+
+        function setGenerationStatus(message, type) {
+            generationStatus.textContent = message;
+            generationStatus.className = type; // success, error, info (default styling)
+        }
+
+        // --- Initial Load --- 
+        document.addEventListener('DOMContentLoaded', async () => {
+            const customers = await fetchItems();
+            populateSelect(customerSelect, customers, '-- Select Customer --');
+        });
+
+    </script>
+</body>
+</html> 

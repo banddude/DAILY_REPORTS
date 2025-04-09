@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2016",             // Target widely compatible ES version
+    "module": "CommonJS",           // Use CommonJS modules
+    "outDir": "./dist",              // Specify output directory for compiled JS (good practice)
+    "rootDir": ".",                 // Specify root directory of source files
+    "esModuleInterop": true,        // Still helpful for CJS/ESM interop
+    "forceConsistentCasingInFileNames": true, 
+    "strict": true,                 
+    "skipLibCheck": true
+    // "allowImportingTsExtensions": false, // Not needed for CommonJS
+    // "noEmit": false // Allow emitting JS files to outDir
+  },
+  "include": ["**/*.ts"], 
+  "exclude": ["node_modules", "dist"]
+}
