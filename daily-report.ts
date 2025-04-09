@@ -475,7 +475,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
   console.log(`Starting report generation for video: ${inputVideoPath}`);
   // --- Profile and Logo Setup ---
   let profileData: any = {};
-  const profilePath = path.join('.', 'profile.json');
+  const profilePath = path.join(__dirname, 'profile.json'); // Use __dirname
   // Read profile data first
   try {
     const profileJsonString = await fs.promises.readFile(profilePath, 'utf-8');
@@ -498,7 +498,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
   // Removed check for inputVideoPath here
   // --------------------------------------------------
   console.log(`Using logo file: ${logoSourceFilename}`);
-  const logoSourcePath = path.join('.', logoSourceFilename);
+  const logoSourcePath = path.join(__dirname, logoSourceFilename); // Use __dirname
 
   // --- Timestamped Directory Setup ---
   const now = new Date();
@@ -536,6 +536,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
   const framesDirPath = path.join(outputBaseDir, 'extracted_frames'); // Frames subdir
   const pdfOutputPath = path.join(outputBaseDir, 'daily_report.pdf');
   const viewerDestPath = path.join(outputBaseDir, 'report-viewer.html'); // Define viewer path
+  const viewerSourcePath = path.join(__dirname, 'report-viewer.html'); // Add source path for viewer
 
   let transcriptionResult: FullTranscription | null = null;
   let reportJson: any = null; // To hold the report object
@@ -683,18 +684,16 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
       console.log('\nGenerating PDF report...');
       await generatePdfReport(reportJsonPath, framesDirPath, pdfOutputPath, logoSourceFilename);
 
-      // --- Copy HTML Viewer --- 
-      const viewerSourcePath = path.join('.', 'report-viewer.html');
-      const viewerDestPath = path.join(outputBaseDir, 'report-viewer.html');
+      // 6. Copy Viewer HTML to Output Directory (ADD THIS STEP)
       try {
           await fs.promises.copyFile(viewerSourcePath, viewerDestPath);
-          console.log(`HTML viewer copied to ${viewerDestPath}`);
+          console.log(`Viewer HTML copied to ${viewerDestPath}`);
       } catch (error) {
-          console.warn(`Warning: Could not copy HTML viewer from ${viewerSourcePath}.`, error);
+          console.error(`!!! Critical Error: Could not copy viewer HTML from ${viewerSourcePath} to ${viewerDestPath}.`, error);
+          // Consider if this should be a fatal error 
       }
-      // ------------------------
 
-      // 6. Upload Entire Report Directory to S3 using AWS CLI
+      // 7. Upload Entire Report Directory to S3 using AWS CLI
       const localSourcePath = outputBaseDir; 
       if (s3Bucket && s3TargetPath) { // Check again (belt and suspenders)
           console.log(`\nAttempting to upload report directory ${localSourcePath} via AWS CLI to ${s3TargetPath}...`);

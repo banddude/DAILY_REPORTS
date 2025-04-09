@@ -1,4 +1,14 @@
 {
+  "name": "daily-reports-app",
+  "version": "1.0.0",
+  "description": "Daily report generation application",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "start": "node dist/server.js",
+    "postinstall": "npm run build",
+    "copy-assets": "cp report-browser.html report-editor.html report-viewer.html profile.json logo.png dist/"
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",
     "@types/express": "^5.0.1",
