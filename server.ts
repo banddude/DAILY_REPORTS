@@ -128,48 +128,6 @@ app.get('/api/browse-reports', async (req: express.Request, res: express.Respons
     }
 });
 
-// GET Endpoint to list available frame images in a report's S3 directory
-app.get('/api/report-frames', async (req: Request, res: Response): Promise<void> => {
-    const reportJsonKey = req.query.key as string; // Get the key for the daily_report.json
-    if (!reportJsonKey) {
-        res.status(400).json({ error: "Missing 'key' query parameter for the report JSON." });
-        return;
-    }
-
-    // Derive the prefix for the extracted_frames directory
-    // e.g., if key is customer/project/report_YYY/daily_report.json,
-    // prefix is customer/project/report_YYY/extracted_frames/
-    const reportBaseKey = reportJsonKey.substring(0, reportJsonKey.lastIndexOf('/'));
-    const framesPrefix = `${reportBaseKey}/extracted_frames/`;
-
-    console.log(`Listing frames in S3 with prefix: ${framesPrefix}`);
-    const listParams = {
-        Bucket: s3Bucket,
-        Prefix: framesPrefix,
-    };
-
-    try {
-        const command = new ListObjectsV2Command(listParams);
-        const data = await s3Client.send(command);
-
-        // Extract just the filenames of the .jpg files
-        const frameFiles = data.Contents?.map(item => {
-            // Get the part after the last '/'
-            return item.Key?.substring(item.Key.lastIndexOf('/') + 1);
-        })
-        .filter(filename => filename && filename.endsWith('.jpg')) // Ensure it's a jpg file
-        .filter((filename): filename is string => filename !== undefined) // Type guard
-        .sort() || []; // Sort alphabetically and handle empty case
-
-        console.log(`Found frame files: ${frameFiles.join(', ')}`);
-        res.status(200).json({ frameFiles });
-
-    } catch (error: any) {
-        console.error(`Error listing S3 frame objects with prefix ${framesPrefix}:`, error);
-        res.status(500).json({ error: `Failed to list frames from S3: ${error.message}` });
-    }
-});
-
 // GET Endpoint to fetch report JSON from S3
 app.get('/api/report', async (req: express.Request, res: express.Response): Promise<void> => {
     const reportKey = req.query.key as string; // e.g., amazon/DSD8/report_.../daily_report.json

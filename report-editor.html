@@ -137,55 +137,6 @@
         #statusMessage.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
          .error-message { color: var(--danger-color); font-weight: bold; text-align: center; margin-top: 50px; padding: 20px; border: 1px solid var(--danger-color); background-color: #f8d7da; border-radius: var(--border-radius); }
 
-        /* --- Image Editing Enhancements --- */
-        #imageManagementContainer { margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 20px; }
-        #imageManagementContainer h3 { font-size: 1.2em; margin-bottom: 15px; color: var(--primary-text-color); }
-        .frame-list-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
-        .frame-item {
-            background-color: var(--section-background-color);
-            border: 1px solid var(--border-color);
-            padding: 10px;
-            border-radius: var(--border-radius);
-            text-align: center;
-            position: relative;
-            font-size: 0.9em;
-        }
-        .frame-item img {
-            max-width: 100%;
-            height: auto;
-            max-height: 100px; /* Smaller previews */
-            display: block;
-            margin: 5px auto 10px auto;
-            border-radius: calc(var(--border-radius) - 2px);
-            border: 1px solid #ccc;
-        }
-        .frame-item .frame-filename { word-wrap: break-word; margin-bottom: 8px; color: var(--secondary-text-color); font-size: 0.9em; }
-        .frame-action-btn {
-            display: block;
-            width: 80%;
-            margin: 5px auto 0 auto;
-            padding: 6px 10px;
-            font-size: 0.9em;
-            cursor: pointer;
-            border-radius: var(--border-radius);
-            border: 1px solid transparent;
-            transition: background-color 0.2s, border-color 0.2s;
-        }
-        .add-frame-btn { background-color: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
-        .add-frame-btn:hover { background-color: #c8e6c9; }
-        .remove-frame-btn { background-color: #fce8e6; color: #c53929; border-color: #f4c7c3; }
-        .remove-frame-btn:hover { background-color: #f8d7da; }
-
-        /* Make editable captions smaller */
-        .image-gallery .caption .editable {
-             width: 100%;
-             box-sizing: border-box;
-             margin-top: 5px;
-             padding: 4px 6px;
-             font-size: 0.9em; /* Smaller font for captions */
-             min-height: 1.2em;
-         }
-
     </style>
 </head>
 <body>
@@ -237,156 +188,22 @@
 
             <div class="section">
                 <h2>Images</h2>
-                <p style="font-size: 0.8em; color: var(--secondary-text-color); margin-bottom: 15px;">Edit captions for images currently in the report. Images will only appear here if they have been added below.</p>
                 <div class="image-gallery" id="imagesContainer">Loading...</div>
-
-                <!-- New Section for Adding/Removing Images -->
-                <div id="imageManagementContainer">
-                    <h3>Manage Report Images</h3>
-                    <div id="availableFramesContainer">
-                        <h4>Available Frames</h4>
-                        <div class="frame-list-container" id="availableFramesList">Loading available frames...</div>
-                    </div>
-                </div>
+                 <p style="font-size: 0.8em; color: var(--secondary-text-color);">Edit image captions below. Images themselves cannot be changed here.</p>
             </div>
         </main>
     </div>
 
     <script>
-        let currentReportData = null;
-        let reportKey = '';
-        let availableFrameFiles = []; // Store the list of all frame files from S3
-        let imageBaseUrl = ''; // Store the base S3 URL for constructing image URLs
+        let currentReportData = null; // Store the fetched data globally within the script scope
+        let reportKey = ''; // Store the S3 key for saving
 
-        // --- Helper Function to get base S3 URL from report data --- 
-        function getBaseS3Url(reportData) {
-            return reportData?.reportAssetsS3Urls?.baseUrl || '';
-        }
-
-        // --- Helper Function to build full S3 URL for a frame --- 
-        function buildFrameUrl(baseUrl, frameFilename) {
-            if (!baseUrl || !frameFilename) return '';
-            const framesSubDir = 'extracted_frames'; // Assuming this is consistent
-            // Ensure no double slashes
-            baseUrl = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
-            return `${baseUrl}${framesSubDir}/${frameFilename}`;
-        }
-
-        // --- Update UI Functions --- 
-        function renderCurrentImageGallery() {
-            const container = document.getElementById('imagesContainer');
-            if (!currentReportData || !currentReportData.images || currentReportData.images.length === 0) {
-                container.innerHTML = '<p class="placeholder-text">No images currently added to the report.</p>';
-                return;
-            }
-
-            container.innerHTML = ''; // Clear previous content
-            imageBaseUrl = getBaseS3Url(currentReportData);
-
-            currentReportData.images.forEach((imgData, index) => {
-                if (!imgData || !imgData.fileName) return; // Skip invalid entries
-                
-                const imageUrl = buildFrameUrl(imageBaseUrl, imgData.fileName);
-
-                const div = document.createElement('div');
-                div.classList.add('image-item');
-                div.innerHTML = `
-                    <img src="${imageUrl || 'placeholder.png'}" alt="${imgData.caption || 'Report image'}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <div style="display:none; color: red; font-size: 0.8em; padding: 10px;">Image not found or missing</div>
-                    <div class="caption">
-                        <div class="editable caption-editable" contenteditable="true" data-image-index="${index}" placeholder="Enter caption...">${imgData.caption || ''}</div>
-                    </div>
-                    <button class="frame-action-btn remove-frame-btn" data-filename="${imgData.fileName}">Remove from Report</button>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        function renderAvailableFrames() {
-            const container = document.getElementById('availableFramesList');
-            if (!availableFrameFiles || availableFrameFiles.length === 0) {
-                container.innerHTML = '<p class="placeholder-text">No frames found in S3.</p>';
-                return;
-            }
-
-            container.innerHTML = ''; // Clear previous content
-            imageBaseUrl = getBaseS3Url(currentReportData); // Ensure baseUrl is available
-
-            const currentImageFilenames = new Set((currentReportData?.images || []).map(img => img.fileName));
-
-            availableFrameFiles.forEach(frameFilename => {
-                // Only show frames NOT currently in the report
-                if (!currentImageFilenames.has(frameFilename)) {
-                    const imageUrl = buildFrameUrl(imageBaseUrl, frameFilename);
-                    const div = document.createElement('div');
-                    div.classList.add('frame-item');
-                    div.innerHTML = `
-                        <img src="${imageUrl || 'placeholder.png'}" alt="${frameFilename}" onerror="this.style.display='none';">
-                        <div class="frame-filename">${frameFilename}</div>
-                        <button class="frame-action-btn add-frame-btn" data-filename="${frameFilename}">Add to Report</button>
-                    `;
-                    container.appendChild(div);
-                }
-            });
-
-            if (container.innerHTML === '') {
-                 container.innerHTML = '<p class="placeholder-text" style="grid-column: 1 / -1;">All available frames have been added to the report.</p>';
-            }
-        }
-
-        // --- Event Handlers --- 
-        function handleAddFrame(filename) {
-            const caption = prompt(`Enter caption for ${filename}:`, '');
-            if (caption === null) return; // User cancelled
-
-            if (!currentReportData.images) {
-                currentReportData.images = []; // Initialize if it doesn't exist
-            }
-
-            // Rebuild the image URL based on potentially updated baseUrl
-            imageBaseUrl = getBaseS3Url(currentReportData);
-            const imageUrl = buildFrameUrl(imageBaseUrl, filename);
-
-            currentReportData.images.push({
-                fileName: filename,
-                caption: caption,
-                s3Url: imageUrl // Store the constructed S3 URL
-            });
-
-            // Re-render both sections
-            renderCurrentImageGallery();
-            renderAvailableFrames();
-        }
-
-        function handleRemoveFrame(filename) {
-            if (!currentReportData || !currentReportData.images) return;
-
-            currentReportData.images = currentReportData.images.filter(img => img.fileName !== filename);
-
-            // Re-render both sections
-            renderCurrentImageGallery();
-            renderAvailableFrames();
-        }
-
-        function updateCaptionFromEditable(event) {
-             const target = event.target;
-             if (target.classList.contains('caption-editable')) {
-                const index = parseInt(target.dataset.imageIndex, 10);
-                const newCaption = target.innerText.trim();
-                if (currentReportData && currentReportData.images && currentReportData.images[index]) {
-                    currentReportData.images[index].caption = newCaption;
-                     console.log(`Updated caption for index ${index} to: ${newCaption}`);
-                }
-            }
-        }
-
-
-        // --- Initialization and Fetching --- 
         document.addEventListener('DOMContentLoaded', () => {
             const saveButton = document.getElementById('saveButton');
             const statusMessage = document.getElementById('statusMessage');
             const reportContent = document.getElementById('reportContent');
 
+            // Get the report key from URL query parameter
             const urlParams = new URLSearchParams(window.location.search);
             reportKey = urlParams.get('key');
 
@@ -395,53 +212,32 @@
                 return;
             }
 
-            // Fetch both report data and available frames concurrently
-            Promise.all([
-                fetch(`/api/report?key=${encodeURIComponent(reportKey)}`).then(res => {
-                    if (!res.ok) return res.json().then(err => { throw new Error(err.error || `HTTP error loading report: ${res.status}`); });
-                    return res.json();
-                }),
-                fetch(`/api/report-frames?key=${encodeURIComponent(reportKey)}`).then(res => {
-                    if (!res.ok) return res.json().then(err => { throw new Error(err.error || `HTTP error loading frames: ${res.status}`); });
-                    return res.json();
+            // Fetch the initial data
+            fetch(`/api/report?key=${encodeURIComponent(reportKey)}`)
+                .then(response => {
+                     if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`); });
+                    }
+                    return response.json();
                 })
-            ])
-            .then(([reportData, framesData]) => {
-                console.log("Report data loaded:", reportData);
-                console.log("Available frames loaded:", framesData);
-                
-                currentReportData = reportData;
-                availableFrameFiles = framesData.frameFiles || [];
-                imageBaseUrl = getBaseS3Url(currentReportData); // Get initial base URL
-                
-                // Ensure image objects have s3Url populated (might be missing from older data)
-                if (currentReportData && currentReportData.images) {
-                     currentReportData.images.forEach(img => {
-                         if (img.fileName && !img.s3Url) {
-                             img.s3Url = buildFrameUrl(imageBaseUrl, img.fileName);
-                         }
-                     });
-                }
-
-                populateForm(currentReportData); // Populate text fields, lists etc.
-                renderCurrentImageGallery(); // Populate the current image gallery
-                renderAvailableFrames(); // Populate the available frames list
-                
-                reportContent.style.display = 'block';
-                saveButton.disabled = false;
-            })
-            .catch(error => {
-                console.error('Error loading initial data:', error);
-                 showError(`Error loading data: ${error.message}`);
-            });
+                .then(data => {
+                    console.log("Report data loaded:", data);
+                    currentReportData = data; // Store fetched data
+                    populateForm(data);
+                    reportContent.style.display = 'block'; // Show content
+                    saveButton.disabled = false; // Enable save button
+                })
+                .catch(error => {
+                    console.error('Error loading report data:', error);
+                     showError(`Error loading report: ${error.message}`);
+                });
 
             // Save button functionality
             saveButton.addEventListener('click', () => {
-                 collectChanges(); // Collect text/list changes before saving
                  saveChanges();
             });
 
-             // Event delegation for adding/removing list items (existing)
+             // Event delegation for adding/removing list items
              document.addEventListener('click', (event) => {
                 const target = event.target;
                 if (target.classList.contains('add-item-btn')) {
@@ -454,204 +250,294 @@
                          listItem.remove(); // Remove from DOM immediately
                      }
                 }
-            });
-            
-            // --- Add Event Delegation for Image Management --- 
-             document.addEventListener('click', (event) => {
-                 const target = event.target;
-                if (target.classList.contains('add-frame-btn')) {
-                    handleAddFrame(target.dataset.filename);
-                } else if (target.classList.contains('remove-frame-btn')) {
-                    handleRemoveFrame(target.dataset.filename);
-                }
-            });
-
-            // --- Add Event Listener for Caption Editing --- 
-             document.addEventListener('input', updateCaptionFromEditable);
-
-        }); // End DOMContentLoaded
-
-        // --- Data Population and Saving Functions (Modified/Existing) --- 
+             });
+        });
 
         function populateForm(data) {
-            if (!data) return;
-            // Populate Header
-            document.getElementById('reportDate').textContent = `Date: ${data.reportMetadata?.date || 'N/A'}`;
-            document.getElementById('preparedBy').textContent = `Prepared by: ${data.reportMetadata?.preparedBy?.name || 'N/A'}`;
-            // ... (populate company info - needs reportMetadata structure) ... 
-            const companyInfo = data.reportMetadata?.companyInfo;
-            const companyDiv = document.getElementById('companyInfo');
-            if (companyInfo && companyDiv) {
-                companyDiv.innerHTML = ''; // Clear loading state
-                if (companyInfo.name) companyDiv.innerHTML += `<strong>${companyInfo.name}</strong>`;
-                if (companyInfo.address) {
-                    const addressParts = [companyInfo.address.street, companyInfo.address.city, companyInfo.address.state, companyInfo.address.zip].filter(Boolean);
-                    if (addressParts.length > 0) companyDiv.innerHTML += `<span>${addressParts.join(', ')}</span><br>`;
-                }
-                if (companyInfo.phone) companyDiv.innerHTML += `<span>Phone: ${companyInfo.phone}</span><br>`;
-                if (companyInfo.website) companyDiv.innerHTML += `<span>Website: <a href="${companyInfo.website}" target="_blank">${companyInfo.website}</a></span>`;
-            }
-             // Populate logo if available
+            // --- Populate Metadata (Read-only in editor) ---
+            const meta = data.reportMetadata || {};
+            const company = meta.companyInfo || {};
+            const prepared = meta.preparedBy || {};
+            const address = company.address || {};
+            const assets = data.reportAssetsS3Urls || {};
+
             const logoContainer = document.getElementById('logoContainer');
-            imageBaseUrl = getBaseS3Url(data);
-            const logoUrl = buildFrameUrl(imageBaseUrl, data.reportMetadata?.companyInfo?.logoFilename); // Build logo URL
-            if (logoUrl && logoContainer) {
-                logoContainer.innerHTML = `<img src="${logoUrl}" alt="Company Logo">`;
-            }
+            if (assets.logoUrl) { logoContainer.innerHTML = `<img src="${assets.logoUrl}" alt="${company.name || 'Company'} Logo">`; }
+            setText('reportDate', `Date: ${assets.baseUrl?.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || 'N/A'}`);
+            setText('preparedBy', `Prepared By: ${prepared.name || 'N/A'} ${prepared.email ? '(' + prepared.email + ')' : ''}`); // Removed mailto link
+            let companyHtml = `<strong>${company.name || 'N/A'}</strong>`;
+            if (address.street) companyHtml += `${address.street}${address.unit ? ' #' + address.unit : ''}<br>`;
+            if (address.city || address.state || address.zip) companyHtml += `${address.city || ''}${address.city && address.state ? ', ' : ''}${address.state || ''} ${address.zip || ''}<br>`;
+            if (company.phone) companyHtml += `Phone: ${company.phone} | `;
+            if (company.website) companyHtml += `Website: <a href="${company.website}" target="_blank">${company.website}</a>`;
+            setHtml('companyInfo', companyHtml.replace(/ \| $/, ''));
 
-            // Populate simple editable fields
-            populateEditableField('narrative', data.narrative);
-            populateEditableField('safetyObservations', data.safetyObservations);
+            // --- Populate Editable Fields ---
+            setEditableHtml('narrative', data.narrative || '');
+            setEditableHtml('safetyObservations', data.safetyObservations || '');
 
-            // Populate editable lists
-            populateEditableList('workCompleted', data.workCompleted || [], 'simple');
-            populateEditableList('issues', data.issues || [], 'issue');
-            populateEditableList('materials', data.materials || [], 'material');
-            populateEditableList('nextSteps', data.nextSteps || [], 'simple');
-            
-            // Image gallery is now populated by renderCurrentImageGallery()
+            populateEditableList('workCompleted', data.workCompleted, 'simple');
+            populateEditableList('nextSteps', data.nextSteps, 'simple');
+            populateEditableList('materials', data.materials, 'material');
+            populateEditableList('issues', data.issues, 'issue');
+            populateEditableImages('imagesContainer', data.images);
         }
 
-        function populateEditableField(id, value) {
-            const element = document.getElementById(id);
-            if (element) {
-                element.textContent = value || ''; // Set text content
+         // Helper to set content of contenteditable divs
+        function setEditableHtml(elementId, content) {
+             const el = document.getElementById(elementId);
+            if (el) { el.innerHTML = content; } // Use innerHTML for potential formatting
+        }
+         function setText(elementId, text) {
+            const el = document.getElementById(elementId);
+            if (el) { el.textContent = text; }
+        }
+        function setHtml(elementId, html) {
+             const el = document.getElementById(elementId);
+            if (el) { el.innerHTML = html; }
+        }
+
+
+        function populateEditableList(listId, items, itemType) {
+             const list = document.getElementById(listId);
+            if (!list) return;
+            list.innerHTML = ''; // Clear loading/previous
+            if (items && items.length > 0) {
+                items.forEach(item => addListItem(listId, itemType, item));
+            } else {
+                // Optionally add a placeholder or leave empty
+                // list.innerHTML = '<li>No items yet.</li>';
             }
         }
 
-         function populateEditableList(id, items, itemType = 'simple') {
-             const listElement = document.getElementById(id);
-             if (!listElement) return;
-             listElement.innerHTML = ''; // Clear loading/default
-             items.forEach(item => {
-                 addListItemElement(listElement, item, itemType);
-             });
-         }
-         
-         function addListItemElement(listElement, itemData, itemType) {
+        function addListItem(listId, itemType, itemData = null) {
+             const list = document.getElementById(listId);
+             if (!list) return;
+
              const li = document.createElement('li');
-             let content = '';
-             let textToEdit = '';
-             if (itemType === 'simple' && typeof itemData === 'string') {
-                 textToEdit = itemData;
-             } else if (itemType === 'issue' && typeof itemData === 'object') {
-                 textToEdit = itemData.description || ''; // Assuming object structure { description: '...' }
-             } else if (itemType === 'material' && typeof itemData === 'object') {
-                  textToEdit = `${itemData.name || ''} (${itemData.quantity || ''} ${itemData.unit || ''})`; // Assuming { name: '..', quantity: '..', unit: '..'}
-             } else {
-                 textToEdit = JSON.stringify(itemData); // Fallback for unknown structure
-             }
+             li.dataset.itemType = itemType; // Store type for saving
 
-             li.innerHTML = `
-                <div class="editable" contenteditable="true" data-item-type="${itemType}">${textToEdit}</div>
-                <button class="remove-item-btn" title="Remove item">&times;</button>
-            `;
-             listElement.appendChild(li);
-         }
-         
-         function addItemToList(listId, itemType) {
-             const listElement = document.getElementById(listId);
-             if (!listElement) return;
-             // Add a new empty item element for editing
-             const placeholderData = itemType === 'simple' ? '' : (itemType === 'issue' ? { description: '' } : { name: '', quantity: '', unit: '' });
-             addListItemElement(listElement, placeholderData, itemType);
-             // Optionally focus the new editable element
-             const newEditable = listElement.lastElementChild?.querySelector('.editable');
-             if (newEditable) {
-                 newEditable.focus();
-             }
-         }
+            let contentHtml = '';
+            if (itemType === 'simple') {
+                 li.innerHTML = `<div class="editable" contenteditable="true">${itemData || ''}</div>`;
+            } else if (itemType === 'material') {
+                const data = itemData || { materialName: '', status: '', note: '' };
+                 li.dataset.materialName = data.materialName; // Store original data if needed
+                 li.dataset.status = data.status;
+                 li.dataset.note = data.note;
+                 li.innerHTML = `
+                    Name: <div class="editable" contenteditable="true" data-field="materialName">${data.materialName}</div><br>
+                    Status: <div class="editable" contenteditable="true" data-field="status">${data.status}</div><br>
+                    Note: <div class="editable" contenteditable="true" data-field="note">${data.note}</div>
+                 `;
+            } else if (itemType === 'issue') {
+                 const data = itemData || { description: '', status: 'Open', impact: '', resolution: '' };
+                 li.dataset.description = data.description; // Store original data if needed
+                 li.dataset.status = data.status;
+                 li.dataset.impact = data.impact;
+                 li.dataset.resolution = data.resolution;
+                 li.innerHTML = `
+                    Desc: <div class="editable" contenteditable="true" data-field="description">${data.description}</div><br>
+                    Status: <select data-field="status">
+                                <option value="Open" ${data.status === 'Open' ? 'selected' : ''}>Open</option>
+                                <option value="Resolved" ${data.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
+                                <option value="Needs Monitoring" ${data.status === 'Needs Monitoring' ? 'selected' : ''}>Needs Monitoring</option>
+                             </select><br>
+                    Impact: <div class="editable" contenteditable="true" data-field="impact">${data.impact}</div><br>
+                    Resolution: <div class="editable" contenteditable="true" data-field="resolution">${data.resolution}</div>
+                 `;
+            }
 
-        function collectChanges() {
-            if (!currentReportData) return;
+            // Add remove button
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-item-btn';
+            removeBtn.innerHTML = '&times;'; // Multiplication sign as 'X'
+            removeBtn.title = 'Remove item';
+            li.appendChild(removeBtn);
 
-            // Collect simple text fields
-            currentReportData.narrative = document.getElementById('narrative')?.textContent.trim() || '';
-            currentReportData.safetyObservations = document.getElementById('safetyObservations')?.textContent.trim() || '';
-
-            // Collect list items
-            currentReportData.workCompleted = collectListItems('workCompleted', 'simple');
-            currentReportData.issues = collectListItems('issues', 'issue');
-            currentReportData.materials = collectListItems('materials', 'material');
-            currentReportData.nextSteps = collectListItems('nextSteps', 'simple');
-            
-            // Captions are updated via event listener 'updateCaptionFromEditable'
-            // The currentReportData.images array is modified directly by add/remove handlers
-            console.log("Collected changes:", currentReportData);
+             list.appendChild(li);
         }
-        
+
+         function addItemToList(listId, itemType) {
+            // Calls addListItem with null data to add a blank entry
+            addListItem(listId, itemType, null);
+         }
+
+        function populateEditableImages(containerId, images) {
+             const container = document.getElementById(containerId);
+             if (!container) return;
+             container.innerHTML = ''; // Clear loading/previous
+             if (images && images.length > 0) {
+                images.forEach((imgInfo, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'image-item';
+                    div.dataset.index = index; // Keep track of original index if needed
+
+                    const captionDiv = document.createElement('div');
+                    captionDiv.className = 'caption';
+                    // Add contenteditable div for the caption
+                    captionDiv.innerHTML = `<div class="editable" contenteditable="true" placeholder="Enter caption...">${imgInfo.caption || ''}</div>`;
+
+
+                    if (imgInfo.s3Url) {
+                        const img = document.createElement('img');
+                        img.src = imgInfo.s3Url;
+                        img.alt = imgInfo.caption || 'Report Image';
+                        img.onerror = () => {
+                            img.remove();
+                            const missingText = document.createElement('p');
+                            missingText.className = 'placeholder-text';
+                            missingText.textContent = '[Image Missing/Inaccessible]';
+                            div.insertBefore(missingText, captionDiv);
+                        };
+                         div.appendChild(img);
+                    } else {
+                         const missingUrlText = document.createElement('p');
+                         missingUrlText.className = 'placeholder-text';
+                         missingUrlText.textContent = '[Image S3 URL missing]';
+                         div.appendChild(missingUrlText);
+                    }
+                     div.appendChild(captionDiv);
+                     container.appendChild(div);
+                });
+             } else {
+                 container.textContent = 'No images to display/edit.';
+             }
+        }
+
+        function collectEditedData() {
+             const updatedData = JSON.parse(JSON.stringify(currentReportData)); // Deep clone the original data
+
+            // Update single fields
+            updatedData.narrative = document.getElementById('narrative')?.innerHTML || '';
+            updatedData.safetyObservations = document.getElementById('safetyObservations')?.innerHTML || '';
+
+            // Update lists
+            updatedData.workCompleted = collectListItems('workCompleted', 'simple');
+            updatedData.nextSteps = collectListItems('nextSteps', 'simple');
+            updatedData.materials = collectListItems('materials', 'material');
+            updatedData.issues = collectListItems('issues', 'issue');
+
+            // Update image captions
+             const imageItems = document.querySelectorAll('#imagesContainer .image-item');
+             imageItems.forEach((itemDiv, index) => {
+                 const captionEditable = itemDiv.querySelector('.caption .editable');
+                 // Find the corresponding image in the original data based on filename/S3 URL if index isn't reliable
+                 // For simplicity, this assumes the order hasn't changed and matches the original index.
+                 if (updatedData.images && updatedData.images[index] && captionEditable) {
+                     updatedData.images[index].caption = captionEditable.innerHTML;
+                 }
+             });
+
+
+             return updatedData;
+        }
+
         function collectListItems(listId, itemType) {
-            const listElement = document.getElementById(listId);
-            if (!listElement) return [];
+            const list = document.getElementById(listId);
+            if (!list) return [];
+
             const items = [];
-            listElement.querySelectorAll('li .editable').forEach(editable => {
-                const text = editable.textContent.trim();
-                if (text) { // Only add non-empty items
-                     if (itemType === 'simple') {
-                         items.push(text);
-                     } else if (itemType === 'issue') {
-                         items.push({ description: text }); // Assuming simple structure for now
-                     } else if (itemType === 'material') {
-                         // Basic parsing - might need improvement
-                         const match = text.match(/^(.+?)\s*\((.+?)\s+(.+?)\)$/);
-                         if (match) {
-                             items.push({ name: match[1].trim(), quantity: match[2].trim(), unit: match[3].trim() });
-                         } else {
-                             items.push({ name: text, quantity: '', unit: '' }); // Fallback
-                         }
+            const listItems = list.querySelectorAll('li');
+
+            listItems.forEach(li => {
+                if (itemType === 'simple') {
+                    const editableDiv = li.querySelector('.editable');
+                    if (editableDiv && editableDiv.innerHTML.trim()) { // Only add non-empty items
+                       items.push(editableDiv.innerHTML);
                      }
-                     // Add other type parsings if needed
+                } else if (itemType === 'material') {
+                    const material = {};
+                    let hasName = false;
+                    li.querySelectorAll('[data-field]').forEach(field => {
+                        material[field.dataset.field] = field.innerHTML;
+                        if(field.dataset.field === 'materialName' && field.innerHTML.trim()) {
+                            hasName = true;
+                        }
+                    });
+                     // Only add if materialName has content
+                    if (hasName) {
+                        items.push(material);
+                    }
+                } else if (itemType === 'issue') {
+                     const issue = {};
+                     let hasDesc = false;
+                    li.querySelectorAll('[data-field]').forEach(field => {
+                         if (field.tagName === 'SELECT') {
+                             issue[field.dataset.field] = field.value;
+                         } else {
+                             issue[field.dataset.field] = field.innerHTML;
+                             if(field.dataset.field === 'description' && field.innerHTML.trim()) {
+                                 hasDesc = true;
+                             }
+                         }
+                     });
+                      // Only add if description has content
+                    if (hasDesc) {
+                        items.push(issue);
+                    }
                 }
             });
             return items;
         }
 
+
         function saveChanges() {
             const saveButton = document.getElementById('saveButton');
             const statusMessage = document.getElementById('statusMessage');
-
             saveButton.disabled = true;
-            statusMessage.textContent = 'Saving...';
-            statusMessage.className = ''; // Clear previous classes
-            statusMessage.style.display = 'block';
+            saveButton.textContent = 'Saving...';
+            showStatus('', ''); // Clear previous status
 
-            console.log("Saving data:", currentReportData);
+            const updatedData = collectEditedData();
+            console.log("Saving data:", updatedData);
 
             fetch(`/api/report?key=${encodeURIComponent(reportKey)}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(currentReportData),
+                body: JSON.stringify(updatedData),
             })
             .then(response => {
                 if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.error || `Save failed: ${response.status}`); });
+                    return response.json().then(err => { throw new Error(err.error || `Save failed! Status: ${response.status}`); });
                 }
                 return response.json();
             })
-            .then(data => {
-                console.log('Save successful:', data);
-                statusMessage.textContent = data.message || 'Report saved successfully!';
-                statusMessage.className = 'success'; // Add success class
+            .then(result => {
+                console.log("Save successful:", result);
+                currentReportData = updatedData; // Update global data state on successful save
+                showStatus(result.message || 'Report saved successfully!', 'success');
             })
             .catch(error => {
                 console.error('Error saving report:', error);
-                statusMessage.textContent = `Error saving: ${error.message}`;
-                statusMessage.className = 'error'; // Add error class
+                showStatus(`Error saving report: ${error.message}`, 'error');
             })
             .finally(() => {
                 saveButton.disabled = false;
-                 // Hide status message after a few seconds
-                setTimeout(() => { statusMessage.style.display = 'none'; }, 5000);
+                saveButton.textContent = 'Save Changes';
+                // Hide status message after a delay
+                setTimeout(() => { showStatus('', ''); }, 5000);
             });
         }
 
+        function showStatus(message, type) {
+            const statusMessage = document.getElementById('statusMessage');
+            if (!statusMessage) return;
+            if (message) {
+                 statusMessage.textContent = message;
+                 statusMessage.className = type; // 'success' or 'error'
+                 statusMessage.style.display = 'block';
+            } else {
+                 statusMessage.style.display = 'none';
+                 statusMessage.className = '';
+            }
+        }
          function showError(message) {
-             const container = document.querySelector('.container'); // Find the main container
-             if (container) {
-                 container.innerHTML = `<div class="error-message">${message}</div>`;
-             }
+             const reportContent = document.getElementById('reportContent');
+             if (reportContent) reportContent.style.display = 'none'; // Hide form
+             document.body.innerHTML = `<div class="container error-message"><h1>Error</h1><p>${message}</p></div>`;
          }
 
     </script>
