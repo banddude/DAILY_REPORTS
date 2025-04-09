@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['...', 'pkgs.ffmpeg']
+nixPkgs = ['...', 'pkgs.ffmpeg', 'pkgs.awscli2']
 
 [start]
 cmd = 'npm run start' 
