@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Profile</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+        #profileFormContainer { display: grid; grid-template-columns: auto 1fr; gap: 10px 15px; align-items: center; margin-bottom: 20px; }
+        label { font-weight: bold; text-align: right; }
+        input[type="text"], input[type="email"], input[type="tel"], textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        textarea { min-height: 150px; font-family: monospace; font-size: 0.9em; }
+        button { padding: 10px 20px; cursor: pointer; grid-column: 2; justify-self: start; }
+        #message { margin-top: 15px; font-weight: bold; grid-column: 1 / -1; } /* Span full width */
+        .error { color: red; }
+        .success { color: green; }
+        fieldset { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; grid-column: 1 / -1; } /* Span full width */
+        legend { font-weight: bold; padding: 0 5px; }
+        /* Style for nested grids inside fieldsets */
+        fieldset > div { display: grid; grid-template-columns: auto 1fr; gap: 10px 15px; align-items: center; }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 600px) {
+            #profileFormContainer, fieldset > div {
+                grid-template-columns: 1fr; /* Single column layout */
+                gap: 5px 0; /* Reduce vertical gap */
+            }
+            label {
+                text-align: left; /* Align labels left */
+                margin-bottom: 2px; /* Add small space below label */
+                /* Ensure labels associated with textareas don't try to span rows incorrectly */
+                grid-row: auto;
+                align-self: auto;
+            }
+            input[type="text"], input[type="email"], input[type="tel"], textarea, button {
+                 grid-column: 1 / -1; /* Make inputs and button span full width */
+            }
+            button {
+                 justify-self: stretch; /* Make button fill width */
+                 margin-top: 10px;
+            }
+            fieldset {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="header-placeholder"></div>
+
+    <h1>Edit Profile (profile.json)</h1>
+
+    <form id="profileForm">
+        <div id="profileFormContainer">
+            <!-- Form fields will be generated here -->
+        </div>
+        <button type="button" id="saveButton">Save Profile</button>
+        <div id="message"></div>
+    </form>
+
+    <script>
+        const formContainer = document.getElementById('profileFormContainer');
+        const saveButton = document.getElementById('saveButton');
+        const messageEl = document.getElementById('message');
+        let originalProfileData = {}; // Store original data to reconstruct
+
+        function createFormFields(data, container, prefix = '') {
+            for (const key in data) {
+                const value = data[key];
+                const inputId = prefix + key;
+                const labelText = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()); // Add spaces and capitalize
+
+                // Special handling for large text/JSON blocks
+                if (key === 'systemPrompt') {
+                    const label = document.createElement('label');
+                    label.htmlFor = inputId;
+                    label.textContent = `${labelText}:`;
+                    container.appendChild(label);
+
+                    const textarea = document.createElement('textarea');
+                    textarea.id = inputId;
+                    textarea.name = inputId;
+                    textarea.value = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+                    container.appendChild(textarea);
+                    continue; // Move to next key
+                }
+                
+                if (key === 'reportJsonSchema') {
+                    const label = document.createElement('label');
+                    label.htmlFor = inputId;
+                    label.textContent = `${labelText}:`;
+                    label.style.gridRow = 'span 2'; // Make label span if textarea is tall
+                    label.style.alignSelf = 'start';
+                    container.appendChild(label);
+
+                    const textarea = document.createElement('textarea');
+                    textarea.id = inputId;
+                    textarea.name = inputId;
+                    textarea.style.height = '300px'; // Make schema textarea taller
+                    textarea.value = typeof value === 'object' ? JSON.stringify(value, null, 2) : value;
+                    container.appendChild(textarea);
+                    continue; // Move to next key
+                }
+
+
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    // Create a fieldset for nested objects
+                    const fieldset = document.createElement('fieldset');
+                    const legend = document.createElement('legend');
+                    legend.textContent = labelText;
+                    fieldset.appendChild(legend);
+
+                    const nestedContainer = document.createElement('div'); // Container for grid inside fieldset
+                    fieldset.appendChild(nestedContainer);
+                    
+                    container.appendChild(fieldset); // Add fieldset to main container
+
+                    createFormFields(value, nestedContainer, inputId + '.'); // Recurse with nested container
+                } else if (typeof value === 'boolean') {
+                     // Handle booleans with checkboxes (if any)
+                     const label = document.createElement('label');
+                     label.htmlFor = inputId;
+                     label.textContent = `${labelText}:`;
+                     container.appendChild(label);
+
+                     const input = document.createElement('input');
+                     input.type = 'checkbox';
+                     input.id = inputId;
+                     input.name = inputId;
+                     input.checked = value;
+                     input.style.justifySelf = 'start'; // Align checkbox left
+                     container.appendChild(input);
+                } else if (!Array.isArray(value)) { // Handle strings, numbers - skip arrays for now
+                    const label = document.createElement('label');
+                    label.htmlFor = inputId;
+                    label.textContent = `${labelText}:`;
+                    container.appendChild(label);
+
+                    const input = document.createElement('input');
+                    input.type = (typeof value === 'number') ? 'number' : 'text';
+                    // Add specific types based on key name heuristics
+                    if (key.toLowerCase().includes('email')) input.type = 'email';
+                    if (key.toLowerCase().includes('phone')) input.type = 'tel';
+
+                    input.id = inputId;
+                    input.name = inputId;
+                    input.value = value;
+                    container.appendChild(input);
+                }
+                // Arrays are not handled in this form generator
+            }
+        }
+
+        // Fetch current profile content on load and build form
+        fetch('/api/profile')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                originalProfileData = data; // Store the structure
+                formContainer.innerHTML = ''; // Clear loading/error message
+                 try {
+                    createFormFields(data, formContainer);
+                 } catch(error) {
+                     console.error('Error creating form fields:', error);
+                     messageEl.textContent = 'Error displaying profile form.';
+                     messageEl.className = 'error';
+                 }
+            })
+            .catch(error => {
+                console.error('Error fetching profile:', error);
+                messageEl.textContent = `Error loading profile: ${error.message}`;
+                messageEl.className = 'error';
+            });
+
+        // Save updated profile content
+        saveButton.addEventListener('click', () => {
+            messageEl.textContent = ''; // Clear previous message
+            messageEl.className = '';
+
+            const formData = new FormData(document.getElementById('profileForm'));
+            const updatedProfile = {}; // Rebuild the object
+
+            function buildObject(data, currentLevel, pathPrefix = '') {
+                 for (const key in currentLevel) {
+                    const value = currentLevel[key];
+                    const formKey = pathPrefix + key;
+
+                     if (key === 'reportJsonSchema') {
+                         const textarea = document.getElementById(formKey);
+                         try {
+                            data[key] = JSON.parse(textarea.value);
+                         } catch (e) {
+                             throw new Error(`Invalid JSON in ${key}: ${e.message}`);
+                         }
+                         continue;
+                     }
+                      if (key === 'systemPrompt') {
+                         const textarea = document.getElementById(formKey);
+                          data[key] = textarea.value; // Keep as string
+                         continue;
+                     }
+
+
+                    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                        data[key] = {};
+                        buildObject(data[key], value, formKey + '.'); // Recurse for nested objects
+                    } else if (typeof value === 'boolean') {
+                         const input = document.getElementById(formKey);
+                         data[key] = input ? input.checked : false; // Get checkbox state
+                    } else if (!Array.isArray(value)) { // Handle strings, numbers
+                         const input = document.getElementById(formKey);
+                         if (input) {
+                            // Attempt to restore original type if number
+                             data[key] = (typeof value === 'number') ? parseFloat(input.value) || 0 : input.value;
+                         } else {
+                             // Should not happen if form generated correctly, but as fallback
+                             data[key] = value;
+                         }
+                    } else {
+                         // Keep original array data as this form doesn't edit arrays
+                         data[key] = value;
+                    }
+                 }
+            }
+
+
+            try {
+                 // Reconstruct the object based on the original structure
+                 buildObject(updatedProfile, originalProfileData);
+
+                 console.log("Sending updated profile:", updatedProfile); // Debugging
+
+                 fetch('/api/profile', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(updatedProfile), // Send the reconstructed object
+                })
+                .then(response => {
+                    if (response.ok) {
+                        messageEl.textContent = 'Profile saved successfully!';
+                        messageEl.className = 'success';
+                        // Optionally re-fetch to confirm and update originalProfileData
+                         fetch('/api/profile').then(res => res.json()).then(data => originalProfileData = data);
+                    } else {
+                        return response.text().then(text => { throw new Error(text || `HTTP error ${response.status}`) });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving profile:', error);
+                    messageEl.textContent = `Error saving profile: ${error.message}`;
+                    messageEl.className = 'error';
+                });
+
+            } catch (error) {
+                 console.error('Error processing form data:', error);
+                 messageEl.textContent = `Error: ${error.message}`;
+                 messageEl.className = 'error';
+            }
+        });
+    </script>
+    <script src="include-header.js"></script>
+</body>
+</html> 

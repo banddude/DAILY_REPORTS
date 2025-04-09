@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { generateReport } from './daily-report'; // Use CommonJS style import (no extension)
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3"; // Import S3 client and commands
 import { Readable } from 'stream'; // Import Readable for S3 upload body
+import { readFile, writeFile } from 'fs/promises'; // Added for async file operations
 
 const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port or default
@@ -75,6 +76,10 @@ const imageUpload = multer({
 
 // Middleware for JSON body parsing (if you need to pass other params)
 app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit for potential large reports
+
+// --- Serve Static Files (like header.html, include-header.js, etc.) ---
+// Serve files directly from the 'dist' directory (which __dirname points to in the compiled JS)
+app.use(express.static(__dirname));
 
 // --- API Endpoints --- 
 
@@ -439,6 +444,69 @@ app.post('/generate-report', upload.single('video'), async (req: express.Request
             console.error(`Error cleaning up temporary file ${uploadedVideoPath}:`, cleanupError);
         }
     }
+});
+
+// GET Endpoint to serve the PROFILE EDITOR HTML file
+app.get('/edit-profile', (req: express.Request, res: express.Response) => {
+    const editorFilePath = path.join(__dirname, 'profile-editor.html');
+    console.log(`Serving profile editor file from: ${editorFilePath}`);
+    res.sendFile(editorFilePath, (err) => {
+        if (err) {
+            console.error("Error sending profile editor HTML file:", err);
+            res.status(404).send("Profile editor interface file not found.");
+        }
+    });
+});
+
+// GET Endpoint to fetch profile.json content
+app.get('/api/profile', async (req: Request, res: Response) => {
+    const profilePath = path.join(__dirname, 'profile.json');
+    console.log(`Fetching profile from: ${profilePath}`);
+    try {
+        const data = await readFile(profilePath, 'utf-8');
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).send(data);
+    } catch (error: any) {
+        console.error(`Error reading profile.json:`, error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ error: 'profile.json not found.' });
+        } else {
+            res.status(500).json({ error: `Failed to read profile.json: ${error.message}` });
+        }
+    }
+});
+
+// POST Endpoint to save updated profile.json content
+app.post('/api/profile', async (req: Request, res: Response) => {
+    const profilePath = path.join(__dirname, 'profile.json');
+    const updatedProfileData = req.body;
+
+    if (!updatedProfileData || typeof updatedProfileData !== 'object' || Object.keys(updatedProfileData).length === 0) {
+        res.status(400).json({ error: "Missing or invalid JSON data in request body." });
+        return;
+    }
+
+    console.log(`Saving updated profile to: ${profilePath}`);
+    try {
+        // Validate if it's actually JSON before writing
+        const profileString = JSON.stringify(updatedProfileData, null, 2);
+        await writeFile(profilePath, profileString, 'utf-8');
+        console.log(`Successfully saved updated profile to ${profilePath}`);
+        res.status(200).json({ message: "Profile updated successfully." });
+    } catch (error: any) {
+        console.error(`Error writing profile.json:`, error);
+        // Handle potential JSON stringify errors (though less likely with prior checks)
+        if (error instanceof SyntaxError) { 
+             res.status(400).json({ error: `Invalid JSON format received: ${error.message}` });
+        } else {
+             res.status(500).json({ error: `Failed to save profile.json: ${error.message}` });
+        }
+    }
+});
+
+// POST Endpoint to upload a video and trigger report generation
+app.post('/upload', upload.single('videoFile'), async (req: Request, res: Response) => {
+    // ... existing code ...
 });
 
 // Start the server

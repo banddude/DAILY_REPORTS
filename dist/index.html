@@ -140,6 +140,8 @@
     </style>
 </head>
 <body>
+    <div id="header-placeholder"></div>
+
     <div class="container">
         <h1>Daily Report Generator</h1>
         <p>Upload a video walkthrough (MP4, MOV, etc.) to automatically generate a daily construction report.</p>
@@ -152,10 +154,6 @@
         <div id="resultsArea">
             <!-- Results will be shown here -->
         </div>
-    </div>
-
-    <div class="browse-link">
-        <a href="/browse">Browse Existing Reports</a>
     </div>
 
     <script>
@@ -210,5 +208,6 @@
             resultsArea.style.display = 'block';
         }
     </script>
+    <script src="include-header.js"></script>
 </body>
 </html> 

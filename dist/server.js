@@ -52,6 +52,7 @@ const fs = __importStar(require("fs"));
 const daily_report_1 = require("./daily-report"); // Use CommonJS style import (no extension)
 const client_s3_1 = require("@aws-sdk/client-s3"); // Import S3 client and commands
 const stream_1 = require("stream"); // Import Readable for S3 upload body
+const promises_1 = require("fs/promises"); // Added for async file operations
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000; // Use environment variable for port or default
 // --- AWS S3 Setup ---
@@ -117,6 +118,9 @@ const imageUpload = (0, multer_1.default)({
 });
 // Middleware for JSON body parsing (if you need to pass other params)
 app.use(express_1.default.json({ limit: '10mb' })); // Increase JSON payload limit for potential large reports
+// --- Serve Static Files (like header.html, include-header.js, etc.) ---
+// Serve files directly from the 'dist' directory (which __dirname points to in the compiled JS)
+app.use(express_1.default.static(__dirname));
 // --- API Endpoints --- 
 // NEW: Serve index.html for the root route
 app.get('/', (req, res) => {
@@ -438,6 +442,67 @@ app.post('/generate-report', upload.single('video'), (req, res) => __awaiter(voi
             console.error(`Error cleaning up temporary file ${uploadedVideoPath}:`, cleanupError);
         }
     }
+}));
+// GET Endpoint to serve the PROFILE EDITOR HTML file
+app.get('/edit-profile', (req, res) => {
+    const editorFilePath = path_1.default.join(__dirname, 'profile-editor.html');
+    console.log(`Serving profile editor file from: ${editorFilePath}`);
+    res.sendFile(editorFilePath, (err) => {
+        if (err) {
+            console.error("Error sending profile editor HTML file:", err);
+            res.status(404).send("Profile editor interface file not found.");
+        }
+    });
+});
+// GET Endpoint to fetch profile.json content
+app.get('/api/profile', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const profilePath = path_1.default.join(__dirname, 'profile.json');
+    console.log(`Fetching profile from: ${profilePath}`);
+    try {
+        const data = yield (0, promises_1.readFile)(profilePath, 'utf-8');
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).send(data);
+    }
+    catch (error) {
+        console.error(`Error reading profile.json:`, error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ error: 'profile.json not found.' });
+        }
+        else {
+            res.status(500).json({ error: `Failed to read profile.json: ${error.message}` });
+        }
+    }
+}));
+// POST Endpoint to save updated profile.json content
+app.post('/api/profile', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const profilePath = path_1.default.join(__dirname, 'profile.json');
+    const updatedProfileData = req.body;
+    if (!updatedProfileData || typeof updatedProfileData !== 'object' || Object.keys(updatedProfileData).length === 0) {
+        res.status(400).json({ error: "Missing or invalid JSON data in request body." });
+        return;
+    }
+    console.log(`Saving updated profile to: ${profilePath}`);
+    try {
+        // Validate if it's actually JSON before writing
+        const profileString = JSON.stringify(updatedProfileData, null, 2);
+        yield (0, promises_1.writeFile)(profilePath, profileString, 'utf-8');
+        console.log(`Successfully saved updated profile to ${profilePath}`);
+        res.status(200).json({ message: "Profile updated successfully." });
+    }
+    catch (error) {
+        console.error(`Error writing profile.json:`, error);
+        // Handle potential JSON stringify errors (though less likely with prior checks)
+        if (error instanceof SyntaxError) {
+            res.status(400).json({ error: `Invalid JSON format received: ${error.message}` });
+        }
+        else {
+            res.status(500).json({ error: `Failed to save profile.json: ${error.message}` });
+        }
+    }
+}));
+// POST Endpoint to upload a video and trigger report generation
+app.post('/upload', upload.single('videoFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    // ... existing code ...
 }));
 // Start the server
 app.listen(port, () => {
