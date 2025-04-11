@@ -568,23 +568,38 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
   try {
     // 1. Convert video to audio (using absolute videoDestPath and absolute audioPath)
     // IMPORTANT: Use the COPIED video path inside the report dir for ffmpeg input
-    await convertVideoToAudio(videoDestPath, audioPath);
+    await fs.promises.copyFile(inputVideoPath, videoDestPath);
+    console.log(`Video copied successfully.`);
 
-    // 2. Transcribe audio (using updated audioPath)
-    transcriptionResult = await transcribeAudio(audioPath, profileData);
-    if (!transcriptionResult || !transcriptionResult.words || transcriptionResult.words.length === 0) {
+    // 2. Read Profile Data
+    console.log(`Reading profile data from: ${profilePath}`);
+    const profileDataContent = await fs.promises.readFile(profilePath, 'utf-8');
+    const profileData = JSON.parse(profileDataContent);
+    console.log(`Profile data read successfully.`);
+
+    // 3. Convert video (copied version) to audio
+    console.log(`Ensuring directory for audio exists: ${path.dirname(audioPath)}`);
+    await ensureDir(path.dirname(audioPath)); // Explicitly ensure parent dir exists just before call
+
+    console.log(`Calling convertVideoToAudio with video: ${videoDestPath}, audio: ${audioPath}`);
+    await convertVideoToAudio(videoDestPath, audioPath); // Pass the copied video path
+
+    // 4. Transcribe Audio
+    console.log(`Calling transcribeAudio with audio: ${audioPath}`);
+    const transcription = await transcribeAudio(audioPath, profileData);
+    if (!transcription || !transcription.words || transcription.words.length === 0) {
       console.error('Transcription failed or produced empty result.');
       throw new Error('Transcription failed');
     }
     console.log('\nTranscript generated.');
 
     // Save the raw transcription data (using updated transcriptDataPath)
-    await fs.promises.writeFile(transcriptDataPath, JSON.stringify(transcriptionResult, null, 2));
+    await fs.promises.writeFile(transcriptDataPath, JSON.stringify(transcription, null, 2));
     console.log(`Raw transcript data saved to ${transcriptDataPath}`);
 
-    // 3. Generate Report using Full Transcription
+    // 5. Generate Report using Full Transcription
     console.log('\nStarting daily report generation based on transcript...');
-    reportJson = await getDailyReport(transcriptionResult, profileData);
+    reportJson = await getDailyReport(transcription, profileData);
     if (!reportJson) {
         throw new Error('Report generation failed');
     }
