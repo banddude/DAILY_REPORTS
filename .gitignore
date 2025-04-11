@@ -1,9 +1,19 @@
+# Environment variables
+.env
+**/.env
+server/.env
+mobile-app/.env
+
 # Large media files
 *.mov
 
 # Dependencies
 node_modules/
 */node_modules/
+
+# Temporary files
+server/uploads/
+server/processing_reports/
 
 # Logs
 *.log
