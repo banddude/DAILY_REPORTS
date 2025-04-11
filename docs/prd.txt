@@ -1,0 +1,35 @@
+# Project Reorganization and Cleanup Plan (4 Steps)
+
+## Goal:
+Organize the project structure into clear frontend and backend separation, remove obsolete files, and prepare the codebase for future feature development, following a 4-step process.
+
+## 4-Step Plan:
+
+### Step 1: Create Backend Structure & Move Core Files
+- **Objective:** Establish the dedicated backend directory and move essential server configuration and entry point.
+- **Tasks:**
+    - Create a `backend/` directory.
+    - Move `server.ts`, `tsconfig.json`, `.env` into `backend/`.
+    - Identify backend-specific scripts and dependencies in the root `package.json` to prepare for potential separation later (no move yet).
+
+### Step 2: Relocate Backend Logic & Support Files
+- **Objective:** Move the remaining backend code and database-related files into the new structure.
+- **Tasks:**
+    - Move `daily-report.ts`, `authMiddleware.ts`, and `supabase_schema_update.sql` into appropriate subdirectories within `backend/` (e.g., `backend/src/`, `backend/db/`).
+    - Update import paths *within* the moved backend files to reflect their new locations relative to each other.
+
+### Step 3: Isolate Frontend & Clean Root Directory
+- **Objective:** Ensure the frontend (`mobile-app/`) is self-contained and remove clutter from the project root.
+- **Tasks:**
+    - Verify `mobile-app/` contains only React Native frontend code and assets and communicates only with the (future relocated) backend API.
+    - Create an `archive/` directory (if it doesn't exist).
+    - Move root HTML files (`report-viewer.html`, `index.html`, `header.html`), `include-header.js`, data/example files (`users.json`, `profile.json`, `daily_report.json`, `example-daily_report.json`), `logo.png`, and any temporary files into `archive/` or delete if clearly obsolete.
+
+### Step 4: Update Configurations & Verify Structure
+- **Objective:** Adjust configuration files and scripts to recognize the new backend location and perform basic validation.
+- **Tasks:**
+    - Update the `backend/tsconfig.json` (`rootDir`, `outDir` if necessary) and potentially create a simpler root `tsconfig.json` if needed for project-wide tooling.
+    - Update scripts in the root `package.json` (e.g., `start`, `dev`, `build`) to target `backend/server.ts` or the compiled output in `backend/dist/`.
+    - Adjust the root `.gitignore` to ignore `backend/node_modules`, `backend/dist`, `backend/.env`, and potentially `archive/`.
+    - Run `npm install` (or equivalent) if changes were made to dependencies.
+    - Perform basic tests: Can the backend server still start? Does the build process complete? (Full functional testing comes after the move). 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography, borders } from '../theme/theme'; // <-- Add this import
 import { API_BASE_URL } from '../config'; // <-- Import from config
+import { useAuth } from '../context/AuthContext'; // Import useAuth
 
 
 // --- Types (Define structures based on expected report data) ---
@@ -93,6 +94,7 @@ type ReportEditorScreenProps = {
 // --- Component ---
 export default function ReportEditorScreen({ route, navigation }: ReportEditorScreenProps): React.ReactElement {
   const { reportKey } = route.params;
+  const { userToken } = useAuth(); // Get token for authenticated fetch
 
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [editedData, setEditedData] = useState<ReportData | null>(null); // State to hold changes
@@ -108,16 +110,37 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
       setLoading(false);
       return;
     }
+    if (!userToken) {
+      setError("Authentication token not found. Cannot load report.");
+      setLoading(false);
+      return; // Need token to fetch
+    }
 
     setLoading('initial');
     setError(null);
     setStatusMessage(null);
 
-    fetch(`${API_BASE_URL}/api/report?key=${encodeURIComponent(reportKey)}`)
+    // Use the backend endpoint which enforces auth via protect middleware
+    const url = `${API_BASE_URL}/api/report?key=${encodeURIComponent(reportKey)}`;
+    console.log(`ReportEditor: Fetching data from ${url}`);
+    
+    fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${userToken}`, // Include Auth header
+            'Accept': 'application/json'
+        }
+    })
       .then(async response => {
         if (!response.ok) {
-          const err = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
-          throw new Error(err.error || `Failed to load report. Status: ${response.status}`);
+          // Attempt to get error message from backend
+          let errorMsg = `Failed to load report. Status: ${response.status}`;
+           try {
+               const err = await response.json();
+               errorMsg = err.error || err.message || errorMsg;
+           } catch (e) {
+               console.error("Could not parse error response", e);
+           }
+          throw new Error(errorMsg);
         }
         return response.json();
       })
@@ -125,7 +148,7 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
         console.log("Report data loaded:", data);
         setReportData(data);
         setEditedData(JSON.parse(JSON.stringify(data))); // Initialize editedData with a deep copy
-        setImageBaseUrl(data.reportAssetsS3Urls?.baseUrl || '');
+        // setImageBaseUrl(data.reportAssetsS3Urls?.baseUrl || ''); // Keep if needed
       })
       .catch(err => {
         console.error('Error loading report data:', err);
@@ -134,7 +157,7 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
       .finally(() => {
         setLoading(false);
       });
-  }, [reportKey]);
+  }, [reportKey, userToken]); // Depend on userToken as well
 
 
   // --- Edit Handlers ---
@@ -254,154 +277,228 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
   };
 
   const handleImageUpload = async (asset: ImagePicker.ImagePickerAsset) => {
-     if (!asset.uri) return;
+      if (!userToken) {
+          setStatusMessage({ message: 'Authentication error.', type: 'error' });
+          return;
+      }
+      setLoading('uploading');
+      setStatusMessage({ message: 'Uploading image...', type: 'success' });
+      
+      try {
+        // Log upload details for debugging
+        console.log('Uploading image:', {
+          uri: asset.uri,
+          fileName: asset.fileName || `upload_${Date.now()}.jpg`,
+          mimeType: asset.mimeType || 'image/jpeg',
+          size: asset.fileSize
+        });
+        
+        // For web only path
+        if (Platform.OS === 'web') {
+          // For web, convert to blob first
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          
+          const webFormData = new FormData();
+          webFormData.append('reportImage', blob, asset.fileName || 'image.jpg');
+          
+          console.log('Web FormData created with blob');
+          
+          // Construct the URL with the report key
+          const uploadUrl = `${API_BASE_URL}/api/report-image?key=${encodeURIComponent(reportKey)}`;
+          console.log('Upload URL:', uploadUrl);
 
-     setLoading('uploading');
-     setStatusMessage(null);
-     setError(null);
+          const webResponse = await fetch(uploadUrl, {
+            method: 'POST',
+            body: webFormData,
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${userToken}`,
+              // Don't set Content-Type, browser will add the correct multipart boundary
+            },
+          });
 
-     const formData = new FormData();
-     const filename = asset.uri.split('/').pop() || `upload_${Date.now()}.jpg`;
-     const match = /\.(\w+)$/.exec(filename);
-     const type = match ? `image/${match[1]}` : `image`;
+          console.log('Response status:', webResponse.status);
+          const responseText = await webResponse.text();
+          console.log('Response text:', responseText);
+          
+          // Parse the response as JSON
+          const result = responseText ? JSON.parse(responseText) : {};
 
-     // Append the file correctly for React Native fetch
-     formData.append('newImage', {
-       uri: asset.uri,
-       name: filename,
-       type: asset.mimeType ?? type, // Use mimeType from picker if available
-     } as any);
+          if (!webResponse.ok) {
+            throw new Error(result.error || 'Image upload failed');
+          }
 
-     try {
-       const response = await fetch(`${API_BASE_URL}/api/upload-image?key=${encodeURIComponent(reportKey)}`, {
-         method: 'POST',
-         body: formData,
-         // headers: { 'Content-Type': 'multipart/form-data' }, // Let fetch set this
-       });
+          // Update local state with the new image list from the response
+          if (result.updatedImages) {
+              setEditedData(prev => prev ? { ...prev, images: result.updatedImages } : null);
+              setReportData(prev => prev ? { ...prev, images: result.updatedImages } : null);
+          }
+          setStatusMessage({ message: 'Image uploaded successfully!', type: 'success' });
+          return; // Exit early for web path
+        }
+        
+        // For native mobile - need different approach
+        const formData = new FormData();
+        // This is the correct way to append a file in React Native
+        formData.append('reportImage', {
+          uri: asset.uri,
+          type: asset.mimeType || 'image/jpeg',
+          name: asset.fileName || `upload_${Date.now()}.jpg`,
+        } as any);
+        
+        console.log('Native FormData created');
+        
+        // Construct the URL with the report key
+        const uploadUrl = `${API_BASE_URL}/api/report-image?key=${encodeURIComponent(reportKey)}`;
+        console.log('Upload URL:', uploadUrl);
 
-       const result = await response.json();
+        // Create a simplified fetch for debugging
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', uploadUrl);
+        xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
+        xhr.setRequestHeader('Accept', 'application/json');
+        
+        // Set up listeners
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('Upload successful, response:', xhr.responseText);
+            try {
+              const result = JSON.parse(xhr.responseText);
+              if (result.updatedImages) {
+                setEditedData(prev => prev ? { ...prev, images: result.updatedImages } : null);
+                setReportData(prev => prev ? { ...prev, images: result.updatedImages } : null);
+              }
+              setStatusMessage({ message: 'Image uploaded successfully!', type: 'success' });
+            } catch (parseError) {
+              console.error('Error parsing response:', parseError);
+              setStatusMessage({ message: 'Upload succeeded but response parsing failed', type: 'error' });
+            }
+          } else {
+            console.error('Upload failed, status:', xhr.status, 'response:', xhr.responseText);
+            setStatusMessage({ message: `Upload failed: ${xhr.status} ${xhr.statusText}`, type: 'error' });
+          }
+          setLoading(false);
+        };
+        
+        xhr.onerror = function() {
+          console.error('XHR error occurred');
+          setStatusMessage({ message: 'Network error during upload', type: 'error' });
+          setLoading(false);
+        };
+        
+        // Send the request
+        console.log('Sending XHR request with FormData');
+        xhr.send(formData);
 
-       if (!response.ok) {
-         throw new Error(result.error || `Upload failed: ${response.status}`);
-       }
-
-       console.log('Upload successful:', result);
-       setStatusMessage({ message: 'Image uploaded successfully!', type: 'success' });
-
-        // Update local state with the new image list from the backend
-       if (result.updatedImages && editedData) {
-          setEditedData(prev => prev ? { ...prev, images: result.updatedImages } : null);
-       } else {
-           console.warn("Backend did not return updated image array after upload.");
-           // Potentially fetch the report data again to ensure consistency
-       }
-
-     } catch (err: any) {
-       console.error('Error uploading image:', err);
-       setError(`Upload failed: ${err.message}`);
-       setStatusMessage({ message: `Upload failed: ${err.message}`, type: 'error' });
-     } finally {
-       setLoading(false);
-     }
-   };
+      } catch (err: any) {
+        console.error('Image upload error:', err);
+        setStatusMessage({ message: `Upload failed: ${err.message}`, type: 'error' });
+      } finally {
+        setLoading(false);
+      }
+  };
 
 
   const handleRemoveImage = (fileName: string) => {
-     if (!editedData || !editedData.images) return;
+    Alert.alert(
+      "Confirm Deletion",
+      `Are you sure you want to remove image: ${fileName}?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+              if (!userToken) {
+                  setStatusMessage({ message: 'Authentication error.', type: 'error' });
+                  return;
+              }
+              setLoading('removing');
+              setStatusMessage({ message: 'Removing image...', type: 'success' });
 
-     Alert.alert(
-       "Confirm Removal",
-       `Are you sure you want to remove the image reference '${fileName}' from the report? The file will remain on the server.`,
-       [
-         { text: "Cancel", style: "cancel" },
-         {
-           text: "Remove", style: "destructive", onPress: async () => {
-             setLoading('removing');
-             setStatusMessage(null);
-             setError(null);
+              // Construct the URL with report key and file name
+              const deleteUrl = `${API_BASE_URL}/api/report-image?key=${encodeURIComponent(reportKey)}&fileName=${encodeURIComponent(fileName)}`;
 
-             try {
-               const response = await fetch(`${API_BASE_URL}/api/remove-image?key=${encodeURIComponent(reportKey)}&fileName=${encodeURIComponent(fileName)}`, {
-                 method: 'DELETE'
-               });
+              try {
+                  const response = await fetch(deleteUrl, {
+                      method: 'DELETE',
+                      headers: {
+                          'Accept': 'application/json',
+                          'Authorization': `Bearer ${userToken}` // ADD AUTH HEADER
+                      }
+                  });
 
-               const result = await response.json();
+                  const result = await response.json();
 
-               if (!response.ok) {
-                 throw new Error(result.error || `Failed to remove image: ${response.status}`);
-               }
+                  if (!response.ok) {
+                      throw new Error(result.error || 'Failed to remove image');
+                  }
 
-               console.log("Image removal successful:", result);
-               setStatusMessage({ message: 'Image reference removed.', type: 'success' });
+                  // Update local state with the updated image list from the response
+                  if (result.updatedImages) {
+                      setEditedData(prev => prev ? { ...prev, images: result.updatedImages } : null);
+                      setReportData(prev => prev ? { ...prev, images: result.updatedImages } : null);
+                  }
+                  setStatusMessage({ message: 'Image removed successfully.', type: 'success' });
 
-               // Update local state with the new image list from the backend
-               if (result.updatedImages) {
-                  setEditedData(prev => prev ? { ...prev, images: result.updatedImages } : null);
-               } else {
-                   console.warn("Backend did not return updated image array after removal.");
-                   // Fallback: Manually filter
-                   setEditedData(prev => {
-                       if (!prev || !prev.images) return prev;
-                       return {...prev, images: prev.images.filter(img => img.fileName !== fileName)};
-                   });
-               }
-
-             } catch (err: any) {
-               console.error('Error removing image:', err);
-               setError(`Removal failed: ${err.message}`);
-               setStatusMessage({ message: `Removal failed: ${err.message}`, type: 'error' });
-             } finally {
-               setLoading(false);
-             }
-           }
-         }
-       ]
-     );
-   };
+              } catch (err: any) {
+                  console.error('Image removal error:', err);
+                  setStatusMessage({ message: `Removal failed: ${err.message}`, type: 'error' });
+              } finally {
+                  setLoading(false);
+              }
+          },
+        },
+      ]);
+  };
 
 
   // --- Save Changes ---
   const saveChanges = async () => {
     if (!editedData) {
-      setError("No data to save.");
-      return;
+        setStatusMessage({ message: 'No changes to save.', type: 'error' });
+        return;
+    }
+    if (!userToken) {
+        setStatusMessage({ message: 'Authentication error.', type: 'error' });
+        return;
     }
 
     setLoading('saving');
     setStatusMessage(null);
     setError(null);
-
-    console.log("Saving data:", editedData);
-
+    
+    const saveUrl = `${API_BASE_URL}/api/report?key=${encodeURIComponent(reportKey)}`;
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/api/report?key=${encodeURIComponent(reportKey)}`, {
+      const response = await fetch(saveUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${userToken}` // ADD AUTH HEADER
         },
         body: JSON.stringify(editedData),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: `Save failed! Status: ${response.status}` }));
-        throw new Error(err.error || `Save failed! Status: ${response.status}`);
+        throw new Error(result.error || 'Failed to save changes');
       }
 
-      const result = await response.json();
-      console.log("Save successful:", result);
-      setReportData(JSON.parse(JSON.stringify(editedData))); // Update original data state on success
-      setStatusMessage({ message: result.message || 'Report saved successfully!', type: 'success' });
-      // Optionally navigate back or show confirmation
+      // Update original reportData state after successful save
+      setReportData(JSON.parse(JSON.stringify(editedData))); 
+      setStatusMessage({ message: 'Changes saved successfully!', type: 'success' });
+      // Optionally navigate back or provide further user feedback
       // navigation.goBack();
 
     } catch (err: any) {
-      console.error('Error saving report:', err);
-      setError(`Error saving report: ${err.message}`);
-      setStatusMessage({ message: `Error saving report: ${err.message}`, type: 'error' });
+      console.error('Error saving changes:', err);
+      setError(`Save failed: ${err.message}`);
+      setStatusMessage({ message: `Save failed: ${err.message}`, type: 'error' }); // Show status too
     } finally {
       setLoading(false);
-      // Optional: Auto-hide status message after a delay
-      setTimeout(() => setStatusMessage(null), 5000);
     }
   };
 

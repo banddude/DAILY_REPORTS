@@ -1,11 +1,23 @@
 # Environment variables
-.env
-
-# Build output
-dist/
+server/.env
 
 # Large media files
 *.mov
 
 # Dependencies
-node_modules/ 
+node_modules/
+*/node_modules/
+
+# Temporary files
+server/uploads/
+server/processing_reports/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+**/.DS_Store
+
+# Expo specific
+mobile-app/.expo/ 

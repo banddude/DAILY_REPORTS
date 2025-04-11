@@ -1,0 +1,64 @@
+---
+description: Guidelines for creating and maintaining Cursor rules to ensure consistency and effectiveness.
+globs: .cursor/rules/*.mdc
+alwaysApply: true
+---
+# Project Development Guidelines
+You have full access to your computer. You must use your tools. These include the browser, tools terminal in the background and file editing. You must never asked me to do anything for you. You must never ask me to start the server. You must never ask me to check it and upload. You should never ask me to do any kind of tasks and you should always come up with a plan to test them yourself if you need to ask me for something stop what you're doing write a plan.text file and then execute that plan to do it.
+
+## NEVER EVER EVER EVER EVER FOR ANY REASON EVEN TESTING HARDCODE ANYHTING INTO THE CODE. NO VAIRABLES SHOULD EVER BE STARTED IN THE CODE. THEY ARE ALL IN THE .ENV FILE. ALL OF THEM. NEVER HARD CODE VARIABLES. NEVER PROVIDE FALL BACK OR DEFAULT DATA EVER.
+
+start the front end by doing cd to the full path to mobile-app and then npm start
+start the back end by doing cd to the full path to /server and then npm start
+
+## Technology Stack
+- **Frontend:** React Native with Expo (Managed Workflow)
+  - Responsible for user interactions and UI.
+  - Must communicate **exclusively** with the backend (no direct calls to external services).
+- **Backend:** Node.js/Express server (located in the project root)
+  - The sole point of contact for the client.
+  - Handles all business logic, authentication, and integration with third-party services.
+- **Database & Auth:** Supabase (PostgreSQL with Supabase Auth)
+- **File Storage:** AWS S3  
+  - Accessed via Supabase Storage or the AWS SDK.
+
+## Architecture Flow
+- **Client Interaction:**  
+  The React Native frontend sends requests only to the backend.
+- **Backend Integration:**  
+  The backend manages all communication with external APIs (e.g., Supabase, AWS S3). This approach:
+  - Centralizes security by managing tokens and credentials in one place.
+  - Keeps the frontend clean and focused on the user experience.
+  
+## Development Workflow & Testing
+- **Autonomy:**  
+  Tackle issues and complete tasks independently. Dig into existing code before adding new files.
+- **Testing:**  
+  - Test all frontend features using the available browser or device tools.
+  - Ensure all backend API endpoints are working properly after changes.
+  - Validate authentication and authorization flows, especially token passing (like JWTs) from the frontend to the backend.
+- **File Structure:**  
+  - Investigate the existing project structure (using tools like `ls`, `tree`, or search features).
+  - Reuse and modularize existing code where possible before introducing new files.
+
+## Stack Integration
+- **Seamless Communication:**  
+  Guarantee smooth integration between:
+  - React Native frontend
+  - Node.js/Express (TypeScript) backend
+  - Supabase (Database & Auth)
+  - AWS S3 (File Storage)
+- **Data Handling & Security:**  
+  - Adhere to best practices for API request/response formats.
+  - Carefully manage authentication tokens between the layers.
+  - Set up environment variables appropriately using `.env` for the backend and `EXPO_PUBLIC_` prefixed variables for the frontend.
+- **Service Isolation:**  
+  The frontend is decoupled from any direct interactions with third-party APIs – the backend handles all external communications.
+
+## Key Principles
+- **Task Focus:**  
+  Stick strictly to the requirements as defined in the `tasks/tasks.json` or outlined in the task descriptions.
+- **Verification:**  
+  Double-check that all new features or modifications match the requirements detailed in the corresponding task or PRD (`prd.txt`).
+- **Security:**  
+  Maintain high security standards, particularly regarding authentication, authorization, and data handling across the frontend, backend, and external services.

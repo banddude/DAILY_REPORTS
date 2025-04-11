@@ -16,7 +16,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { colors, spacing, typography, borders } from '../theme/theme';
-import { API_BASE_URL } from '../config'; // <-- Import from config
+import { API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
+import { fetchApi } from './BrowseScreen';
 
 // Basic type for the result object expected from the server
 interface ReportResult {
@@ -46,6 +48,7 @@ type LoadingState = 'customers' | 'projects' | false;
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
+  const { userToken } = useAuth();
   const [selectedFile, setSelectedFile] =
     useState<SelectedAsset | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -56,68 +59,89 @@ export default function HomeScreen() {
   const [selectedCustomer, setSelectedCustomer] = useState<string | undefined>(undefined);
   const [projects, setProjects] = useState<string[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined);
-  const [loadingState, setLoadingState] = useState<LoadingState>(false); // For picker data loading
+  const [loadingState, setLoadingState] = useState<LoadingState>(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
 
-  // Fetch customers on component mount
+  // Log token value on every render
+  console.log(`HomeScreen Render: userToken is ${userToken ? 'present' : 'null'}`);
+
+  // Fetch customers - Back to Simplest Logic
   useEffect(() => {
     let isMounted = true;
+    console.log(`HomeScreen Customer Effect Triggered: userToken is ${userToken ? 'present' : 'null'}`);
+
     const fetchCustomers = async () => {
+      // Check token *inside* the async function right before fetch
+      if (!userToken) { 
+        console.log('FetchCustomers ABORTED: No userToken at time of execution.');
+        setCustomers([]);
+        if(isMounted) setLoadingState(false); // Ensure loading stops if aborted
+        return;
+      }
+      
       setLoadingState('customers');
       setPickerError(null);
+      console.log('HomeScreen: INSIDE fetchCustomers async func - Attempting fetchApi call...'); // Log before the call
       try {
-        // Use the correct endpoint from BrowseScreen
-        const response = await fetch(`${API_BASE_URL}/api/browse-reports`);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
+        const fetchedCustomers = await fetchApi('/api/browse-reports', userToken);
         if (isMounted) {
-          // Access the correct key ('items' as used in BrowseScreen's fetchApi)
-          setCustomers(data.items || []); 
+          console.log('HomeScreen: Successfully fetched customers (simple effect).', fetchedCustomers);
+          setCustomers(fetchedCustomers);
         }
       } catch (err: any) {
-        if (isMounted) setPickerError(`Failed to load customers: ${err.message}`);
-        console.error("Fetch customers error:", err);
+        const errorMessage = `Failed to load customers: ${err.message}`;
+        if (isMounted) {
+            console.error("HomeScreen Fetch customers error (simple effect):", errorMessage, err); // Log full error
+            setPickerError(errorMessage);
+            setCustomers([]);
+        }
       } finally {
         if (isMounted) setLoadingState(false);
       }
     };
 
-    fetchCustomers();
-    return () => { isMounted = false; }; // Cleanup
-  }, []);
+    // Directly call the async function if token exists
+    if (userToken) {
+        fetchCustomers();
+    } else {
+        // Clear customers if token is null (e.g., on logout)
+        setCustomers([]);
+    }
 
-  // Fetch projects when customer changes
+    return () => { isMounted = false; };
+  }, [userToken]); // Depend ONLY on userToken
+
+  // Fetch projects - Needs token check
   useEffect(() => {
     let isMounted = true;
-    if (selectedCustomer) {
-      const fetchProjects = async () => {
-        setLoadingState('projects');
-        setPickerError(null);
-        setProjects([]); // Clear previous projects
-        setSelectedProject(undefined); // Reset project selection
-        try {
-          // Use the correct endpoint from BrowseScreen
-          const response = await fetch(`${API_BASE_URL}/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`);
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          const data = await response.json();
-          if (isMounted) {
-            // Access the correct key ('items' as used in BrowseScreen's fetchApi)
-            setProjects(data.items || []); 
-          }
-        } catch (err: any) {
-          if (isMounted) setPickerError(`Failed to load projects: ${err.message}`);
-           console.error("Fetch projects error:", err);
-        } finally {
-          if (isMounted) setLoadingState(false);
-        }
-      };
-      fetchProjects();
-      return () => { isMounted = false; }; // Cleanup
-    } else {
-      setProjects([]); // Clear projects if no customer is selected
-      setSelectedProject(undefined);
+    if (!selectedCustomer || !userToken) {
+        setProjects([]); 
+        setSelectedProject(undefined);
+        return; 
     }
-  }, [selectedCustomer]);
+    
+    const fetchProjects = async () => {
+      setLoadingState('projects');
+      setPickerError(null);
+      setProjects([]);
+      setSelectedProject(undefined);
+      console.log(`HomeScreen: Triggering project fetch for customer ${selectedCustomer} (token present).`);
+      try {
+        const fetchedProjects = await fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken);
+        if (isMounted) {
+          setProjects(fetchedProjects);
+        }
+      } catch (err: any) {
+        const errorMessage = `Failed to load projects: ${err.message}`;
+        if (isMounted) setPickerError(errorMessage);
+        console.error("HomeScreen Fetch projects error:", errorMessage, err);
+      } finally {
+        if (isMounted) setLoadingState(false);
+      }
+    };
+    fetchProjects();
+    return () => { isMounted = false; };
+  }, [selectedCustomer, userToken]);
 
   async function pickDocument() {
     // Reset previous result and selection
@@ -262,7 +286,6 @@ export default function HomeScreen() {
   }
 
   async function handleUpload() {
-    // Add validation for customer and project
     if (!selectedCustomer || !selectedProject) {
       setResult({ message: 'Please select a customer and project first.', type: 'error' });
       return;
@@ -271,27 +294,27 @@ export default function HomeScreen() {
       setResult({ message: 'Please select or record a video file first.', type: 'error' });
       return;
     }
+    if (!userToken) {
+        setResult({ message: 'Authentication error. Please log out and back in.', type: 'error' });
+        return;
+    }
 
     setIsLoading(true);
-    setResult({ message: 'Generating report... This may take a minute or two depending on video length.', type: 'loading', data: null });
+    setResult({ message: 'Generating report... ', type: 'loading', data: null });
 
     const formData = new FormData();
-    // Add customer and project to form data
     formData.append('customer', selectedCustomer);
     formData.append('project', selectedProject);
-
-    // Append the file
-    formData.append('video', {
-      uri: selectedFile.uri,
-      name: selectedFile.name,
-    } as any);
+    formData.append('video', { uri: selectedFile.uri, name: selectedFile.name } as any);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/generate-report`, {
+      console.log('HomeScreen handleUpload: Calling /api/generate-report');
+      const response = await fetch(`${API_BASE_URL}/api/generate-report`, {
         method: 'POST',
         body: formData,
         headers: {
            'Accept': 'application/json',
+           'Authorization': `Bearer ${userToken}`
         },
       });
 
@@ -301,14 +324,9 @@ export default function HomeScreen() {
          const errorMessage = (responseJson as { error: string }).error || `Report generation failed: ${response.status}`;
          throw new Error(errorMessage);
       }
-
        const reportData = responseJson as ReportResult;
        console.log('Report generated:', reportData);
-       setResult({
-         message: 'Report Generated Successfully!',
-         type: 'success',
-         data: reportData,
-       });
+       setResult({ message: 'Report Generated Successfully!', type: 'success', data: reportData });
 
     } catch (error) {
       console.error('Report generation error:', error);
@@ -316,8 +334,6 @@ export default function HomeScreen() {
       setResult({ message: `Error: ${errorMessage}`, type: 'error', data: null });
     } finally {
       setIsLoading(false);
-      // Optionally clear selection after upload attempt
-      // setSelectedFile(null);
     }
   }
 
@@ -372,8 +388,11 @@ export default function HomeScreen() {
 
           if (reportKey) {
               console.log(`Navigating to ReportEditor with extracted key: ${reportKey}`);
-              // Ensure your ReportEditorScreen is registered with the name 'ReportEditor'
-              navigation.navigate('ReportEditor', { reportKey: reportKey });
+              // Fix: Navigate to the correct stack and screen
+              navigation.navigate('BrowseTab', { 
+                screen: 'ReportEditor', 
+                params: { reportKey: reportKey }
+              });
           } else {
               throw new Error("'key' parameter not found in URL");
           }
@@ -394,7 +413,11 @@ export default function HomeScreen() {
           return;
       }
       console.log(`Navigating to WebViewer with URL: ${url}`);
-      navigation.navigate('WebViewer', { url: url });
+      // Fix: Navigate to the correct stack and screen
+      navigation.navigate('BrowseTab', { 
+        screen: 'WebViewer', 
+        params: { url: url }
+      });
       // No need for complex parsing or fallback to Linking here
   }
 

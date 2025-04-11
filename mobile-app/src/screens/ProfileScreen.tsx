@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config'; // <-- Import from config
+import { useAuth } from '../context/AuthContext'; // Add this import for auth context
+import * as ImagePicker from 'expo-image-picker'; // Import ImagePicker
 
 // Define the expected structure of the profile data
 interface ProfileCompanyAddress {
@@ -147,11 +149,10 @@ const styles = StyleSheet.create({
       paddingVertical: spacing.xs,
   },
   logo: {
-      width: 150,
-      height: 50,
-      resizeMode: 'contain',
+      width: 200,
+      height: 100,
+      marginBottom: spacing.md,
       alignSelf: 'center',
-      marginBottom: spacing.lg,
   },
   saveButtonContainer: {
       paddingHorizontal: spacing.lg,
@@ -169,7 +170,32 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     fontSize: typography.fontSizeXS,
-  }
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  logoCaption: {
+    fontSize: typography.fontSizeM,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  uploadButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radiusSmall,
+  },
+  uploadButtonText: {
+    color: colors.surfaceAlt,
+    fontWeight: typography.fontWeightMedium as '500',
+  },
+  uploadingText: {
+    marginTop: spacing.sm,
+    color: colors.primary,
+    fontWeight: typography.fontWeightMedium as '500',
+  },
 });
 
 // --- Helper to open links ---
@@ -222,13 +248,28 @@ function ProfileScreen(): React.ReactElement {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { userToken } = useAuth(); // Get authentication token from context
+  const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`);
+      // Check if userToken exists
+      if (!userToken) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+      
+      // Add authorization header with the token
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Accept': 'application/json'
+        }
+      });
+      
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Failed to fetch profile' }));
         throw new Error(errData.error || `HTTP error! status: ${response.status}`);
@@ -248,7 +289,7 @@ function ProfileScreen(): React.ReactElement {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userToken]);
 
   useEffect(() => {
     fetchProfile();
@@ -314,9 +355,6 @@ function ProfileScreen(): React.ReactElement {
             state: editableProfile.company?.address?.state,
             zip: editableProfile.company?.address?.zip,
           },
-          // Preserve potentially non-editable customer/project from original
-          customer: originalProfile.company?.customer,
-          project: originalProfile.company?.project,
         },
         config: {
           logoFilename: originalProfile.config?.logoFilename, // Preserve original logo
@@ -334,6 +372,8 @@ function ProfileScreen(): React.ReactElement {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`,
+          'Accept': 'application/json'
         },
         body: JSON.stringify(payload),
       });
@@ -352,7 +392,114 @@ function ProfileScreen(): React.ReactElement {
     } finally {
       setIsSaving(false);
     }
-  }, [originalProfile, editableProfile]);
+  }, [originalProfile, editableProfile, userToken]);
+
+  // Function to handle logo upload
+  const handleLogoUpload = async () => {
+    if (!userToken) return;
+    
+    try {
+      // Request permission to access the media library
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'You need to grant access to your photos to upload a logo.');
+        return;
+      }
+      
+      // Launch the image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [2, 1],
+        quality: 0.8,
+      });
+      
+      if (result.canceled) {
+        console.log('User canceled image picker');
+        return;
+      }
+      
+      if (!result.assets || result.assets.length === 0) {
+        console.log('No assets returned from image picker');
+        return;
+      }
+      
+      // Get the selected image
+      const selectedImage = result.assets[0];
+      
+      // Show uploading indicator
+      setIsUploadingLogo(true);
+      setError(null);
+      
+      // Create a form data object to send the image
+      const formData = new FormData();
+      
+      // Handle web environment vs. native environment differently
+      if (Platform.OS === 'web') {
+        // For web, fetch the blob from the URI
+        try {
+          const response = await fetch(selectedImage.uri);
+          const blob = await response.blob();
+          formData.append('logo', blob, 'logo.jpg');
+          console.log('Web: Appended blob to FormData');
+        } catch (err) {
+          console.error('Error creating blob from URI:', err);
+          setError('Failed to prepare image for upload');
+          setIsUploadingLogo(false);
+          return;
+        }
+      } else {
+        // For native (iOS/Android)
+        // @ts-ignore - TypeScript doesn't recognize the URI structure needed for React Native FormData
+        formData.append('logo', {
+          uri: selectedImage.uri,
+          type: 'image/jpeg',
+          name: 'logo.jpg',
+        });
+        console.log('Native: Appended file object to FormData');
+      }
+      
+      console.log('Uploading logo to:', `${API_BASE_URL}/api/upload-logo`);
+      
+      // Upload the logo with appropriate headers
+      const response = await fetch(`${API_BASE_URL}/api/upload-logo`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Accept': 'application/json',
+          // Don't set Content-Type here, let it be set automatically with boundary
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server response:', response.status, errorText);
+        throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+      }
+      
+      const responseData = await response.json();
+      console.log('Upload response:', responseData);
+      
+      // Set the new logo URL with a timestamp to force refresh
+      const timestamp = Date.now();
+      setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${timestamp}`);
+      
+      // Show success message
+      setSuccessMessage('Logo uploaded successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
+      // Refresh profile data to get updated logoFilename
+      fetchProfile();
+      
+    } catch (err: any) {
+      console.error("Error uploading logo:", err);
+      setError(`Failed to upload logo: ${err.message}`);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   // --- Render Helpers ---
 
@@ -406,6 +553,44 @@ function ProfileScreen(): React.ReactElement {
     );
   }, [editableProfile]);
 
+  const renderLogoSection = () => {
+    if (!userToken) return null;
+    
+    // Use the cached logo URL if available, otherwise build the URL
+    const displayLogoUrl = logoUrl || `${API_BASE_URL}/api/logo/${userToken}`;
+    
+    return (
+      <View style={styles.logoContainer}>
+        <Image 
+          source={{ uri: displayLogoUrl }} 
+          style={styles.logo}
+          resizeMode="contain"
+          onError={(e) => {
+            console.log('Error loading logo:', e.nativeEvent.error);
+          }}
+        />
+        <Text style={styles.logoCaption}>Company Logo</Text>
+        
+        <TouchableOpacity 
+          style={styles.uploadButton} 
+          onPress={handleLogoUpload}
+          disabled={isUploadingLogo}
+        >
+          <Text style={styles.uploadButtonText}>
+            {originalProfile?.config?.logoFilename ? 'Change Logo' : 'Upload Logo'}
+          </Text>
+        </TouchableOpacity>
+        
+        {isUploadingLogo && (
+          <View style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center' }}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.uploadingText}> Uploading...</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   // --- Main Render Logic ---
 
   if (isLoading) {
@@ -428,10 +613,6 @@ function ProfileScreen(): React.ReactElement {
       );
   }
 
-  const logoFilename = originalProfile.config?.logoFilename;
-  const logoUrl = logoFilename ? `${API_BASE_URL}/${logoFilename}` : null;
-  const imageSource: ImageSourcePropType | undefined = logoUrl ? { uri: logoUrl } : undefined;
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
       <KeyboardAvoidingView
@@ -443,7 +624,7 @@ function ProfileScreen(): React.ReactElement {
               style={styles.scrollViewContent}
               keyboardShouldPersistTaps="handled"
           >
-            {imageSource && <Image source={imageSource} style={styles.logo} />}
+            {renderLogoSection()}
 
             {/* Display Save Status */} 
             <View style={styles.statusMessageContainer}>
@@ -468,15 +649,6 @@ function ProfileScreen(): React.ReactElement {
                 {renderEditableField('ZIP Code', 'company.address.zip', { keyboard: 'number-pad' })}
                 {renderEditableField('Company Phone', 'company.phone', { keyboard: 'phone-pad' })}
                 {renderLinkField('Website', 'company.website')}
-                {/* Display Default Customer/Project as read-only - value from original */}
-                 <View style={styles.fieldContainer}>
-                     <Text style={styles.label}>Default Customer:</Text>
-                     <Text style={styles.valueText}>{originalProfile?.company?.customer || '-'}</Text>
-                 </View>
-                 <View style={styles.fieldContainer}>
-                     <Text style={styles.label}>Default Project:</Text>
-                     <Text style={styles.valueText}>{originalProfile?.company?.project || '-'}</Text>
-                 </View>
             </View>
 
              <View style={styles.section}>
@@ -485,15 +657,7 @@ function ProfileScreen(): React.ReactElement {
                 {renderEditableField('Whisper Model', 'config.whisperModel')}
                 {renderEditableField('System Prompt', 'config.systemPrompt', { multiline: true, lines: 8 })}
                 {renderEditableField('Report Schema (JSON)', 'config.reportJsonSchema', { multiline: true, lines: 12, isJson: true })}
-                 <View style={styles.fieldContainer}>
-                     <Text style={styles.label}>Logo Filename:</Text>
-                     <Text style={styles.valueText}>{originalProfile?.config?.logoFilename || '-'}</Text>
-                 </View>
              </View>
-
-             <Text style={styles.footerNote}>
-                 Default Customer/Project and Logo are managed elsewhere.
-             </Text>
 
           </ScrollView>
       </KeyboardAvoidingView>

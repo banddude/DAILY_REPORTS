@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { Picker } from '@react-native-picker/picker'; // Import the picker
 import { useNavigation } from '@react-navigation/native'; // Import useNavigation
 import { colors, spacing, typography, borders } from '../theme/theme'; // <-- Add this import
 import { API_BASE_URL } from '../config'; // <-- Import from config
+import { useAuth } from '../context/AuthContext'; // Import the useAuth hook
 
 // Define base URL for the API (use your actual backend URL)
 // For local development with Expo Go, use your machine's local IP
@@ -124,18 +125,42 @@ const styles = StyleSheet.create({
 });
 
 // --- Helper Functions ---
-const fetchApi = async (endpoint: string): Promise<string[]> => {
+export const fetchApi = async (endpoint: string, token: string | null): Promise<string[]> => {
   const url = `${API_BASE_URL}${endpoint}`;
   console.log('Fetching:', url);
+  
+  const headers: HeadersInit = {
+      'Accept': 'application/json', // Standard header
+      // Add other headers if needed
+  };
+  
+  if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      console.log('Auth Header Sent:', `Bearer ${token.substring(0, 5)}...`); // Log partial token for verification
+  } else {
+      console.warn('fetchApi called without a token for endpoint:', endpoint);
+      // Depending on whether unprotected endpoints might use this, either throw or allow
+      // For browse, token is required. Throw an error or return empty array.
+      // throw new Error('Authentication token is required for this request.');
+      return []; // Return empty for now, assuming protected endpoints might fail later
+  }
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers }); // Pass headers to fetch
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({ error: 'Unknown API error' }));
-      throw new Error(errData.error || `HTTP error! status: ${response.status}`);
+      let errorBody = '';
+      try {
+          errorBody = await response.text(); // Read body as text first
+          const errData = JSON.parse(errorBody); // Try to parse as JSON
+          throw new Error(errData.error || errData.message || `HTTP error! status: ${response.status}`);
+      } catch (parseError) {
+          // If JSON parsing fails, use the raw text or a default message
+          console.error("Failed to parse error response as JSON:", errorBody);
+          throw new Error(`HTTP error! status: ${response.status}. Response: ${errorBody.substring(0, 100)}`); 
+      }
     }
     const data = await response.json();
     console.log('Received:', data);
-    // Ensure the result is always an array of strings
     return Array.isArray(data?.items) ? data.items.filter((item: any) => typeof item === 'string') : [];
   } catch (error: any) {
     console.error("API Fetch Error:", error);
@@ -143,7 +168,7 @@ const fetchApi = async (endpoint: string): Promise<string[]> => {
   }
 };
 
-const openLink = async (url: string) => {
+export const openLink = async (url: string) => {
   const supported = await Linking.canOpenURL(url);
   if (supported) {
     await Linking.openURL(url);
@@ -154,7 +179,8 @@ const openLink = async (url: string) => {
 
 // --- Component ---
 function BrowseScreen(): React.ReactElement {
-  const navigation = useNavigation<any>(); // Get navigation object, use specific type if available
+  const navigation = useNavigation<any>();
+  const { userToken } = useAuth(); // Get context value safely using the hook
   const [customers, setCustomers] = useState<string[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string | undefined>(undefined);
   const [projects, setProjects] = useState<string[]>([]);
@@ -168,7 +194,7 @@ function BrowseScreen(): React.ReactElement {
     let isMounted = true;
     setLoadingState('customers');
     setError(null);
-    fetchApi('/api/browse-reports')
+    fetchApi('/api/browse-reports', userToken)
       .then(fetchedCustomers => {
           if (isMounted) setCustomers(fetchedCustomers);
       })
@@ -179,7 +205,7 @@ function BrowseScreen(): React.ReactElement {
           if (isMounted) setLoadingState('idle');
       });
       return () => { isMounted = false }; // Cleanup on unmount
-  }, []);
+  }, [userToken]);
 
   // Fetch projects when customer changes
   useEffect(() => {
@@ -194,7 +220,7 @@ function BrowseScreen(): React.ReactElement {
     setError(null);
     setSelectedProject(undefined);
     setReports([]);
-    fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`)
+    fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken)
       .then(fetchedProjects => {
           if (isMounted) setProjects(fetchedProjects);
       })
@@ -205,7 +231,7 @@ function BrowseScreen(): React.ReactElement {
           if (isMounted) setLoadingState('idle');
       });
        return () => { isMounted = false };
-  }, [selectedCustomer]);
+  }, [selectedCustomer, userToken]);
 
   // Fetch reports when project changes
   useEffect(() => {
@@ -216,7 +242,7 @@ function BrowseScreen(): React.ReactElement {
     let isMounted = true;
     setLoadingState('reports');
     setError(null);
-    fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}&project=${encodeURIComponent(selectedProject)}`)
+    fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}&project=${encodeURIComponent(selectedProject)}`, userToken)
       .then(fetchedReports => {
           if (isMounted) setReports(fetchedReports);
       })
@@ -227,7 +253,7 @@ function BrowseScreen(): React.ReactElement {
           if (isMounted) setLoadingState('idle');
       });
        return () => { isMounted = false };
-  }, [selectedCustomer, selectedProject]); // selectedCustomer needed for the API call
+  }, [selectedCustomer, selectedProject, userToken]);
 
   // Display loading indicator
   const renderLoading = (section: 'customers' | 'projects' | 'reports') => {
@@ -298,30 +324,23 @@ function BrowseScreen(): React.ReactElement {
         {selectedCustomer && selectedProject && reports.length > 0 && (
           <View style={styles.reportList}>
             {reports.map((reportFolder) => {
-              const reportDate = reportFolder.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || reportFolder;
-              const baseKey = `${selectedCustomer}/${selectedProject}/${reportFolder}`;
+              if (!userToken) {
+                console.error("User token not available in BrowseScreen");
+                return null;
+              }
+              const baseKey = `users/${userToken}/${selectedCustomer}/${selectedProject}/${reportFolder}`;
               const jsonKey = `${baseKey}/daily_report.json`;
-              // const editorUrl = `${API_BASE_URL}/edit-report?key=${encodeURIComponent(jsonKey)}`;
-              // Construct viewer URL - needs adjustment based on actual deployment
-              // Option 1: Use a dedicated viewer endpoint on the server
-              // const viewerUrl = `${API_BASE_URL}/view-report?key=${encodeURIComponent(jsonKey)}`;
-              // Option 2: Direct S3 link (requires public bucket or signed URLs & knowing bucket/region)
-               // const viewerS3Key = `${baseKey}/report-viewer.html`;
-               // const viewerUrl = `https://your-bucket.s3.your-region.amazonaws.com/${viewerS3Key}`;
-               // --- Navigating to the editor screen for both View and Edit for now ---
+              const viewerKey = `${baseKey}/report-viewer.html`;
+              
+              const reportDate = reportFolder.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || reportFolder;
 
               const navigateToEditor = () => {
                   console.log(`Navigating to ReportEditor with key: ${jsonKey}`);
-                  // Ensure your ReportEditorScreen is registered with the name 'ReportEditor' in your navigator
                   navigation.navigate('ReportEditor', { reportKey: jsonKey });
               };
 
               const navigateToWebViewer = () => {
-                  // Construct the direct S3 URL for the viewer HTML file
-                  const viewerKey = `${baseKey}/report-viewer.html`;
-                  // Using virtual-hosted style S3 URL
                   const viewerUrl = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${viewerKey}`;
-
                   console.log(`Navigating to WebViewer with URL: ${viewerUrl}`);
                   navigation.navigate('WebViewer', { url: viewerUrl });
               };
@@ -332,7 +351,6 @@ function BrowseScreen(): React.ReactElement {
                         <Text style={styles.reportName}>Report: {reportDate}</Text>
                     </View>
                   <View style={styles.reportLinks}>
-                    {/* Navigate to WebViewer for View and ReportEditorScreen for Edit */}
                     <TouchableOpacity onPress={navigateToWebViewer}><Text style={styles.linkText}>View</Text></TouchableOpacity>
                     <TouchableOpacity onPress={navigateToEditor}><Text style={styles.linkText}>Edit</Text></TouchableOpacity>
                   </View>

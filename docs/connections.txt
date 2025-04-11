@@ -1,0 +1,679 @@
+# Project File Connections Analysis
+
+## File: server.ts
+
+### Imports/Requires:
+*   `express`: Web server framework.
+*   `multer`: Middleware for handling multipart/form-data (file uploads).
+*   `path`: Node.js module for handling file paths.
+*   `fs`: Node.js module for file system operations (sync and async via promises).
+*   `cors`: Middleware for enabling Cross-Origin Resource Sharing.
+*   `./daily-report`: Local module containing the `generateReport` function.
+*   `@aws-sdk/client-s3`: AWS SDK v3 client for S3 interactions (GetObject, PutObject, ListObjectsV2, DeleteObjectCommand).
+*   `stream`: Node.js module (specifically `Readable` for S3 uploads).
+*   `fs/promises`: Async file system operations (`readFile`, `writeFile`).
+*   `./authMiddleware`: Local module containing the `protect` middleware.
+
+### Environment Variables Used:
+*   `PORT`: Port number for the server (defaults to 3000).
+*   `AWS_S3_BUCKET`: Name of the S3 bucket (critical, server exits if not set).
+*   (Implicitly) `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`: Used by `new S3Client({})` if not running with IAM roles.
+*   (Implicitly) `SUPABASE_URL`, `SUPABASE_ANON_KEY`: Required by `./authMiddleware`.
+*   `OPENAI_API_KEY`: Likely used within `./daily-report` module (not directly here).
+
+### Local File/Directory Interactions:
+*   `./uploads`: Directory created/used by `multer` for temporary file storage (for video uploads).
+*   `__dirname` (resolves to `./dist` after compilation): Used as the base for:
+    *   Serving static files via `express.static(__dirname)`.
+    *   Serving specific HTML files (`report-browser.html`, `report-editor.html` - currently missing) via `res.sendFile(path.join(__dirname, <filename>))`.
+*   `profile.json`: Reads/writes this file via API endpoints.
+*   `users.json`: Reads this file (likely obsolete).
+*   Used implicitly by `require('./daily-report')` and `require('./authMiddleware')`.
+
+### API Endpoints Defined:
+*   `/browse` (GET): Serves `report-browser.html` (MISSING FILE).
+*   `/edit-report` (GET): Serves `report-editor.html` (MISSING FILE).
+*   `/api/browse-reports` (GET): Lists S3 objects. (Uses `authMiddleware.protect`)
+*   `/api/report` (GET): Fetches report JSON from S3. (Uses `authMiddleware.protect`)
+*   `/api/report` (POST): Saves updated report JSON to S3. (Uses `authMiddleware.protect`)
+*   `/api/upload-video` (POST): Handles video uploads via `multer`, uploads to S3. (Uses `authMiddleware.protect`)
+*   `/api/generate-report` (POST): Calls `generateReport` from `./daily-report`, uploads results to S3. (Uses `authMiddleware.protect`)
+*   `/api/profile` (GET): Reads and serves `profile.json`. (Uses `authMiddleware.protect`)
+*   `/api/profile` (POST): Reads `profile.json`, updates it, and saves it back. (Uses `authMiddleware.protect`)
+*   `/api/upload-profile-image` (POST): Handles image upload via `multer`, uploads to S3. (Uses `authMiddleware.protect`)
+*   `/api/user` (GET): Reads `users.json` (likely obsolete login attempt).
+*   `/api/report-image` (POST/DELETE): Handles image uploads/deletions for reports in S3. (Uses `authMiddleware.protect`)
+
+### Connections to Other Files:
+*   `daily-report.ts`: Imports and calls `generateReport`.
+*   `authMiddleware.ts`: Imports and uses `protect` middleware for most API routes.
+*   `report-viewer.html`, `report-editor.html`: Referenced in routes but missing.
+*   `profile.json`: Read/written by profile API endpoints.
+*   `users.json`: Read by user API endpoint (obsolete).
+*   Static Assets (`report-viewer.html`, `logo.png`, etc.): Served via `express.static`. Copied via `package.json` build script.
+
+### Build Dependencies (`package.json` - implicitly):
+*   Relies on `tsc` and `tsconfig.json`.
+*   Relies on the `copy-assets` script.
+
+---
+
+## File: report-viewer.html
+
+### Connections:
+*   **Local Files (referenced via relative paths):
+    *   `daily_report.json`: Fetches this file via `fetch('daily_report.json')` to populate the report content. Expects this file to be in the *same directory* as `report-viewer.html` (likely in the S3 bucket folder for a specific report).
+*   **External Files:** None directly referenced.
+*   **Inline CSS:** Contains all styling within `<style>` tags.
+*   **Inline JavaScript:** Contains all logic within `<script>` tags for:
+    *   Fetching `daily_report.json`.
+    *   Parsing the JSON data.
+    *   Populating the HTML structure (divs, lists) with data from `daily_report.json`.
+    *   Handling potential errors during fetch or processing.
+
+### Purpose:
+*   Acts as a client-side template to display the contents of a `daily_report.json` file.
+*   Requires `daily_report.json` to be present in the same directory when accessed by the browser/frontend.
+
+---
+
+## File: daily-report.ts
+
+### Imports/Requires:
+*   `dotenv`: Loads environment variables from a `.env` file.
+*   `openai`: OpenAI Node.js library for interacting with GPT and Whisper models.
+*   `fs`: Node.js file system module (for sync, async, and stream operations).
+*   `child_process`: Node.js module (specifically `exec`) for running shell commands (like `ffmpeg`).
+*   `path`: Node.js module for handling file paths.
+*   `util`: Node.js module (specifically `promisify`) for converting callback-based functions to promise-based.
+*   `openai/uploads`: Specific import from the OpenAI library (`toFile`) for preparing file uploads.
+*   `pdfkit`: Library for generating PDF documents.
+
+### Environment Variables Used:
+*   `OPENAI_API_KEY`: Required by the `OpenAI` client.
+*   Implicitly uses variables needed by `ffmpeg` if it's not in the system PATH.
+
+### Local File/Directory Interactions:
+*   `processing_reports/`: Base directory created within `__dirname` (i.e., `dist/processing_reports/`) to store intermediate files for each report generation.
+    *   `<unique_report_id>/`: A subdirectory created for each run of `generateReport`.
+    *   `input_video.*`: Copy of the input video within the unique directory.
+    *   `audio.mp3`: Extracted audio file.
+    *   `transcription.json`: Saved result from OpenAI Whisper.
+    *   `frames/`: Subdirectory to store extracted video frames.
+    *   `report_output.json`: JSON report generated by OpenAI GPT.
+    *   `report_output.pdf`: Final PDF report.
+*   `__dirname`: Used extensively with `path.join` to construct paths relative to the compiled script's location (`dist/`).
+*   `profile.json`: Reads this file (expected in `__dirname`, so `dist/profile.json`) to get configuration settings (models, prompts, schema).
+*   `report-viewer.html`: Copies this file (from `__dirname`, so `dist/report-viewer.html`) into the S3 output directory.
+*   `logo.png`: Reads this file (from `__dirname`, so `dist/logo.png`) to embed in the PDF.
+
+### External Processes/Commands:
+*   `ffmpeg`: Relies heavily on the `ffmpeg` command-line tool being installed and accessible in the system's PATH.
+    *   Used to convert video to MP3 (`convertVideoToAudio`).
+    *   Used to extract specific frames from video (`extractFrame`).
+
+### Connections to Other Files:
+*   `profile.json`: Reads configuration directly from this file. Assumes a specific structure within `profileData.config`.
+*   `report-viewer.html`, `logo.png`: Reads/copies these files. Expects them to be in the same directory as the compiled script (`dist/`).
+*   `.env`: Reads `OPENAI_API_KEY` via `dotenv`.
+*   `server.ts`: This module *is called by* `server.ts` (via `require('./daily-report')`). The `generateReport` function is exported for use by the server.
+
+### API/Service Calls:
+*   **OpenAI API:**
+    *   `openai.audio.transcriptions.create`: Calls Whisper API to transcribe `audio.mp3`.
+    *   `openai.chat.completions.create`: Calls GPT API (configurable model) with the transcript and schema from `profile.json` to generate the report JSON.
+*   **AWS S3:** (Via `server.ts` or direct SDK usage if restored)
+    *   Intended to upload the contents of the report-specific directory (`processing_reports/<unique_report_id>/`) including the JSON, PDF, viewer HTML, and potentially frames to S3.
+
+### Core Functionality (`generateReport` export):
+1.  Creates a unique processing directory.
+2.  Copies the input video into it.
+3.  Calls `ffmpeg` to extract audio (`audio.mp3`).
+4.  Calls OpenAI Whisper to transcribe the audio (`transcription.json`).
+5.  Calls `ffmpeg` to extract relevant frames (logic for *which* frames seems missing/commented out, potentially related to `test.ts` mentioned in comments).
+6.  Reads `profile.json` for configuration.
+7.  Calls OpenAI GPT with transcript and schema to generate report JSON (`report_output.json`).
+8.  Modifies image filenames within the report JSON to match extracted frames.
+9.  Calls `pdfkit` to generate a PDF (`report_output.pdf`) using the report JSON and extracted frames.
+10. (Intended) Copies `report-viewer.html`, and uploads everything to S3.
+11. Returns S3 URLs for the viewer and editor (though editor logic seems web-based, not directly part of this script).
+
+---
+
+## File: authMiddleware.ts
+
+### Imports/Requires:
+*   `express`: Specifically `Request`, `Response`, `NextFunction` types for middleware signature.
+*   `@supabase/supabase-js`: Supabase client library (`createClient`, `SupabaseClient`) for interacting with Supabase Auth.
+*   `dotenv`: Loads environment variables.
+
+### Environment Variables Used:
+*   `SUPABASE_URL`: URL for the Supabase project (critical, exits if not set).
+*   `SUPABASE_ANON_KEY`: Anon key for the Supabase project (critical, exits if not set).
+
+### Local File/Directory Interactions:
+*   `.env`: Reads Supabase credentials via `dotenv`.
+
+### Global Modifications:
+*   Uses `declare global` to augment the `Express.Request` interface, adding an optional `user` property to store authenticated user details.
+
+### API/Service Calls:
+*   **Supabase Auth:**
+    *   `supabase.auth.getUser(token)`: Verifies the JWT passed in the `Authorization: Bearer` header against the Supabase project.
+
+### Connections to Other Files:
+*   `.env`: Reads Supabase credentials.
+*   `server.ts` (or other files defining Express routes): The exported `protect` function is intended to be used as middleware in Express route definitions to secure endpoints.
+
+### Core Functionality (`protect` export):
+1.  Extracts the JWT token from the `Authorization` header.
+2.  If no token exists, sends a 401 Unauthorized response.
+3.  Calls `supabase.auth.getUser` with the token.
+4.  If verification fails (error or no user found), sends a 401 Unauthorized response.
+5.  If verification succeeds, attaches the user's details (id, aud, role, email) to `req.user`.
+6.  Calls `next()` to pass control to the next middleware or the route handler.
+
+---
+
+## File: include-header.js (OBSOLETE)
+
+### Connections:
+*   **Local Files (referenced via relative paths):
+    *   `/header.html`: Fetched this file via `fetch('/header.html')`. (File deleted).
+*   **External Files:** None.
+*   **DOM Interaction:**
+    *   Finds the element with `id="header-placeholder"`.
+    *   Attempted to inject `header.html`.
+
+### Purpose:
+*   (Obsolete) Provided a simple client-side mechanism to include `header.html`.
+*   This script no longer serves a purpose as `header.html` is deleted and no pages include `#header-placeholder` anymore (assuming `index.html` was the only one). Should likely be deleted.
+
+---
+
+## File: mobile-app/App.tsx
+
+### Imports/Requires:
+*   `react`: Core React library.
+*   `@react-navigation/native`: Base navigation library.
+*   `@react-navigation/bottom-tabs`: For creating the main tab bar.
+*   `@react-navigation/stack`: For creating stack navigators within tabs.
+*   `react-native-safe-area-context`: For handling safe areas on different devices.
+*   `@expo/vector-icons/Ionicons`: Icon library.
+*   `./src/theme/theme`: Local theme file (colors, typography, borders).
+*   `./src/screens/HomeScreen`: Screen component for the 'Home' tab.
+*   `./src/screens/BrowseScreen`: Screen component for the 'Browse' tab.
+*   `./src/screens/ProfileScreen`: Screen component for the 'Profile' tab.
+*   `./src/screens/ReportEditorScreen`: Screen component for editing reports (used in stacks).
+*   `./src/screens/WebViewScreen`: Screen component for displaying web content (like the HTML viewer).
+
+### Environment Variables Used:
+*   None directly, but imported screens might use them (e.g., from `config.ts`).
+
+### Local File/Directory Interactions:
+*   Imports various components and theme settings from `./src/` subdirectories.
+
+### Navigation Structure:
+*   **Root:** `NavigationContainer` wrapping a `Tab.Navigator`.
+*   **Tabs:**
+    *   `Home`: Uses `HomeStackNavigator`, title 'Generate Report'.
+    *   `Browse`: Uses `BrowseStackNavigator`, title 'Browse Reports'.
+    *   `Profile`: Uses `ProfileScreen` directly, title 'Profile'.
+*   **Stacks:**
+    *   `HomeStackNavigator`:
+        *   `HomeStackScreen` -> `HomeScreen` (Initial)
+        *   `ReportEditor` -> `ReportEditorScreen`
+        *   `WebViewer` -> `WebViewScreen`
+    *   `BrowseStackNavigator`:
+        *   `BrowseStackScreen` -> `BrowseScreen` (Initial)
+        *   `ReportEditor` -> `ReportEditorScreen`
+        *   `WebViewer` -> `WebViewScreen`
+*   **Navigation Params:**
+    *   Defines `RootStackParamList` to type-check navigation parameters.
+    *   `ReportEditor` screen expects a `reportKey: string` param.
+    *   `WebViewer` screen expects a `url: string` param.
+
+### Styling:
+*   Uses the imported `theme` object (`colors`, `typography`, `borders`) to style tab bar, headers, and icons.
+*   Configures tab icons using `Ionicons` based on the focused state.
+
+### Purpose:
+*   Sets up the main navigation structure (bottom tabs and nested stacks) for the mobile application.
+*   Connects screen components to the navigation routes.
+*   Applies consistent styling using the theme.
+
+---
+
+## File: mobile-app/index.ts
+
+### Imports/Requires:
+*   `expo`: Specifically the `registerRootComponent` function.
+*   `./App`: The main application component defined in `App.tsx`.
+
+### Environment Variables Used:
+*   None directly.
+
+### Local File/Directory Interactions:
+*   Imports the `App` component.
+
+### Purpose:
+*   Serves as the main entry point for the Expo application.
+*   Registers the root component (`App`) with Expo/React Native, ensuring the app loads correctly in different environments (Expo Go, native build).
+
+---
+
+## File: mobile-app/src/config.ts
+
+### Imports/Requires:
+*   None.
+
+### Environment Variables Used:
+*   `EXPO_PUBLIC_API_BASE_URL`: Reads this environment variable (prefixed for Expo) to determine the backend API endpoint.
+
+### Local File/Directory Interactions:
+*   None.
+
+### Purpose:
+*   Provides a centralized configuration point for the mobile app.
+*   Determines the backend API URL, using an environment variable for production/staging builds and defaulting to `http://localhost:3000` for local development.
+*   Exports the `API_BASE_URL` constant for use by other parts of the mobile app (e.g., screens making API calls).
+
+---
+
+## File: mobile-app/src/screens/HomeScreen.tsx
+
+### Imports/Requires:
+*   `react` (useState, useEffect, useCallback): Core React hooks.
+*   `react-native`: Core UI components (StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Linking, Platform, SafeAreaView, ScrollView, Alert).
+*   `expo-document-picker`: For selecting files from the device's file system.
+*   `expo-image-picker`: For selecting images/videos from the photo library or recording video.
+*   `@react-navigation/native` (useNavigation): Hook for accessing navigation functions.
+*   `@react-native-picker/picker`: Dropdown picker component.
+*   `../theme/theme`: Local theme file (colors, spacing, typography, borders).
+*   `../config`: Local config file (exports `API_BASE_URL`).
+
+### Environment Variables Used:
+*   None directly, but uses `API_BASE_URL` from `../config` which reads `EXPO_PUBLIC_API_BASE_URL`.
+
+### Local File/Directory Interactions:
+*   Imports `theme` from `../theme/theme`.
+*   Imports `API_BASE_URL` from `../config`.
+
+### API Endpoints Called:
+*   `${API_BASE_URL}/api/browse-reports` (GET): Fetches initial customer list and project list based on selected customer.
+*   `${API_BASE_URL}/api/generate-report` (POST): Sends selected video file (and potentially customer/project info) using `FormData`.
+
+### Navigation:
+*   Uses `useNavigation` hook.
+*   Calls `navigation.navigate('ReportEditor', { reportKey: <key> })` to navigate to the editor screen, passing the report key extracted from the `editorUrl`.
+*   Calls `navigation.navigate('WebViewer', { url: <url> })` to navigate to the web viewer screen, passing the `viewerUrl` directly.
+
+### Permissions:
+*   Requests `ImagePicker.requestMediaLibraryPermissionsAsync()` before accessing the photo library.
+*   Requests `ImagePicker.requestCameraPermissionsAsync()` before launching the camera.
+
+### Core Functionality:
+*   Allows users to select a video via the Photo Library, Camera, or Filesystem using `expo-image-picker` and `expo-document-picker`.
+*   Includes pickers to select a Customer and Project, fetching the lists dynamically from the `/api/browse-reports` endpoint.
+*   Constructs `FormData` containing the video file (and potentially customer/project info).
+*   Sends the `FormData` to the `/api/generate-report` backend endpoint.
+*   Displays loading, success, or error messages based on the API response.
+*   On success, displays links that navigate the user to the `ReportEditorScreen` or `WebViewScreen` using the URLs provided by the backend.
+*   Validates selected file size.
+
+### Styling:
+*   Uses styles defined in `StyleSheet.create()`.
+*   Applies theme values from `../theme/theme` to components.
+
+---
+
+## File: mobile-app/src/screens/BrowseScreen.tsx
+
+### Imports/Requires:
+*   `react` (useState, useEffect, useCallback): Core React hooks.
+*   `react-native`: Core UI components (View, Text, Button, StyleSheet, ActivityIndicator, ScrollView, Linking, Alert, Platform, TouchableOpacity).
+*   `react-native-safe-area-context`: For safe area views.
+*   `@react-native-picker/picker`: Dropdown picker component.
+*   `@react-navigation/native` (useNavigation): Hook for navigation.
+*   `../theme/theme`: Local theme file.
+*   `../config`: Local config file (exports `API_BASE_URL`).
+
+### Constants Defined:
+*   `S3_BUCKET_NAME`: 'shaffer-reports' (Hardcoded).
+*   `AWS_REGION`: 'us-east-1' (Hardcoded).
+
+### Environment Variables Used:
+*   None directly, but uses `API_BASE_URL` from `../config`.
+
+### Local File/Directory Interactions:
+*   Imports `theme` from `../theme/theme`.
+*   Imports `API_BASE_URL` from `../config`.
+
+### API Endpoints Called:
+*   `${API_BASE_URL}/api/browse-reports` (GET): Called without params to get customers, with `?customer=` to get projects, and with `?customer=&project=` to get reports.
+
+### Navigation:
+*   Uses `useNavigation` hook.
+*   Calls `navigation.navigate('ReportEditor', { reportKey: <key> })`.
+*   Calls `navigation.navigate('WebViewer', { url: <url> })`.
+
+### External Linking:
+*   Uses `Linking.openURL()` to potentially open S3 URLs directly (if navigation fails or is not used).
+
+### Core Functionality:
+*   Provides pickers to select Customer -> Project -> Report.
+*   Fetches lists for each picker level dynamically from the `/api/browse-reports` backend endpoint.
+*   Displays loading indicators while fetching data.
+*   Displays error messages if fetching fails.
+*   Lists the reports found for the selected customer/project.
+*   For each report, provides links/buttons to:
+    *   Navigate to `ReportEditorScreen` (passing the S3 report JSON key).
+    *   Navigate to `WebViewScreen` (passing the S3 URL for the `report-viewer.html`).
+
+### Styling:
+*   Uses styles defined in `StyleSheet.create()`.
+*   Applies theme values from `../theme/theme`.
+*   Includes platform-specific styling (e.g., Picker height).
+
+---
+
+## File: mobile-app/src/screens/ProfileScreen.tsx
+
+### Imports/Requires:
+*   `react` (useState, useEffect, useCallback): Core React hooks.
+*   `react-native`: Core UI components (View, Text, StyleSheet, ActivityIndicator, ScrollView, Alert, Image, Linking, TextInput, Button, Platform, KeyboardAvoidingView, TouchableOpacity).
+*   `react-native-safe-area-context`: For safe area views.
+*   `../theme/theme`: Local theme file.
+*   `../config`: Local config file (exports `API_BASE_URL`).
+*   `expo-image-picker`: For selecting a new logo image from the library.
+
+### Interfaces Defined:
+*   Defines detailed interfaces (`ProfileCompanyAddress`, `ProfileCompany`, `ProfileConfig`, `ProfileData`) for the expected structure of the profile JSON data.
+
+### Environment Variables Used:
+*   None directly, but uses `API_BASE_URL` from `../config`.
+
+### Local File/Directory Interactions:
+*   Imports `theme` from `../theme/theme`.
+*   Imports `API_BASE_URL` from `../config`.
+
+### API Endpoints Called:
+*   `${API_BASE_URL}/api/profile` (GET): Fetches the current profile data on component mount.
+*   `${API_BASE_URL}/api/profile` (POST): Sends the entire `editableProfile` state object to save changes.
+*   `${API_BASE_URL}/api/upload-profile-image` (POST): Sends the selected image file using `FormData` to update the logo.
+
+### Navigation:
+*   None directly (it's a screen within the Tab navigator).
+
+### External Linking:
+*   Uses `Linking.openURL()` to open the company website URL.
+
+### Core Functionality:
+*   Fetches profile data from `/api/profile` and displays it.
+*   Creates a deep copy of the fetched profile data (`editableProfile`) to allow editing without modifying the original state immediately.
+*   Uses helper functions (`setNestedValue`, `getNestedValue`) to handle updates to nested properties within the `editableProfile` state (e.g., `company.address.street`).
+*   Renders various fields using `TextInput`, including multi-line text areas for `systemPrompt` and `reportJsonSchema`.
+*   Attempts to display the company logo by constructing a URL: `${API_BASE_URL}/${profileData.config.logoFilename}`.
+*   Provides a button to select a new logo image using `ImagePicker.launchImageLibraryAsync`.
+*   Uploads the selected logo image to `/api/upload-profile-image`.
+*   Provides a "Save Changes" button which POSTs the `editableProfile` state back to `/api/profile`.
+*   Manages loading states (`isLoading`, `isSaving`) and displays status/error messages.
+*   Uses `KeyboardAvoidingView` to adjust the layout when the keyboard is visible.
+
+### Permissions:
+*   Requests `ImagePicker.requestMediaLibraryPermissionsAsync()` before allowing logo selection.
+
+### Styling:
+*   Uses styles defined in `StyleSheet.create()`.
+*   Applies theme values from `../theme/theme`.
+*   Includes platform-specific styling and layout adjustments.
+
+---
+
+## File: mobile-app/src/screens/ReportEditorScreen.tsx
+
+### Imports/Requires:
+*   `react` (useState, useEffect, useCallback): Core React hooks.
+*   `react-native`: Core UI components (StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, Platform).
+*   `react-native-safe-area-context`: For safe area views.
+*   `expo-image-picker`: For selecting images from the library to add to the report.
+*   `../theme/theme`: Local theme file.
+*   `../config`: Local config file (exports `API_BASE_URL`).
+
+### Interfaces Defined:
+*   Defines detailed interfaces for the report structure (`CompanyInfo`, `PreparedBy`, `ReportMetadata`, `ReportImage`, `MaterialItem`, `IssueItem`, `ReportData`).
+
+### Props (via Navigation):
+*   Expects `reportKey: string` to be passed in `route.params`.
+
+### Environment Variables Used:
+*   None directly, but uses `API_BASE_URL` from `../config`.
+
+### Local File/Directory Interactions:
+*   Imports `theme` from `../theme/theme`.
+*   Imports `API_BASE_URL` from `../config`.
+
+### API Endpoints Called:
+*   `${API_BASE_URL}/api/report?key=<reportKey>` (GET): Fetches the initial report JSON data.
+*   `${API_BASE_URL}/api/report?key=<reportKey>` (POST): Saves the entire `editedData` state object back to the server.
+*   `${API_BASE_URL}/api/report-image?key=<reportKey>&filename=<filename>` (POST): Uploads a new image file using `FormData`.
+*   `${API_BASE_URL}/api/report-image?key=<reportKey>&filename=<filename>` (DELETE): Removes an existing image associated with the report.
+
+### Navigation:
+*   Receives navigation props but doesn't appear to navigate *away* from this screen in the provided code snippet.
+
+### Core Functionality:
+*   Receives a `reportKey` (path to the report JSON in S3) via navigation parameters.
+*   Fetches the report data from `/api/report`.
+*   Creates a deep copy (`editedData`) of the fetched data to track user modifications.
+*   Renders various sections of the report (metadata, narrative, work completed, issues, materials, safety, next steps, images) using `TextInput` components for editing.
+*   Provides functions (`handleTextChange`, `handleListChange`, `addItemToList`, `removeItemFromList`, `handleCaptionChange`) to update the `editedData` state based on user input.
+*   Allows adding new images:
+    *   Requests media library permissions.
+    *   Uses `ImagePicker.launchImageLibraryAsync` to select an image.
+    *   Uploads the selected image using `FormData` to `/api/report-image`.
+    *   Updates the `editedData.images` array upon successful upload.
+*   Allows removing existing images:
+    *   Sends a DELETE request to `/api/report-image`.
+    *   Updates the `editedData.images` array upon successful removal.
+*   Displays images using the `imageBaseUrl` (fetched from `reportAssetsS3Urls.baseUrl` in the report data) combined with the `fileName`.
+*   Provides a "Save Changes" button that POSTs the entire `editedData` state to `/api/report`.
+*   Manages loading states and displays status/error messages.
+
+### Permissions:
+*   Requests `ImagePicker.requestMediaLibraryPermissionsAsync()` before allowing image selection.
+
+### Styling:
+*   Uses styles defined in `StyleSheet.create()`.
+*   Applies theme values from `../theme/theme`.
+*   Includes platform-specific adjustments.
+
+---
+
+## File: mobile-app/src/screens/WebViewScreen.tsx
+
+### Imports/Requires:
+*   `react`: Core React library.
+*   `react-native`: `ActivityIndicator`, `StyleSheet`, `View`.
+*   `react-native-webview`: Provides the `WebView` component.
+*   `react-native-safe-area-context`: For safe area views.
+*   `../theme/theme`: Local theme file (specifically `colors`).
+
+### Props (via Navigation):
+*   Expects `url: string` to be passed in `route.params`.
+
+### Environment Variables Used:
+*   None.
+
+### Local File/Directory Interactions:
+*   Imports `colors` from `../theme/theme`.
+
+### API Endpoints Called:
+*   None directly. The `WebView` component itself will make requests to the URL provided.
+
+### Navigation:
+*   Receives navigation props (`route`) to get the URL, but doesn't navigate away.
+
+### Core Functionality:
+*   Receives a URL via navigation parameters.
+*   Renders a full-screen `WebView` component.
+*   Sets the `source` of the `WebView` to the received URL.
+*   Displays a loading indicator (`ActivityIndicator`) while the web page is loading.
+*   Handles the case where the URL is missing (returns an empty view).
+
+### Styling:
+*   Uses styles defined in `StyleSheet.create()`.
+*   Applies theme colors (`colors.surface`, `colors.primary`).
+
+---
+
+## File: mobile-app/src/theme/theme.ts
+
+### Imports/Requires:
+*   `react-native`: Only `StyleSheet` (for `hairlineWidth`) and `Platform` (used in commented-out code).
+
+### Environment Variables Used:
+*   None.
+
+### Local File/Directory Interactions:
+*   None. This file *defines* theme constants for other files to import.
+
+### Purpose:
+*   Provides a centralized definition for the application's visual theme.
+*   Defines constants for:
+    *   `colors`: A palette including primary, secondary, neutral, text, and status colors.
+    *   `spacing`: An 8-point grid system for consistent margins and padding.
+    *   `typography`: Font sizes, weights, and line heights.
+    *   `borders`: Border radii and widths.
+*   Exports individual constant objects (`colors`, `spacing`, etc.) and a combined `theme` object.
+*   Intended to be imported by screen and component files to ensure a consistent UI.
+
+---
+
+## File: profile.json
+
+### Type: Data/Configuration File
+
+### Content Structure:
+*   **Root Object:** Contains user details, company details, and configuration settings.
+*   **`name`, `email`, `phone`:** Top-level user contact info.
+*   **`company` (object):**
+    *   `name`, `phone`, `website`: Company contact info.
+    *   `address` (object): Street, unit, city, state, zip.
+    *   `customer`, `project`: Default or current context (Amazon/DSD8). *Note: These fields seem context-specific and might be better managed dynamically.* 
+*   **`config` (object):**
+    *   `chatModel`: Specifies the OpenAI model for report generation (e.g., "o3-mini").
+    *   `whisperModel`: Specifies the OpenAI model for transcription (e.g., "whisper-1").
+    *   `logoFilename`: Name of the logo file (e.g., "logo.png") expected to be served by the backend.
+    *   `systemPrompt`: Detailed instructions for the OpenAI chat model on how to generate the report JSON from a transcript.
+    *   `reportJsonSchema` (object): The precise JSON schema the AI must adhere to when generating the report.
+
+### Connections:
+*   **Read by:**
+    *   `server.ts`: Reads the file to serve profile data via the `/api/profile` GET endpoint.
+    *   `daily-report.ts`: Reads the file to get configuration (`chatModel`, `whisperModel`, `systemPrompt`, `reportJsonSchema`, `logoFilename`).
+*   **Written by:**
+    *   `server.ts`: Writes updated profile data back to this file via the `/api/profile` POST endpoint.
+*   **Copied by:**
+    *   `package.json` (`copy-assets` script): Copies this file into the `dist/` directory during the build process so the running server can access it.
+*   **Referenced Assets:**
+    *   `logo.png`: The `config.logoFilename` field points to this file, which is expected to be served by the backend and used by `daily-report.ts` for PDF generation and potentially by `mobile-app/src/screens/ProfileScreen.tsx`.
+
+### Purpose:
+*   Stores user and company information.
+*   Holds critical configuration for interacting with OpenAI APIs (models, prompt, schema).
+*   Acts as a configuration source for the report generation process.
+
+---
+
+## File: users.json
+
+### Type: Data File
+
+### Content Structure:
+*   An array of user objects.
+*   Each object contains:
+    *   `email`: User's email address.
+    *   `password`: Plaintext password (***SECURITY RISK!***).
+    *   `UUID`: A unique identifier for the user.
+
+### Connections:
+*   **Read by:**
+    *   `server.ts`: Reads the file to find a user by email/password via the `/api/user` GET endpoint (presumably for a simple login, although this is insecure and likely replaced by Supabase auth).
+*   **Written by:**
+    *   Not written to by any current code.
+*   **Copied by:**
+    *   `package.json` (`copy-assets` script): Copies this file into the `dist/` directory during the build process.
+
+### Purpose:
+*   Appears to be an outdated or placeholder mechanism for storing user credentials.
+*   The presence of Supabase (`authMiddleware.ts`) suggests this file is likely **obsolete** and **insecure**. It should probably be removed.
+
+---
+
+## File: package.json (Root)
+
+### Type: Project Manifest / Build Configuration
+
+### Key Fields:
+*   `name`, `version`, `description`: Standard project metadata.
+*   `main`: `dist/server.js` - Specifies the entry point for the application after building.
+*   `scripts`:
+    *   `build`: Executes `tsc -p tsconfig.json` (compiles TypeScript using root `tsconfig.json`) and then runs `npm run copy-assets`.
+    *   `start`: Executes the compiled server entry point (`node dist/server.js`).
+    *   `postinstall`: Runs the `build` script automatically after `npm install`.
+    *   `copy-assets`: Copies a list of files (`index.html`, `report-browser.html`, `report-editor.html`, `report-viewer.html`, `profile.json`, `logo.png`, `profile-editor.html`, `header.html`, `include-header.js`) into the `dist/` directory. ***Note: Several of these source files are missing or deleted. This script needs updating.***
+*   `dependencies`: Lists runtime dependencies for the backend server (`express`, `@aws-sdk/client-s3`, `@supabase/supabase-js`, `openai`, `pdfkit`, etc.) and *also* some React Native dependencies (`@react-navigation/...`, `react-native-...`). ***Note: Mixing backend and frontend dependencies here is not ideal for separation.***
+*   `devDependencies`: Lists development dependencies (`typescript`, `ts-node`, `@types/...`).
+
+### Connections:
+*   **Build Process:**
+    *   Uses `typescript` (via `tsc`) and `tsconfig.json` to compile `.ts` files (like `server.ts`, `daily-report.ts`) into JavaScript in the `dist/` directory.
+    *   Copies specific static assets (`report-viewer.html`, `profile.json`, `logo.png`, `users.json` (implicitly if still listed in copy-assets), etc.) into `dist/` so they are available to the running server (`server.ts`, `daily-report.ts`).
+*   **Runtime:**
+    *   The `start` script runs the compiled `dist/server.js`.
+    *   Defines the dependencies required for the server to run.
+*   **Files Referenced:**
+    *   `tsconfig.json`: Used by the `build` script.
+    *   `dist/server.js`: Defined as `main` and executed by `start` script.
+    *   Files listed in `copy-assets`: `report-viewer.html`, `profile.json`, `logo.png`, `users.json` (assumed, needs verification in script). ***Note: Missing/deleted files also listed.***
+*   **Implicit:** Relies on `npm` or a compatible package manager to install dependencies and run scripts.
+
+### Purpose:
+*   Defines project metadata, scripts, and dependencies.
+*   Orchestrates the build process (TypeScript compilation and asset copying).
+*   Specifies how to start the application server.
+
+---
+
+## File: tsconfig.json (Root)
+
+### Type: TypeScript Configuration
+
+### Compiler Options:
+*   `target`: `ES2016` (Specifies the target ECMAScript version for compiled JavaScript).
+*   `module`: `CommonJS` (Specifies the module system for compiled code).
+*   `outDir`: `./dist` (Output directory for compiled JavaScript files).
+*   `rootDir`: `.` (Root directory of the source TypeScript files - currently the project root).
+*   `esModuleInterop`: `true` (Enables better compatibility between CommonJS and ES modules).
+*   `forceConsistentCasingInFileNames`: `true` (Enforces case sensitivity in file names).
+*   `strict`: `true` (Enables all strict type-checking options).
+*   `skipLibCheck`: `true` (Skips type checking of declaration files (`.d.ts`)).
+
+### Include/Exclude:
+*   `include`: `["**/*.ts"]` (Tells the compiler to include all `.ts` files found within the `rootDir`).
+*   `exclude`: `["node_modules", "dist", "mobile-app"]` (Excludes these directories from compilation).
+
+### Connections:
+*   **Used by:**
+    *   `package.json` (`build` script via `tsc -p tsconfig.json`): The TypeScript compiler (`tsc`) reads this file to determine how to compile the project.
+*   **Governs Compilation of:**
+    *   All `.ts` files in the project root (`server.ts`, `daily-report.ts`, `authMiddleware.ts`, etc.) *except* those in `node_modules`, `dist`, and `mobile-app`.
+*   **Output Location:**
+    *   Specifies that compiled JavaScript should be placed in the `./dist` directory.
+
+### Purpose:
+*   Configures the TypeScript compiler (`tsc`) for the backend part of the project.
+*   Defines which files to compile, where to put the output, and which compiler rules to enforce.
+
+---

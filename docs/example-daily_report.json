@@ -1,0 +1,66 @@
+{
+    "narrative": "Today, we installed a lamp and hung skateboards on the wall. We also encountered a problem when a customer's dog obstructed our work, which led to breaking a TV.",
+    "workCompleted": [
+      "installed a lamp",
+      "hung skateboards on the wall"
+    ],
+    "issues": [
+      {
+        "description": "A customer's dog obstructed the work area.",
+        "status": "Open"
+      },
+      {
+        "description": "A TV was broken during the work.",
+        "status": "Open"
+      }
+    ],
+    "materials": [],
+    "safetyObservations": "Site safety protocols were followed. No incidents or hazards observed.",
+    "nextSteps": [
+      "Address the obstruction caused by the dog to facilitate smoother working conditions.",
+      "Evaluate options for replacing the broken TV."
+    ],
+    "images": [
+      {
+        "fileName": "frame_1.06.jpg",
+        "caption": "Installed lamp.",
+        "s3Url": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/extracted_frames/frame_1.06.jpg"
+      },
+      {
+        "fileName": "frame_4.22.jpg",
+        "caption": "Broken TV resulting from the day's work.",
+        "s3Url": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/extracted_frames/frame_4.22.jpg"
+      },
+      {
+        "fileName": "frame_15.02.jpg",
+        "caption": "Skateboards hung on the wall.",
+        "s3Url": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/extracted_frames/frame_15.02.jpg"
+      }
+    ],
+    "customer": "amazon",
+    "project": "DSD8",
+    "reportMetadata": {
+      "preparedBy": {
+        "name": "Mike Shaffer",
+        "email": "mike@shaffercon.com"
+      },
+      "companyInfo": {
+        "name": "Shaffer Construction, Inc. ",
+        "address": {
+          "street": "325 N Larchmont Blvd.",
+          "unit": "202",
+          "city": "Los Angeles",
+          "state": "CA",
+          "zip": "90004"
+        },
+        "phone": "323-642-8509",
+        "website": "https://www.shaffercon.com"
+      }
+    },
+    "reportAssetsS3Urls": {
+      "baseUrl": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/",
+      "videoUrl": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/IMG_3076.MOV",
+      "transcriptJsonUrl": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/transcript_data.json",
+      "pdfUrl": "https://shaffer-reports.s3.us-east-1.amazonaws.com/amazon/DSD8/report_2025-04-09T06-32-28-610Z/daily_report.pdf"
+    }
+  }

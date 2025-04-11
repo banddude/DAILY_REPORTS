@@ -257,10 +257,46 @@
 
                     // Logo
                     const logoContainer = document.getElementById('logoContainer');
+                    
+                    // Get the base URL and extract the user ID path
+                    const baseUrl = assets.baseUrl || '';
+                    
+                    // Extract user ID from baseUrl if possible
+                    // Format: users/{userId}/{customer}/{project}/report_{timestamp}
+                    let userId = null;
+                    const userIdMatch = baseUrl.match(/users\/([^\/]+)/);
+                    if (userIdMatch && userIdMatch[1]) {
+                        userId = userIdMatch[1];
+                    }
+                    
+                    // Construct possible logo URLs
+                    let logoUrl = null;
+                    
+                    // First try user-specific logo path
+                    if (userId) {
+                        // Get S3 domain from the baseUrl
+                        const s3DomainMatch = baseUrl.match(/(https:\/\/[^\/]+)/);
+                        if (s3DomainMatch && s3DomainMatch[1]) {
+                            const s3Domain = s3DomainMatch[1];
+                            // User-specific logo in the user's directory
+                            logoUrl = `${s3Domain}/users/${userId}/logo.png`;
+                        }
+                    }
+                    
+                    // If logo URL was provided in the data, use that instead
                     if (assets.logoUrl) {
+                        logoUrl = assets.logoUrl;
+                    }
+                    
+                    // If we have a logo URL, try to load it
+                    if (logoUrl) {
                         const logoImg = document.createElement('img');
-                        logoImg.src = assets.logoUrl;
+                        logoImg.src = logoUrl;
                         logoImg.alt = `${company.name || 'Company'} Logo`;
+                        logoImg.onerror = () => {
+                            console.warn("Logo failed to load:", logoUrl);
+                            logoImg.remove(); // Remove broken image
+                        };
                         logoContainer.appendChild(logoImg);
                     } else {
                         logoContainer.innerHTML = ''; // No logo placeholder
@@ -268,9 +304,19 @@
 
 
                     // Date
-                    const baseUrl = assets.baseUrl || '';
                     const dateMatch = baseUrl.match(/report_(\d{4}-\d{2}-\d{2})/);
                     setText('reportDate', `Date: ${dateMatch ? dateMatch[1] : 'N/A'}`);
+
+                    // Customer & Project
+                    if (meta.customer && meta.project) {
+                        const customerProjectEl = document.createElement('div');
+                        customerProjectEl.className = 'meta-info';
+                        customerProjectEl.innerHTML = `<strong>Customer:</strong> ${meta.customer} | <strong>Project:</strong> ${meta.project}`;
+                        const reportDateEl = document.getElementById('reportDate');
+                        if (reportDateEl && reportDateEl.parentNode) {
+                            reportDateEl.parentNode.insertBefore(customerProjectEl, reportDateEl.nextSibling);
+                        }
+                    }
 
                     // Prepared By (No mailto link)
                     setText('preparedBy', `Prepared By: ${prepared.name || 'N/A'} ${prepared.email ? '(' + prepared.email + ')' : ''}`); // Removed mailto link
