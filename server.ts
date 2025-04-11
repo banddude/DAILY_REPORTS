@@ -11,31 +11,17 @@ import { readFile, writeFile } from 'fs/promises'; // Added for async file opera
 const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port or default
 
-// --- CORS Configuration ---
-const allowedOrigins = [
-    'http://localhost:8081', // Expo web default
-    'http://localhost:8082', // Expo web alternate
-    // Add your deployed web app's frontend URL here later
-    // e.g., 'https://app.yourdomain.com'
-];
-
-const corsOptions: cors.CorsOptions = {
-  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      console.warn(`CORS blocked for origin: ${origin}`); // Log blocked origins
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Allow standard methods
-  credentials: true // Allow cookies if needed later
-};
-
-app.use(cors(corsOptions));
-// --------------------------
+app.use(
+    cors({
+      origin: [
+        'http://localhost:8081',
+        'http://localhost:8082',
+        'https://reports.shaffercon.com'
+      ],
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      credentials: true
+    })
+  );
 
 // --- AWS S3 Setup ---
 // Ensure AWS credentials and region are configured in the environment (e.g., .env or IAM role)
