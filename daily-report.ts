@@ -9,6 +9,16 @@ import { promisify } from 'util';
 import { toFile } from 'openai/uploads'; // Add this import
 import PDFDocument from 'pdfkit';
 
+// --- Define a base directory for all report processing ---
+const PROCESSING_BASE_DIR = path.join(__dirname, 'processing_reports');
+
+// Ensure the base processing directory exists on startup
+if (!fs.existsSync(PROCESSING_BASE_DIR)) {
+    fs.mkdirSync(PROCESSING_BASE_DIR, { recursive: true });
+    console.log(`Created base processing directory: ${PROCESSING_BASE_DIR}`);
+}
+// --------------------------------------------------------
+
 // Configuration for OpenAI API
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -113,6 +123,7 @@ async function ensureDir(dirPath: string): Promise<void> {
     await fs.promises.access(dirPath);
   } catch (error: any) {
     if (error.code === 'ENOENT') {
+      console.log(`Creating directory (ensureDir): ${dirPath}`); // Log path being created
       await fs.promises.mkdir(dirPath, { recursive: true });
     } else {
       throw error;
@@ -124,13 +135,18 @@ async function ensureDir(dirPath: string): Promise<void> {
  * Extracts a frame from a video file at a specific timestamp using ffmpeg.
  */
 async function extractFrame(videoPath: string, timestamp: number, outputDir: string, outputFilename: string): Promise<void> {
-  const outputPath = path.join(outputDir, outputFilename);
+  const outputPath = path.join(outputDir, outputFilename); // outputDir is already absolute
   const command = `ffmpeg -ss ${timestamp.toFixed(6)} -i "${videoPath}" -frames:v 1 -q:v 2 "${outputPath}"`;
+  console.log(`Executing frame extraction command: ${command}`); // Log command
   try {
-    await execAsync(command);
+    const { stdout, stderr } = await execAsync(command);
+    if (stdout) console.log(`extractFrame stdout [${timestamp.toFixed(2)}s]:`, stdout);
+    if (stderr) console.warn(`extractFrame stderr [${timestamp.toFixed(2)}s]:`, stderr);
     console.log(`Extracted frame at ${timestamp.toFixed(2)}s to ${outputPath}`);
-  } catch (error) {
-    console.error(`Error extracting frame at ${timestamp.toFixed(2)}s:`, error);
+  } catch (error: any) {
+    console.error(`Error extracting frame at ${timestamp.toFixed(2)}s:`, error); // Log full error
+    // Decide if you want to throw or just log and continue
+    // throw error; // Uncomment to stop processing if one frame fails
   }
 }
 
@@ -182,8 +198,16 @@ async function convertVideoToAudio(videoPath: string, audioPath: string): Promis
     if (error.code === 'ENOENT') {
       console.log(`Converting video ${videoPath} to audio ${audioPath}...`);
       const command = `ffmpeg -i "${videoPath}" -vn -acodec libmp3lame -ar 44100 -ac 2 -ab 192k -f mp3 "${audioPath}"`;
-      await execAsync(command);
-      console.log('Video to audio conversion complete.');
+      console.log(`Executing audio conversion command: ${command}`); // Log command
+      try {
+          const { stdout, stderr } = await execAsync(command);
+          if (stdout) console.log('convertVideoToAudio stdout:', stdout);
+          if (stderr) console.warn('convertVideoToAudio stderr:', stderr);
+          console.log('Video to audio conversion complete.');
+      } catch (execError: any) {
+          console.error(`ffmpeg execution failed for audio conversion:`, execError); // Log the actual error object
+          throw execError; // Re-throw after logging to stop the process
+      }
     } else {
       throw error; // Re-throw other access errors
     }
@@ -472,10 +496,14 @@ async function generatePdfReport(reportDataPath: string, imagesDir: string, outp
 // --- Main Report Generation Function --- 
 
 export async function generateReport(inputVideoPath: string): Promise<string> {
-  console.log(`Starting report generation for video: ${inputVideoPath}`);
+  // Use the absolute path provided by multer/server
+  const absoluteInputVideoPath = inputVideoPath; 
+  console.log(`Starting report generation for absolute video path: ${absoluteInputVideoPath}`);
+  
   // --- Profile and Logo Setup ---
   let profileData: any = {};
-  const profilePath = path.join(__dirname, 'profile.json'); // Use __dirname
+  // Assume profile.json and logo are relative to __dirname (dist)
+  const profilePath = path.join(__dirname, 'profile.json'); 
   // Read profile data first
   try {
     const profileJsonString = await fs.promises.readFile(profilePath, 'utf-8');
@@ -486,65 +514,61 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
     throw new Error(`Failed to read profile data: ${profilePath}`); // Throw error if profile missing
   }
 
-  // --- Read Config from profileData (NO DEFAULTS) ---
+  // --- Read Config from profileData ---
   const logoSourceFilename = profileData.config.logoFilename; 
-  // Removed inputVideoPath read here, it's now an argument
-  // ---------------------------------------------------
-  
-  // --- Add check to ensure config value exists --- 
   if (!logoSourceFilename) {
     throw new Error('Required configuration (logoFilename) missing in profile.json');
   }
-  // Removed check for inputVideoPath here
-  // --------------------------------------------------
-  console.log(`Using logo file: ${logoSourceFilename}`);
-  const logoSourcePath = path.join(__dirname, logoSourceFilename); // Use __dirname
+  const logoSourcePath = path.join(__dirname, logoSourceFilename);
+  console.log(`Using logo file: ${logoSourcePath}`);
 
-  // --- Timestamped Directory Setup ---
+  // --- Timestamped Directory Setup (Use Absolute Path) ---
   const now = new Date();
   const timestamp = now.toISOString().replace(/[:.]/g, '-');
-  const outputBaseDir = path.join('.', `report_${timestamp}`);
-  await ensureDir(outputBaseDir);
-  console.log(`Outputting files to: ${outputBaseDir}`);
+  // Create the report directory INSIDE the PROCESSING_BASE_DIR
+  const outputBaseDir = path.join(PROCESSING_BASE_DIR, `report_${timestamp}`);
+  await ensureDir(outputBaseDir); // ensureDir handles absolute paths fine
+  console.log(`Outputting files to absolute path: ${outputBaseDir}`);
 
   // --- Copy Logo to Output Directory ---
-  const logoDestPath = path.join(outputBaseDir, logoSourceFilename);
+  const logoDestPath = path.join(outputBaseDir, logoSourceFilename); // Now absolute
   try {
       await fs.promises.copyFile(logoSourcePath, logoDestPath);
       console.log(`Logo copied to ${logoDestPath}`);
   } catch (error) {
       console.warn(`Warning: Could not copy logo from ${logoSourcePath}. Report will not include logo.`, error);
-      // Allow continuing without logo
   }
 
   // --- Copy Original Video to Output Directory ---
-  const videoPath = inputVideoPath; // Use function argument
-  console.log(`Using input video: ${videoPath}`); // Log the video path being used
-  const videoDestPath = path.join(outputBaseDir, path.basename(videoPath)); 
+  // Video path is already absolute from multer
+  console.log(`Using input video (already absolute): ${absoluteInputVideoPath}`); 
+  const videoDestPath = path.join(outputBaseDir, path.basename(absoluteInputVideoPath)); 
   try {
-      await fs.promises.copyFile(videoPath, videoDestPath);
+      await fs.promises.copyFile(absoluteInputVideoPath, videoDestPath);
       console.log(`Original video copied to ${videoDestPath}`);
   } catch (error) {
-      console.error(`!!! Critical Error: Could not copy source video from ${videoPath} to ${videoDestPath}. Aborting.`, error);
-      throw new Error(`Failed to copy source video: ${videoPath}`); 
+      console.error(`!!! Critical Error: Could not copy source video from ${absoluteInputVideoPath} to ${videoDestPath}. Aborting.`, error);
+      throw new Error(`Failed to copy source video: ${absoluteInputVideoPath}`); 
   }
 
-  // --- Define Paths within the Timestamped Directory ---
+  // --- Define Paths within the Timestamped Directory (Now Absolute) ---
   const audioPath = path.join(outputBaseDir, 'output.mp3');
   const transcriptDataPath = path.join(outputBaseDir, 'transcript_data.json');
   const reportJsonPath = path.join(outputBaseDir, 'daily_report.json');
   const framesDirPath = path.join(outputBaseDir, 'extracted_frames'); // Frames subdir
   const pdfOutputPath = path.join(outputBaseDir, 'daily_report.pdf');
-  const viewerDestPath = path.join(outputBaseDir, 'report-viewer.html'); // Define viewer path
-  const viewerSourcePath = path.join(__dirname, 'report-viewer.html'); // Add source path for viewer
+  const viewerDestPath = path.join(outputBaseDir, 'report-viewer.html'); 
+  // Viewer source still relative to __dirname (dist)
+  const viewerSourcePath = path.join(__dirname, 'report-viewer.html'); 
 
   let transcriptionResult: FullTranscription | null = null;
   let reportJson: any = null; // To hold the report object
   let finalReportViewerUrl: string | null = null; // Variable to store the final URL
 
   try {
-    // 1. Convert video to audio (using updated audioPath)
-    await convertVideoToAudio(videoPath, audioPath);
+    // 1. Convert video to audio (using absolute videoDestPath and absolute audioPath)
+    // IMPORTANT: Use the COPIED video path inside the report dir for ffmpeg input
+    await convertVideoToAudio(videoDestPath, audioPath);
 
     // 2. Transcribe audio (using updated audioPath)
     transcriptionResult = await transcribeAudio(audioPath, profileData);
@@ -589,7 +613,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
 
   // --- Frame Extraction and Report Finalization ---
   try {
-      await ensureDir(framesDirPath); // Ensure frames subdir exists
+      await ensureDir(framesDirPath); // Ensure frames subdir exists (absolute path)
       console.log('\nStarting frame extraction based on report timestamps...');
       
       if (reportJson.images && Array.isArray(reportJson.images)) {
@@ -604,7 +628,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
               const fileName = `frame_${timestamp.toFixed(2)}.jpg`;
               const caption = imageInfo.caption;
               frameExtractionPromises.push(
-                  extractFrame(videoPath, timestamp, framesDirPath, fileName)
+                  extractFrame(videoDestPath, timestamp, framesDirPath, fileName)
               );
               reportJson.images[i] = { fileName, caption }; 
           }
@@ -694,6 +718,7 @@ export async function generateReport(inputVideoPath: string): Promise<string> {
       }
 
       // 7. Upload Entire Report Directory to S3 using AWS CLI
+      // The localSourcePath IS outputBaseDir, which is now absolute
       const localSourcePath = outputBaseDir; 
       if (s3Bucket && s3TargetPath) { // Check again (belt and suspenders)
           console.log(`\nAttempting to upload report directory ${localSourcePath} via AWS CLI to ${s3TargetPath}...`);

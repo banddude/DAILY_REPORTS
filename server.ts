@@ -401,17 +401,27 @@ app.delete('/api/remove-image', async (req: Request, res: Response): Promise<voi
 });
 
 // POST Endpoint for report generation (UPDATED RESPONSE)
-app.post('/generate-report', upload.single('video'), async (req: express.Request, res: express.Response): Promise<void> => { 
+app.post('/generate-report', upload.single('video'), async (req: express.Request, res: express.Response): Promise<void> => {
     console.log('Received request for /generate-report');
+
+    // --- BEGIN MULTER CHECK ---
     if (!req.file) {
-        res.status(400).json({ error: 'No video file uploaded.' });
-        return; 
+        console.error('>>> Multer Error: req.file is missing. File upload likely failed or was not parsed correctly.');
+        // Log headers to see Content-Type if available
+        console.error('>>> Request Headers:', JSON.stringify(req.headers, null, 2));
+        res.status(400).json({ error: 'No video file uploaded or file could not be processed by server.' });
+        return;
+    } else {
+        console.log('>>> Multer Success: req.file received.');
+        // Log minimal file info received by multer
+        console.log(`>>> req.file details: { fieldname: '${req.file.fieldname}', originalname: '${req.file.originalname}', mimetype: '${req.file.mimetype}', path: '${req.file.path}', size: ${req.file.size} }`);
     }
+    // --- END MULTER CHECK ---
+
     const uploadedVideoPath = req.file.path;
-    console.log(`Video uploaded temporarily to: ${uploadedVideoPath}`);
+    // console.log(`Video uploaded temporarily to: ${uploadedVideoPath}`); // Already logged above
     try {
         console.log('Starting report generation process...');
-        // generateReport now returns the JSON key
         const reportJsonKey = await generateReport(uploadedVideoPath);
         console.log(`Report generated successfully. JSON Key: ${reportJsonKey}`);
 
