@@ -11,22 +11,23 @@ import { readFile, writeFile } from 'fs/promises'; // Added for async file opera
 const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port or default
 
-// --- CORS Setup (safe for dev + deployed frontend) ---
+// --- CORS Setup (must be at the VERY TOP) ---
 app.use(
     cors({
-      origin: true, // Reflect the request's origin (dynamic handling)
+      origin: true, // Reflect request's origin
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
       preflightContinue: false,
       optionsSuccessStatus: 204
     })
   );
   
-  // Add Vary header so Railway/Cloudflare/etc. don't cache broken CORS responses
   app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin');
     next();
   });
-  // ------------------------------------------------------
+  // ---------------------------------------------
+  
+  app.use(express.json({ limit: '10mb' }));
 
 // --- AWS S3 Setup ---
 // Ensure AWS credentials and region are configured in the environment (e.g., .env or IAM role)
