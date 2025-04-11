@@ -1,4 +1,11 @@
-\
+# Environment variables
 .env
-*.mov 
+
+# Build output
+dist/
+
+# Large media files
+*.mov
+
+# Dependencies
 node_modules/ 

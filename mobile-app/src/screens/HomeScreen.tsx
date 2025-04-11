@@ -533,11 +533,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.lg,
     // Add subtle shadow for depth
-    shadowColor: colors.textPrimary, // Use a dark color for shadow
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    // shadowColor: colors.textPrimary, // Use a dark color for shadow - DEPRECATED
+    // shadowOffset: { width: 0, height: 4 }, // DEPRECATED
+    // shadowOpacity: 0.1, // DEPRECATED
+    // shadowRadius: 10, // DEPRECATED
+    boxShadow: `0px 4px 10px rgba(0, 0, 0, 0.1)`, // Modern web shadow
+    elevation: 5, // Keep for Android
   },
   // headerPlaceholder: { // Example style if you add a header
   //   height: 50,

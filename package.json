@@ -4,14 +4,16 @@
   "description": "Daily report generation application",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc && npm run copy-assets",
+    "build": "tsc -p tsconfig.json && npm run copy-assets",
     "start": "node dist/server.js",
     "postinstall": "npm run build",
     "copy-assets": "cp index.html report-browser.html report-editor.html report-viewer.html profile.json logo.png profile-editor.html header.html include-header.js dist/"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",
+    "@react-navigation/native-stack": "^7.3.10",
     "@react-navigation/stack": "^7.2.10",
+    "@supabase/supabase-js": "^2.49.4",
     "@types/express": "^5.0.1",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.14.0",

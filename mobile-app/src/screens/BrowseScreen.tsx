@@ -39,11 +39,8 @@ const styles = StyleSheet.create({
     padding: spacing.md, // Use theme token
     backgroundColor: colors.surface, // Use theme token
     borderRadius: borders.radiusLarge, // Use theme token
-    shadowColor: '#000', // Keep existing shadow styles for now
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
+    boxShadow: `0px 1px 2px rgba(0, 0, 0, 0.1)`, // Modern web shadow
+    elevation: 3, // Keep for Android
   },
   controlGroup: {
     marginBottom: spacing.md, // Use theme token
@@ -95,11 +92,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000', // Keep existing shadow styles for now
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 2,
+    boxShadow: `0px 1px 1px rgba(0, 0, 0, 0.05)`, // Modern web shadow
+    elevation: 2, // Keep for Android
   },
   reportInfo: {
       flex: 1, // Allow text to take available space
