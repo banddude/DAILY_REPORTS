@@ -11,17 +11,7 @@ import { readFile, writeFile } from 'fs/promises'; // Added for async file opera
 const app = express();
 const port = process.env.PORT || 3000; // Use environment variable for port or default
 
-app.use(
-    cors({
-      origin: [
-        'http://localhost:8081',
-        'http://localhost:8082',
-        'https://reports.shaffercon.com'
-      ],
-      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-      credentials: true
-    })
-  );
+app.use(cors()); // WARNING: this allows *everything*, don't use in production
 
 // --- AWS S3 Setup ---
 // Ensure AWS credentials and region are configured in the environment (e.g., .env or IAM role)
