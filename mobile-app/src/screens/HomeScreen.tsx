@@ -871,6 +871,22 @@ const HomeScreen: React.FC = () => {
                 )}
             </View>
 
+            {/* --- Generate Report Button --- */}
+            <TouchableOpacity
+                style={[
+                    styles.generateButton,
+                    (!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport) && styles.disabledButton,
+                ]}
+                onPress={handleUpload}
+                disabled={!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport}
+            >
+                {isGeneratingReport ? (
+                    <ActivityIndicator color={colors.textOnPrimary} />
+                ) : (
+                    <Text style={styles.generateButtonText}>Generate Report</Text>
+                )}
+            </TouchableOpacity>
+
             {renderResultArea()}
         </ScrollView>
 
@@ -1190,6 +1206,24 @@ const styles = StyleSheet.create({
      height: '100%',
   },
   closeButton: {
+  },
+  generateButton: {
+    backgroundColor: colors.success,
+    padding: spacing.md,
+    borderRadius: borders.radiusMedium,
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    marginHorizontal: spacing.lg,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  disabledButton: {
+    backgroundColor: colors.textDisabled,
+  },
+  generateButtonText: {
+    fontSize: typography.fontSizeM,
+    fontWeight: typography.fontWeightBold as 'bold',
+    color: colors.textOnPrimary,
   },
 });
 
