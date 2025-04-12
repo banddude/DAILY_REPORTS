@@ -6,11 +6,11 @@
   "scripts": {
     "install:mobile": "cd mobile-app && npm install",
     "build:server": "tsc -p tsconfig.json",
-    "build:mobile-web": "cd mobile-app && npx expo export:web",
+    "build:mobile-web": "cd mobile-app && npx expo export --platform web",
     "build": "npm run install:mobile && npm run build:server && npm run build:mobile-web && npm run copy-assets",
     "start": "node server/dist/server.js",
     "postinstall": "npm run install:mobile",
-    "copy-assets": "cp -R mobile-app/web-build/* server/dist/ && cp server/data/profile.json server/dist/"
+    "copy-assets": "cp -R mobile-app/dist/* server/dist/ && cp server/data/profile.json server/dist/"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",
