@@ -518,10 +518,24 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                 <View style={styles.section}>
                   <Text style={styles.sectionHeader}>Configuration</Text>
                    <SettingsRow
+                     icon="chatbubbles-outline"
+                     label="Chat Model"
+                     value={originalProfile.config?.chatModel || 'Not Set'}
+                     isFirst
+                     showDisclosure={true}
+                     onPress={() => navigation.navigate('EditChatModel')}
+                   />
+                   <SettingsRow
+                     icon="mic-outline"
+                     label="Whisper Model"
+                     value={originalProfile.config?.whisperModel || 'Not Set'}
+                     showDisclosure={true}
+                     onPress={() => navigation.navigate('EditWhisperModel')}
+                   />
+                   <SettingsRow
                      icon="reader-outline"
                      label="System Prompt"
                      value={originalProfile.config?.systemPrompt ? 'View/Edit Prompt' : 'Not Set'}
-                     isFirst
                      numberOfLines={1}
                      showDisclosure={true}
                      onPress={() => navigation.navigate('EditSystemPrompt')}

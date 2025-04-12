@@ -310,10 +310,10 @@ function EditLogoScreen(): React.ReactElement {
         </View>
 
         {/* Status Messages (Kept below button) */}
-        {/* <View style={[styles.statusMessageContainer, {marginTop: 0}]}> // Temporarily commented out for debugging
-            {error && <Text style={styles.errorText}>{error}</Text>}
-            {successMessage && <Text style={styles.successText}>{successMessage}</Text>}
-        </View> */}
+        <View style={[styles.statusMessageContainer, {marginTop: 0}]}> 
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
+        </View>
 
       </ScrollView>
     </SafeAreaView>

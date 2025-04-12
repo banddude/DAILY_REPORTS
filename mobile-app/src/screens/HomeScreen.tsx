@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,15 +10,22 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  Image,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
+import * as VideoThumbnails from 'expo-video-thumbnails';
+import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
-import { fetchApi } from './BrowseScreen';
+import { fetchApi } from './fetchApiHelper';
+import SelectionModal from '../components/SelectionModal';
+import { Ionicons } from '@expo/vector-icons';
 
 // Basic type for the result object expected from the server
 interface ReportResult {
@@ -40,115 +47,234 @@ interface SelectedAsset {
   size?: number;
 }
 
-// Add API Base URL (or import from a config file)
-// const API_BASE_URL = process.env.API_BASE_URL || 'https://localhost:3000'; // <-- REMOVE THIS LINE
-
-// Type for loading state for different data types
-type LoadingState = 'customers' | 'projects' | false;
-
-export default function HomeScreen() {
+const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const isFocused = useIsFocused();
   const { userToken } = useAuth();
-  const [selectedFile, setSelectedFile] =
-    useState<SelectedAsset | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<SelectedAsset | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
   const [result, setResult] = useState<ResultState>({ message: '', type: null, data: null });
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+  const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
+  const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [isFileProcessing, setIsFileProcessing] = useState(false);
+  const videoPlayerRef = useRef<Video>(null);
 
   // State for pickers
-  const [customers, setCustomers] = useState<string[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string | undefined>(undefined);
-  const [projects, setProjects] = useState<string[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined);
-  const [loadingState, setLoadingState] = useState<LoadingState>(false);
-  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [fetchedCustomers, setFetchedCustomers] = useState<string[]>([]);
+  const [fetchedProjects, setFetchedProjects] = useState<string[]>([]);
+  const [isFetchingCustomers, setIsFetchingCustomers] = useState(false);
+  const [isFetchingProjects, setIsFetchingProjects] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // State for modal
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+      title: string;
+      data: string[];
+      currentSelection?: string;
+      isLoading: boolean;
+      onSelect: (item: string) => void;
+  } | null>(null);
 
   // Log token value on every render
   console.log(`HomeScreen Render: userToken is ${userToken ? 'present' : 'null'}`);
 
-  // Fetch customers - Back to Simplest Logic
-  useEffect(() => {
-    let isMounted = true;
-    console.log(`HomeScreen Customer Effect Triggered: userToken is ${userToken ? 'present' : 'null'}`);
-
-    const fetchCustomers = async () => {
-      // Check token *inside* the async function right before fetch
-      if (!userToken) { 
-        console.log('FetchCustomers ABORTED: No userToken at time of execution.');
-        setCustomers([]);
-        if(isMounted) setLoadingState(false); // Ensure loading stops if aborted
-        return;
-      }
-      
-      setLoadingState('customers');
-      setPickerError(null);
-      console.log('HomeScreen: INSIDE fetchCustomers async func - Attempting fetchApi call...'); // Log before the call
-      try {
-        const fetchedCustomers = await fetchApi('/api/browse-reports', userToken);
-        if (isMounted) {
-          console.log('HomeScreen: Successfully fetched customers (simple effect).', fetchedCustomers);
-          setCustomers(fetchedCustomers);
-        }
-      } catch (err: any) {
-        const errorMessage = `Failed to load customers: ${err.message}`;
-        if (isMounted) {
-            console.error("HomeScreen Fetch customers error (simple effect):", errorMessage, err); // Log full error
-            setPickerError(errorMessage);
-            setCustomers([]);
-        }
-      } finally {
-        if (isMounted) setLoadingState(false);
-      }
-    };
-
-    // Directly call the async function if token exists
-    if (userToken) {
-        fetchCustomers();
-    } else {
-        // Clear customers if token is null (e.g., on logout)
-        setCustomers([]);
+  // Fetch customers - Refactored Logic
+  const loadCustomers = useCallback(async () => {
+    if (!userToken) {
+      console.log('HomeScreen Customer Effect: No userToken, clearing customers.');
+      setFetchedCustomers([]);
+      setSelectedCustomer(undefined);
+      setIsFetchingCustomers(false);
+      return;
     }
 
-    return () => { isMounted = false; };
-  }, [userToken]); // Depend ONLY on userToken
+    console.log('HomeScreen: Attempting to fetch customers...');
+    setIsFetchingCustomers(true);
+    setFetchError(null);
+    setFetchedCustomers([]);
+    setSelectedCustomer(undefined);
 
-  // Fetch projects - Needs token check
-  useEffect(() => {
-    let isMounted = true;
-    if (!selectedCustomer || !userToken) {
-        setProjects([]); 
-        setSelectedProject(undefined);
-        return; 
-    }
-    
-    const fetchProjects = async () => {
-      setLoadingState('projects');
-      setPickerError(null);
-      setProjects([]);
+    try {
+      const customersData: string[] = await fetchApi('/api/browse-reports', userToken);
+      console.log('HomeScreen: Successfully fetched customers.', customersData.length);
+      setFetchedCustomers(customersData);
+    } catch (err: any) {
+      const errorMessage = `Failed to load customers: ${err?.message || 'Unknown error'}`;
+      console.error("HomeScreen Fetch customers error:", errorMessage, err);
+      setFetchError(errorMessage);
+      setFetchedCustomers([]);
+      setSelectedCustomer(undefined);
       setSelectedProject(undefined);
-      console.log(`HomeScreen: Triggering project fetch for customer ${selectedCustomer} (token present).`);
-      try {
-        const fetchedProjects = await fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken);
-        if (isMounted) {
-          setProjects(fetchedProjects);
-        }
-      } catch (err: any) {
-        const errorMessage = `Failed to load projects: ${err.message}`;
-        if (isMounted) setPickerError(errorMessage);
-        console.error("HomeScreen Fetch projects error:", errorMessage, err);
-      } finally {
-        if (isMounted) setLoadingState(false);
-      }
-    };
-    fetchProjects();
-    return () => { isMounted = false; };
+    } finally {
+      setIsFetchingCustomers(false);
+    }
+  }, [userToken]);
+
+  // Fetch projects - Refactored Logic
+  const loadProjects = useCallback(async () => {
+    if (!selectedCustomer || !userToken) {
+      setFetchedProjects([]);
+      setIsFetchingProjects(false);
+      return;
+    }
+
+    console.log(`HomeScreen: Triggering project fetch for customer ${selectedCustomer}.`);
+    setIsFetchingProjects(true);
+    setFetchError(null);
+    setFetchedProjects([]);
+    setSelectedProject(undefined);
+
+    try {
+      const projectsData: string[] = await fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken);
+      console.log(`HomeScreen: Successfully fetched projects for ${selectedCustomer}.`, projectsData.length);
+      setFetchedProjects(projectsData);
+    } catch (err: any) {
+      const errorMessage = `Failed to load projects: ${err?.message || 'Unknown error'}`;
+      console.error("HomeScreen Fetch projects error:", errorMessage, err);
+      setFetchError(errorMessage);
+      setFetchedProjects([]);
+      setSelectedProject(undefined);
+    } finally {
+      setIsFetchingProjects(false);
+    }
   }, [selectedCustomer, userToken]);
 
+  // Effect to load customers when screen focuses or token changes
+  useEffect(() => {
+    if (isFocused && userToken) {
+      loadCustomers();
+    } else if (!userToken) {
+      setFetchedCustomers([]);
+      setFetchedProjects([]);
+      setSelectedCustomer(undefined);
+      setSelectedProject(undefined);
+      setFetchError(null);
+    }
+  }, [isFocused, userToken, loadCustomers]);
+
+  // Effect to load projects when selectedCustomer changes
+  useEffect(() => {
+    if (selectedCustomer) {
+      loadProjects();
+    } else {
+      setFetchedProjects([]);
+      setSelectedProject(undefined);
+    }
+  }, [selectedCustomer, loadProjects]);
+
+  // Effect to generate thumbnail when selectedFile changes
+  useEffect(() => {
+    const generateThumbnail = async () => {
+      if (selectedFile?.uri) {
+        setIsGeneratingThumbnail(true);
+        setThumbnailUri(null);
+        try {
+          console.log(`Generating thumbnail for: ${selectedFile.uri}`);
+          const { uri } = await VideoThumbnails.getThumbnailAsync(
+            selectedFile.uri,
+            {
+              time: 1000, // Generate thumbnail around the 1-second mark
+              quality: 0.5 // Adjust quality if needed
+            }
+          );
+          console.log(`Thumbnail generated: ${uri}`);
+          setThumbnailUri(uri);
+        } catch (e) {
+          console.warn('Could not generate thumbnail:', e);
+          setThumbnailUri(null);
+        } finally {
+          setIsGeneratingThumbnail(false);
+        }
+      } else {
+        setThumbnailUri(null);
+        setIsGeneratingThumbnail(false);
+      }
+    };
+
+    generateThumbnail();
+
+    // Optional: Cleanup function if thumbnail URI needs revoking (rarely needed for file URIs)
+    // return () => {
+    //   if (thumbnailUri) { /* Revoke logic */ }
+    // };
+  }, [selectedFile]); // Re-run effect if selectedFile changes
+
+  // Effect to configure audio mode when preview modal opens/closes
+  useEffect(() => {
+    const configureAudio = async (shouldPlayInBackground: boolean) => {
+      try {
+        console.log('Configuring audio mode for playback...');
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix, // Don't mix with other audio
+          playsInSilentModeIOS: true, // <-- Key setting for playing audio even in silent mode
+          staysActiveInBackground: shouldPlayInBackground, // If you want playback while app is backgrounded (false for modal)
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+          shouldDuckAndroid: false, // Don't lower volume for notifications
+          playThroughEarpieceAndroid: false, // Play through speaker
+        });
+        console.log('Audio mode configured.');
+      } catch (e) {
+        console.error('Failed to set audio mode', e);
+      }
+    };
+
+    if (isPreviewModalVisible) {
+      configureAudio(false); // Configure for foreground playback when modal opens
+    }
+    // Optional: Add logic here to reset audio mode when modal closes if needed
+    // else { /* Reset audio mode */ }
+
+  }, [isPreviewModalVisible]);
+
+  // Modal handlers
+  const openCustomerModal = () => {
+    setModalConfig({
+        title: 'Select Customer',
+        data: fetchedCustomers,
+        currentSelection: selectedCustomer,
+        isLoading: isFetchingCustomers,
+        onSelect: (customer) => {
+            if (customer !== selectedCustomer) {
+                setSelectedCustomer(customer);
+                setSelectedProject(undefined);
+            }
+        },
+    });
+    setIsModalVisible(true);
+  };
+
+  const openProjectModal = () => {
+    if (!selectedCustomer) return;
+    setModalConfig({
+        title: 'Select Project',
+        data: fetchedProjects,
+        currentSelection: selectedProject,
+        isLoading: isFetchingProjects,
+        onSelect: (project) => {
+            setSelectedProject(project);
+        },
+    });
+    setIsModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setIsModalVisible(false);
+    setModalConfig(null);
+  };
+
   async function pickDocument() {
-    // Reset previous result and selection
     setResult({ message: '', type: null, data: null });
     setSelectedFile(null);
+    // Clear previous states immediately
+    setIsFileProcessing(false);
+    setIsGeneratingThumbnail(false);
+    setThumbnailUri(null);
 
-    // Present choice to the user
     Alert.alert(
       'Select Video Source',
       'Where would you like to select the video from?',
@@ -156,123 +282,172 @@ export default function HomeScreen() {
         {
           text: 'Photo Library',
           onPress: async () => {
+            let pickerStartTime = 0;
             try {
-              // Request permissions
               const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (permissionResult.granted === false) {
                 Alert.alert('Permission Required', 'Photo library permission is needed to select videos.');
                 return;
               }
 
+              console.log(`[${Date.now()}] Before ImagePicker.launchImageLibraryAsync`);
+              pickerStartTime = Date.now();
               const pickerResult = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                allowsEditing: false, // Depending on requirements, could allow basic editing
-                quality: 0.8, // Adjust quality if needed for uploads
+                allowsEditing: false,
+                quality: 0.8, // Note: quality might add processing time
               });
+              console.log(`[${Date.now()}] After ImagePicker.launchImageLibraryAsync (took ${Date.now() - pickerStartTime}ms)`);
 
               if (pickerResult.canceled) {
                 console.log('Image picking cancelled');
                 return;
               }
 
-              if (pickerResult.assets && pickerResult.assets.length > 0) {
-                const asset = pickerResult.assets[0];
-                // Limit file size (e.g., 100MB) - adjust as needed
-                const maxSize = 100 * 1024 * 1024;
-                if (asset.fileSize && asset.fileSize > maxSize) {
-                  Alert.alert("File Too Large", `Please select a video file smaller than ${maxSize / (1024 * 1024)} MB.`);
-                  return;
-                }
-                // Map ImagePickerAsset to SelectedAsset
-                setSelectedFile({
-                  uri: asset.uri,
-                  name: asset.fileName || `video_${Date.now()}.mov`, // Provide a default name if fileName is null
-                  size: asset.fileSize,
-                });
-                console.log('Selected file URI (Library):', asset.uri);
-              }
+              // Set processing true immediately using requestAnimationFrame
+              console.log(`[${Date.now()}] Requesting animation frame to set processing state`);
+              requestAnimationFrame(() => {
+                  console.log(`[${Date.now()}] Inside animation frame - setting isFileProcessing true`);
+                  setIsFileProcessing(true);
+              });
+
+              // Continue processing the result asynchronously (yields thread briefly)
+              setTimeout(async () => {
+                  console.log(`[${Date.now()}] Starting post-picker processing`);
+                  if (pickerResult.assets && pickerResult.assets.length > 0) {
+                    const asset = pickerResult.assets[0];
+                    const maxSize = 100 * 1024 * 1024;
+                    if (asset.fileSize && asset.fileSize > maxSize) {
+                      Alert.alert("File Too Large", `Please select a video file smaller than ${maxSize / (1024 * 1024)} MB.`);
+                      setIsFileProcessing(false);
+                      return;
+                    }
+                    console.log(`[${Date.now()}] Setting selected file`);
+                    setIsFileProcessing(false); // Done processing *before* triggering thumbnail gen
+                    setSelectedFile({
+                      uri: asset.uri,
+                      name: asset.fileName || `video_${Date.now()}.mov`,
+                      size: asset.fileSize,
+                    });
+                  } else {
+                     console.log(`[${Date.now()}] Picker returned no assets`);
+                     setIsFileProcessing(false); // Reset if no assets
+                  }
+              }, 0); // setTimeout 0 allows RAF to run first
+
             } catch (error) {
-              console.error('Error picking from library:', error);
+              console.error(`[${Date.now()}] Error picking from library:`, error);
               setResult({ message: `Error selecting file: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
+              setIsFileProcessing(false);
             }
           },
         },
         {
           text: 'Record Video',
           onPress: async () => {
+            let pickerStartTime = 0;
             try {
-              // Request camera permissions
               const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
               if (permissionResult.granted === false) {
                 Alert.alert('Permission Required', 'Camera permission is needed to record videos.');
                 return;
               }
 
+              console.log(`[${Date.now()}] Before ImagePicker.launchCameraAsync`);
+              pickerStartTime = Date.now();
               const pickerResult = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                allowsEditing: false, // Or true if you want basic editing
-                quality: 0.8, // Adjust quality as needed
+                allowsEditing: false,
+                quality: 0.8,
               });
+              console.log(`[${Date.now()}] After ImagePicker.launchCameraAsync (took ${Date.now() - pickerStartTime}ms)`);
 
               if (pickerResult.canceled) {
                 console.log('Video recording cancelled');
                 return;
               }
 
-              if (pickerResult.assets && pickerResult.assets.length > 0) {
-                const asset = pickerResult.assets[0];
-                // Optional: Check file size if necessary (Camera output size might be less predictable)
-                // const maxSize = 100 * 1024 * 1024;
-                // if (asset.fileSize && asset.fileSize > maxSize) { ... }
+              console.log(`[${Date.now()}] Requesting animation frame to set processing state`);
+              requestAnimationFrame(() => {
+                 console.log(`[${Date.now()}] Inside animation frame - setting isFileProcessing true`);
+                 setIsFileProcessing(true);
+              });
 
-                // Map CameraAsset to SelectedAsset
-                setSelectedFile({
-                  uri: asset.uri,
-                  // Camera roll often doesn't provide a good filename
-                  name: `recorded_video_${Date.now()}.mov`, 
-                  size: asset.fileSize, // fileSize might be undefined
-                });
-                console.log('Recorded video URI:', asset.uri);
-              }
+              setTimeout(async () => {
+                 console.log(`[${Date.now()}] Starting post-picker processing`);
+                 if (pickerResult.assets && pickerResult.assets.length > 0) {
+                    const asset = pickerResult.assets[0];
+                    console.log(`[${Date.now()}] Setting selected file`);
+                    setIsFileProcessing(false);
+                    setSelectedFile({
+                      uri: asset.uri,
+                      name: `recorded_video_${Date.now()}.mov`,
+                      size: asset.fileSize,
+                    });
+                 } else {
+                    console.log(`[${Date.now()}] Picker returned no assets`);
+                    setIsFileProcessing(false);
+                 }
+               }, 0);
+
             } catch (error) {
-              console.error('Error recording video:', error);
+              console.error(`[${Date.now()}] Error recording video:`, error);
               setResult({ message: `Error recording video: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
+              setIsFileProcessing(false);
             }
           },
         },
         {
           text: 'Files',
           onPress: async () => {
+            let pickerStartTime = 0;
             try {
+              console.log(`[${Date.now()}] Before DocumentPicker.getDocumentAsync`);
+              pickerStartTime = Date.now();
               const pickerResult = await DocumentPicker.getDocumentAsync({
-                type: 'video/*', // Accept any video type
-                copyToCacheDirectory: false, // Avoid unnecessary copying if possible
+                type: 'video/*',
+                copyToCacheDirectory: false,
               });
+              console.log(`[${Date.now()}] After DocumentPicker.getDocumentAsync (took ${Date.now() - pickerStartTime}ms)`);
 
               if (pickerResult.canceled) {
                 console.log('Document picking cancelled');
                 return;
               }
 
-              if (pickerResult.assets && pickerResult.assets.length > 0) {
-                const asset = pickerResult.assets[0];
-                // Limit file size (e.g., 100MB) - adjust as needed
-                const maxSize = 100 * 1024 * 1024;
-                 if (asset.size && asset.size > maxSize) {
-                    Alert.alert("File Too Large", `Please select a video file smaller than ${maxSize / (1024 * 1024)} MB.`);
-                    return;
+              console.log(`[${Date.now()}] Requesting animation frame to set processing state`);
+               requestAnimationFrame(() => {
+                  console.log(`[${Date.now()}] Inside animation frame - setting isFileProcessing true`);
+                  setIsFileProcessing(true);
+               });
+
+              setTimeout(async () => {
+                 console.log(`[${Date.now()}] Starting post-picker processing`);
+                 if (pickerResult.assets && pickerResult.assets.length > 0) {
+                    const asset = pickerResult.assets[0];
+                    const maxSize = 100 * 1024 * 1024;
+                    if (asset.size && asset.size > maxSize) {
+                       Alert.alert("File Too Large", `Please select a video file smaller than ${maxSize / (1024 * 1024)} MB.`);
+                       setIsFileProcessing(false);
+                       return;
+                    }
+                    console.log(`[${Date.now()}] Setting selected file`);
+                    setIsFileProcessing(false);
+                    setSelectedFile({
+                      uri: asset.uri,
+                      name: asset.name,
+                      size: asset.size,
+                    });
+                 } else {
+                    console.log(`[${Date.now()}] Picker returned no assets`);
+                    setIsFileProcessing(false);
                  }
-                 // Map DocumentPickerAsset to SelectedAsset
-                 setSelectedFile({
-                    uri: asset.uri,
-                    name: asset.name,
-                    size: asset.size,
-                 });
-                 console.log('Selected file URI (Files):', asset.uri);
-              }
+               }, 0);
+
             } catch (error) {
-              console.error('Error picking document:', error);
+              console.error(`[${Date.now()}] Error picking document:`, error);
               setResult({ message: `Error selecting file: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
+              setIsFileProcessing(false);
             }
           },
         },
@@ -299,13 +474,17 @@ export default function HomeScreen() {
         return;
     }
 
-    setIsLoading(true);
+    setIsGeneratingReport(true);
     setResult({ message: 'Generating report... ', type: 'loading', data: null });
 
     const formData = new FormData();
     formData.append('customer', selectedCustomer);
     formData.append('project', selectedProject);
-    formData.append('video', { uri: selectedFile.uri, name: selectedFile.name } as any);
+    formData.append('video', {
+      uri: selectedFile.uri,
+      name: selectedFile.name,
+      type: 'video/quicktime',
+    } as any);
 
     try {
       console.log('HomeScreen handleUpload: Calling /api/generate-report');
@@ -318,7 +497,14 @@ export default function HomeScreen() {
         },
       });
 
-      const responseJson: ReportResult | { error: string } = await response.json();
+      const contentType = response.headers.get('content-type');
+      let responseJson: ReportResult | { error: string };
+      if (contentType && contentType.indexOf('application/json') !== -1) {
+          responseJson = await response.json();
+      } else {
+          const textResponse = await response.text();
+          throw new Error(textResponse || `Report generation failed with status: ${response.status}`);
+      }
 
       if (!response.ok) {
          const errorMessage = (responseJson as { error: string }).error || `Report generation failed: ${response.status}`;
@@ -326,210 +512,290 @@ export default function HomeScreen() {
       }
        const reportData = responseJson as ReportResult;
        console.log('Report generated:', reportData);
-       setResult({ message: 'Report Generated Successfully!', type: 'success', data: reportData });
+       // Keep loading state briefly before navigation
+       // setResult({ message: 'Report Generated Successfully!', type: 'success', data: reportData });
+       
+       // Navigate directly to the viewer
+       navigateToWebViewer(reportData.viewerUrl); 
+       
+       // Optionally reset file/state *after* scheduling navigation or upon returning
+       // setSelectedFile(null);
+       // setThumbnailUri(null);
 
     } catch (error) {
       console.error('Report generation error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       setResult({ message: `Error: ${errorMessage}`, type: 'error', data: null });
     } finally {
-      setIsLoading(false);
+      // Set generating false after navigation call (or potentially before)
+      setIsGeneratingReport(false);
     }
   }
 
-   function renderResultArea() {
-     if (result.type === null) return null;
+  function renderResultArea() {
+    if (result.type === null || result.type === 'success') return null;
 
-     const resultContainerStyle = [
-       styles.resultsAreaBase,
-       result.type === 'loading' && styles.resultsLoading,
-       result.type === 'success' && styles.resultsSuccess,
-       result.type === 'error' && styles.resultsError,
-     ];
+    const resultContainerStyle = [
+      styles.resultsContainerBase,
+      result.type === 'loading' && styles.resultsContainerLoading,
+      result.type === 'error' && styles.resultsContainerError,
+    ];
 
-     const resultTextStyle = [
-       styles.resultTextBase,
-       result.type === 'success' && styles.resultTextSuccess,
-       result.type === 'error' && styles.resultTextError,
-       result.type === 'loading' && styles.resultTextLoading,
-     ];
+    const resultTextStyle = [
+      styles.resultTextBase,
+      result.type === 'error' && styles.resultTextError,
+      result.type === 'loading' && styles.resultTextLoading,
+    ];
 
-     return (
-       <View style={resultContainerStyle}>
-         {result.type === 'success' && <Text style={styles.resultTitle}>Report Generated Successfully!</Text>}
-         {result.type !== 'success' && <Text style={resultTextStyle}>{result.message}</Text>}
-         {isLoading && result.type === 'loading' && (
-           <ActivityIndicator size="small" color="#656d76" style={{ marginTop: 10 }} />
-         )}
-         {result.type === 'success' && result.data && (
-           <>
-             <TouchableOpacity onPress={() => navigateToEditorFromUrl(result.data?.editorUrl)}>
-               <Text style={styles.link}>Edit Report &rarr;</Text>
-             </TouchableOpacity>
-             <TouchableOpacity onPress={() => navigateToWebViewer(result.data?.viewerUrl)}>
-               <Text style={styles.link}>View Report &rarr;</Text>
-             </TouchableOpacity>
-           </>
-         )}
-       </View>
-     );
-   }
+    return (
+      <View style={resultContainerStyle}>
+        <Text style={resultTextStyle}>{result.message}</Text>
+        {isGeneratingReport && result.type === 'loading' && (
+          <ActivityIndicator size="small" color={colors.textSecondary} style={styles.resultLoadingIndicator} />
+        )}
+      </View>
+    );
+  }
 
-  // Helper function to extract reportKey from URL and navigate
   function navigateToEditorFromUrl(url: string | undefined) {
-      if (!url) {
-          Alert.alert("Navigation Error", "Could not get report URL.");
-          return;
-      }
-      try {
-          // Attempt to parse the URL and extract the 'key' query parameter
-          const parsedUrl = new URL(url);
-          const reportKey = parsedUrl.searchParams.get('key');
+    if (!url) {
+        Alert.alert("Navigation Error", "Could not get report URL.");
+        return;
+    }
+    try {
+        const parsedUrl = new URL(url);
+        const reportKey = parsedUrl.searchParams.get('key');
 
-          if (reportKey) {
-              console.log(`Navigating to ReportEditor with extracted key: ${reportKey}`);
-              // Fix: Navigate to the correct stack and screen
-              navigation.navigate('BrowseTab', { 
-                screen: 'ReportEditor', 
-                params: { reportKey: reportKey }
-              });
-          } else {
-              throw new Error("'key' parameter not found in URL");
-          }
-      } catch (error) {
-          console.error("Error extracting report key from URL:", error);
-          Alert.alert(
-              "Navigation Error",
-              `Could not determine the report key from the URL. Please check the URL format or try browsing for the report.\nURL: ${url}`,
-              [{ text: "Open Web Link Instead", onPress: () => Linking.openURL(url) }, { text: "OK" } ]
-          );
-      }
+        if (reportKey) {
+            console.log(`Navigating to ReportEditor with extracted key: ${reportKey}`);
+            navigation.navigate('BrowseTab', {
+              screen: 'ReportEditor',
+              params: { reportKey: reportKey }
+            });
+        } else {
+            throw new Error("'key' parameter not found in URL");
+        }
+    } catch (error) {
+        console.error("Error extracting report key from URL:", error, `URL: ${url}`);
+        Alert.alert(
+            "Navigation Error",
+            `Could not process the report URL. Please check the URL format or try browsing for the report.\n\nError: ${error instanceof Error ? error.message : 'Invalid URL'}`,
+            [
+                { text: "Open Web Link Instead", onPress: () => Linking.canOpenURL(url).then(supported => {
+                    if (supported) { Linking.openURL(url); } else { Alert.alert("Cannot open URL", "This link cannot be opened.")}
+                }) },
+                { text: "OK" }
+            ]
+        );
+    }
   }
 
-  // Helper function to navigate to WebViewer
   function navigateToWebViewer(url: string | undefined) {
-      if (!url) {
-          Alert.alert("Navigation Error", "Could not get report URL to view.");
-          return;
-      }
-      console.log(`Navigating to WebViewer with URL: ${url}`);
-      // Fix: Navigate to the correct stack and screen
-      navigation.navigate('BrowseTab', { 
-        screen: 'WebViewer', 
-        params: { url: url }
-      });
-      // No need for complex parsing or fallback to Linking here
-  }
+    if (!url) {
+        Alert.alert("Navigation Error", "Could not get report URL to view.");
+        return;
+    }
+    // Reset state *before* navigating away
+    setSelectedFile(null);
+    setThumbnailUri(null);
+    setIsFileProcessing(false);
+    setIsGeneratingThumbnail(false);
+    setResult({ message: '', type: null, data: null }); // Clear results too
 
-  // Helper function to render loading indicators for pickers
-  const renderPickerLoading = (type: LoadingState) => {
-      if (loadingState === type) {
-          return (
-              <View style={styles.pickerLoadingContainer}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.pickerLoadingText}>Loading {type}...</Text>
-              </View>
-          );
-      }
-      return null;
-  };
+    console.log(`Navigating to WebViewer with URL: ${url}`);
+    navigation.navigate('BrowseTab', {
+      screen: 'WebViewer',
+      params: { url: url }
+    });
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.container}>
-            {/* Placeholder for Header - Implement or remove as needed */}
-            {/* <View style={styles.headerPlaceholder}><Text>Header Goes Here</Text></View> */}
-
+       <ScrollView
+         contentContainerStyle={styles.scrollContainer}
+         keyboardShouldPersistTaps="handled"
+         showsVerticalScrollIndicator={false}
+       >
             <Text style={styles.title}>Daily Report Generator</Text>
             <Text style={styles.description}>
-                Select the customer and project, then upload or record a video walkthrough to automatically generate a daily construction report.
+                Select customer & project, then upload or record a video walkthrough to generate a report.
             </Text>
 
-            {/* --- Customer and Project Pickers --- */} 
-            <View style={styles.pickerContainer}>
-                {pickerError && <Text style={styles.errorText}>{pickerError}</Text>}
-                
-                {/* Customer Picker */} 
-                <View style={styles.controlGroup}>
-                    <Text style={styles.label}>Customer:</Text>
-                     <View style={[styles.pickerWrapper, loadingState === 'customers' && styles.pickerWrapperDisabled]}>
-                        <Picker
-                            selectedValue={selectedCustomer}
-                            onValueChange={(itemValue) => setSelectedCustomer(itemValue || undefined)}
-                            enabled={loadingState !== 'customers'}
-                            style={styles.picker}
-                            prompt="Select a Customer"
-                        >
-                            <Picker.Item label="-- Select Customer --" value={undefined} />
-                            {customers.map((customer) => (
-                                <Picker.Item key={customer} label={customer} value={customer} />
-                            ))}
-                        </Picker>
-                     </View>
-                     {renderPickerLoading('customers')}
-                </View>
+            <View style={styles.sectionContainer}>
+                <Text style={styles.sectionHeaderText}>Details</Text>
+                 {fetchError && <Text style={styles.fetchErrorText}>{fetchError}</Text>}
 
-                {/* Project Picker */} 
-                <View style={styles.controlGroup}>
-                    <Text style={styles.label}>Project:</Text>
-                     <View style={[styles.pickerWrapper, (!selectedCustomer || loadingState === 'projects') && styles.pickerWrapperDisabled]}>
-                        <Picker
-                            selectedValue={selectedProject}
-                            onValueChange={(itemValue) => setSelectedProject(itemValue || undefined)}
-                            enabled={!!selectedCustomer && loadingState !== 'projects'}
-                            style={styles.picker}
-                            prompt="Select a Project"
-                        >
-                            <Picker.Item label="-- Select Project --" value={undefined} />
-                            {projects.map((project) => (
-                                <Picker.Item key={project} label={project} value={project} />
-                            ))}
-                        </Picker>
+                <TouchableOpacity
+                    style={[styles.rowContainer, styles.firstRowInSection]}
+                    onPress={openCustomerModal}
+                    disabled={isFetchingCustomers}
+                >
+                    <View style={styles.rowIconContainer}>
+                        <Ionicons name="business-outline" size={22} color={colors.textSecondary} />
+                    </View>
+                    <Text style={styles.rowLabel}>Customer</Text>
+                    <View style={styles.rowValueContainer}>
+                        <Text style={styles.rowValueText} numberOfLines={1}>{isFetchingCustomers ? 'Loading...' : (selectedCustomer || 'Select')}</Text>
+                        {isFetchingCustomers ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} style={styles.rowChevron} />}
+                   </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.rowContainer, !selectedCustomer && styles.rowDisabled]}
+                    onPress={openProjectModal}
+                    disabled={!selectedCustomer || isFetchingProjects}
+                >
+                     <View style={styles.rowIconContainer}>
+                         <Ionicons name="folder-outline" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} />
                      </View>
-                     {renderPickerLoading('projects')}
-                </View>
+                    <Text style={[styles.rowLabel, !selectedCustomer && styles.rowLabelDisabled]}>Project</Text>
+                     <View style={styles.rowValueContainer}>
+                         <Text style={[styles.rowValueText, !selectedCustomer && styles.rowValueDisabled]} numberOfLines={1}>{!selectedCustomer ? 'Select Customer First' : (isFetchingProjects ? 'Loading...' : (selectedProject || 'Select'))}</Text>
+                         {isFetchingProjects ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} style={styles.rowChevron} />}
+                    </View>
+                </TouchableOpacity>
             </View>
 
-            {/* --- Video Upload Area --- */} 
-            <View style={styles.uploadArea}>
-                <TouchableOpacity
-                  style={[styles.button, styles.selectButton, isLoading && styles.buttonDisabled]}
-                  onPress={pickDocument}
-                  disabled={isLoading}
-                >
-                    <Text style={[styles.buttonText, styles.selectButtonText, isLoading && styles.buttonTextDisabled]}>
-                        {selectedFile ? 'Change Video File' : 'Select Video File'}
-                    </Text>
-                </TouchableOpacity>
+            <View style={styles.sectionContainer}>
+                <Text style={styles.sectionHeaderText}>Video</Text>
+                <View style={styles.uploadSectionContent}>
+                    <TouchableOpacity
+                      style={[
+                        styles.buttonBase,
+                        isGeneratingReport && styles.buttonDisabled,
+                        { borderTopWidth: borders.widthHairline, borderTopColor: colors.borderLight }
+                      ]}
+                      onPress={pickDocument}
+                      disabled={isGeneratingReport}
+                    >
+                        <View style={styles.buttonIconContainer}>
+                           <Ionicons name="videocam-outline" size={22} color={isGeneratingReport ? colors.textDisabled : colors.textSecondary} />
+                        </View>
+                        <Text style={[
+                            styles.buttonTextBase,
+                            isGeneratingReport && styles.buttonTextDisabled
+                        ]}>
+                            {selectedFile ? 'Change Video File' : 'Select or Record Video'}
+                        </Text>
+                        <View style={styles.buttonChevronContainer}>
+                           <Ionicons name="chevron-forward" size={22} color={isGeneratingReport ? colors.textDisabled : colors.textSecondary} />
+                        </View>
+                    </TouchableOpacity>
 
-                {selectedFile && (
-                    <Text style={styles.selectedFileName}>
-                        Selected: {selectedFile.name.substring(0, 35)}{selectedFile.name.length > 35 ? '...' : ''}
-                    </Text>
-                )}
+                    {selectedFile && (
+                        <TouchableOpacity
+                            style={styles.thumbnailContainer}
+                            onPress={() => {
+                                console.log('Opening preview for video:', JSON.stringify(selectedFile, null, 2));
+                                setIsPreviewModalVisible(true);
+                            }}
+                            disabled={!thumbnailUri && !isFileProcessing}
+                        >
+                          {thumbnailUri ? (
+                              <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} resizeMode="cover" />
+                          ) : (isFileProcessing || isGeneratingThumbnail) ? (
+                              <View style={styles.thumbnailPlaceholder}>
+                                 <ActivityIndicator size="small" color={colors.textSecondary} />
+                              </View>
+                          ) : (
+                             <View style={styles.thumbnailPlaceholder}>
+                                <Ionicons name="image-outline" size={24} color={colors.textSecondary} />
+                             </View>
+                          )}
+                          <Text style={styles.thumbnailFilenameText} numberOfLines={1} ellipsizeMode="middle">
+                              {selectedFile.name}
+                          </Text>
+                          <View style={styles.playIconOverlay}>
+                             <Ionicons name="play-circle-outline" size={24} color="rgba(255, 255, 255, 0.8)" />
+                          </View>
+                        </TouchableOpacity>
+                    )}
 
-                {/* Generate Report Button - Disable if no customer/project/file or if loading */} 
-                <TouchableOpacity
-                    style={[
-                        styles.button,
-                        (!selectedFile || !selectedCustomer || !selectedProject || isLoading) && styles.buttonDisabled
-                    ]}
-                    onPress={handleUpload}
-                    disabled={!selectedFile || !selectedCustomer || !selectedProject || isLoading}
-                >
-                    <Text style={[
-                        styles.buttonText,
-                        (!selectedFile || !selectedCustomer || !selectedProject || isLoading) && styles.buttonTextDisabled
-                    ]}>
-                        Generate Report
-                    </Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[
+                            styles.buttonBase,
+                            (!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport) && styles.buttonDisabled,
+                            { borderBottomWidth: 0 }
+                        ]}
+                        onPress={handleUpload}
+                        disabled={!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport}
+                    >
+                        <View style={styles.buttonIconContainer}>
+                           <Ionicons name="document-text-outline" size={22} color={(!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport) ? colors.textDisabled : colors.textSecondary} />
+                        </View>
+                        <Text style={[
+                            styles.buttonTextBase,
+                            !((!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport)) && { color: colors.textPrimary },
+                            (!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport) && styles.buttonTextDisabled
+                        ]}>
+                            {isGeneratingReport ? 'Generating...' : 'Generate Report'}
+                        </Text>
+                        <View style={styles.buttonChevronContainer}>
+                            {isGeneratingReport ? (
+                                <ActivityIndicator
+                                    size="small"
+                                    color={colors.textDisabled}
+                                />
+                            ) : (
+                               <Ionicons name="chevron-forward" size={22} color={(!selectedFile || !selectedCustomer || !selectedProject) ? colors.textDisabled : colors.textSecondary} />
+                            )}
+                        </View>
+                    </TouchableOpacity>
+                 </View>
             </View>
 
             {renderResultArea()}
-        </View>
-      </ScrollView>
+        </ScrollView>
+
+        {modalConfig && (
+            <SelectionModal
+                isVisible={isModalVisible}
+                title={modalConfig.title}
+                data={modalConfig.data}
+                currentSelection={modalConfig.currentSelection}
+                onSelect={modalConfig.onSelect}
+                onClose={closeModal}
+                isLoading={modalConfig.isLoading}
+            />
+        )}
+
+        <Modal
+             visible={isPreviewModalVisible}
+             transparent={true}
+             animationType="fade"
+             onRequestClose={() => setIsPreviewModalVisible(false)}
+         >
+            <View style={styles.modalContainer}>
+               <View style={styles.videoContainer}>
+                 {selectedFile?.uri && (
+                    <>
+                     <Video
+                        ref={videoPlayerRef}
+                        source={{ uri: selectedFile.uri }}
+                        style={styles.videoPlayer}
+                        useNativeControls
+                        resizeMode={ResizeMode.CONTAIN}
+                        onError={(error) => {
+                           console.error('Video playback error string:', error);
+                           Alert.alert(
+                               "Playback Error",
+                               `Sorry, this video could not be played. It might be in an unsupported format or corrupted.\n\nError: ${error}`,
+                               [{ text: "OK", onPress: () => setIsPreviewModalVisible(false) }]
+                           );
+                        }}
+                        onFullscreenUpdate={(event) => {
+                           // Optional: Handle fullscreen updates if needed
+                           console.log('Fullscreen status:', event.fullscreenUpdate);
+                        }}
+                    />
+                    </>
+                 )}
+               </View>
+               <TouchableOpacity style={styles.closeButton} onPress={() => setIsPreviewModalVisible(false)}>
+                  <Ionicons name="close-circle" size={36} color={colors.surface} />
+               </TouchableOpacity>
+            </View>
+         </Modal>
     </SafeAreaView>
   );
 }
@@ -537,205 +803,242 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background, // Use screen background color
+    backgroundColor: colors.background,
   },
   scrollContainer: {
       flexGrow: 1,
-      justifyContent: 'center', // Center content vertically for a cleaner look
-      alignItems: 'center',
-      padding: spacing.lg, // Consistent padding
+      paddingVertical: spacing.lg,
   },
-  container: {
-    maxWidth: 600,
-    width: '100%',
-    backgroundColor: colors.surface, // Card background
-    padding: spacing.xl, // Generous padding inside the card
-    borderWidth: 0, // Remove border for a flatter look
-    // borderColor: colors.border, // Use theme token - REMOVED
-    borderRadius: borders.radiusLarge, // More rounded corners
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    // Add subtle shadow for depth
-    // shadowColor: colors.textPrimary, // Use a dark color for shadow - DEPRECATED
-    // shadowOffset: { width: 0, height: 4 }, // DEPRECATED
-    // shadowOpacity: 0.1, // DEPRECATED
-    // shadowRadius: 10, // DEPRECATED
-    boxShadow: `0px 4px 10px rgba(0, 0, 0, 0.1)`, // Modern web shadow
-    elevation: 5, // Keep for Android
-  },
-  // headerPlaceholder: { // Example style if you add a header
-  //   height: 50,
-  //   width: '100%',
-  //   backgroundColor: '#f0f0f0',
-  //   marginBottom: 20,
-  //   justifyContent: 'center',
-  //   alignItems: 'center',
-  // },
   title: {
-    fontSize: typography.fontSizeXXL, // Use theme token (Largest)
-    fontWeight: typography.fontWeightBold as '600',
+    fontSize: typography.fontSizeXL,
+    fontWeight: typography.fontWeightBold as 'bold',
     color: colors.textPrimary,
-    marginBottom: spacing.md, // More space below title
+    marginBottom: spacing.xs,
     textAlign: 'center',
-    lineHeight: typography.lineHeightXXL, // Use corresponding line height
+    lineHeight: typography.lineHeightXL,
+    paddingHorizontal: spacing.lg,
   },
   description: {
     color: colors.textSecondary,
     fontSize: typography.fontSizeM,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-    lineHeight: typography.lineHeightM, // Use theme token (CORRECTED)
-  },
-  uploadArea: {
     marginBottom: spacing.xl,
-    padding: spacing.xl, // Increase padding for a better dropzone feel
-    width: '100%',
-    borderWidth: borders.widthMedium, // Slightly thicker border
-    borderStyle: 'dashed',
-    borderColor: colors.border, // Use theme token
-    borderRadius: borders.radiusMedium, // Standard rounding
-    backgroundColor: colors.background, // Use screen background color for contrast
-    alignItems: 'center',
-  },
-  // Button - Primary Action (Generate)
-  button: {
-    paddingVertical: spacing.md, // Taller button
-    paddingHorizontal: spacing.xl,
-    borderRadius: borders.radiusMedium,
-    backgroundColor: colors.primary, // Use primary color
-    width: '100%', // Make buttons full width within their container
-    alignItems: 'center',
-    marginBottom: spacing.md, // Space below each button
-  },
-  // Button - Secondary Action (Select File)
-  selectButton: {
-    backgroundColor: colors.surface, // White background
-    borderColor: colors.border, // Border color
-    borderWidth: borders.widthThin, // Thin border
-  },
-  buttonText: {
-    color: colors.textOnPrimary, // White text for primary button
-    fontSize: typography.fontSizeM,
-    fontWeight: typography.fontWeightMedium as '500',
     textAlign: 'center',
+    lineHeight: typography.lineHeightM,
+    paddingHorizontal: spacing.lg,
   },
-  selectButtonText: {
-    color: colors.primary, // Primary color text for secondary button
+  sectionContainer: {
+      marginBottom: spacing.xl,
   },
-  buttonDisabled: {
-    backgroundColor: colors.background, // Use a disabled background color
-    borderColor: colors.border, // Keep border for select button
-    // Optionally change text color for disabled state
-    // color: colors.textDisabled,
+  sectionHeaderText: {
+      paddingBottom: spacing.xs,
+      marginBottom: spacing.xxs,
+      paddingHorizontal: spacing.lg,
+      color: colors.textSecondary,
+      fontSize: typography.fontSizeS,
+      fontWeight: typography.fontWeightMedium as '500',
+      textTransform: 'uppercase',
   },
-  buttonTextDisabled: {
-    color: colors.textDisabled, // Greyed out text when disabled
-  },
-  resultsAreaBase: {
-    marginTop: spacing.xl,
-    width: '100%',
-    padding: spacing.md,
-    borderRadius: borders.radiusMedium,
-    borderWidth: borders.widthThin,
-    // Common styles for all result types
-  },
-   resultsLoading: {
-      backgroundColor: colors.warningBg,
-      borderColor: colors.warningBorder,
-      alignItems: 'center',
-   },
-   resultsSuccess: {
-      backgroundColor: colors.successBg,
-      borderColor: colors.successBorder,
-      alignItems: 'flex-start', // Align items left for success state
-   },
-   resultsError: {
-      backgroundColor: colors.errorBg,
-      borderColor: colors.errorBorder,
-      alignItems: 'flex-start', // Align items left for error state
-   },
-   resultTextBase: {
-      fontSize: typography.fontSizeM,
-      lineHeight: typography.lineHeightM,
-      marginBottom: spacing.sm, // Space below message text
-   },
-   resultTextLoading: {
-      color: colors.warningText, // Use theme token
-      textAlign: 'center',
-   },
-   resultTextSuccess: {
-      color: colors.successText,
-   },
-   resultTextError: {
-      color: colors.errorText, // Use theme token (CORRECTED)
-      fontWeight: typography.fontWeightMedium as '500', // Medium weight for error text
-   },
-   resultTitle: { // For success message header
-      fontSize: typography.fontSizeL,
-      fontWeight: typography.fontWeightBold as '600',
-      color: colors.successText,
-      marginBottom: spacing.sm,
-   },
-   link: {
-       marginTop: spacing.xs, // Less margin top
-       color: colors.primaryDarker,
-       fontWeight: typography.fontWeightMedium as '500',
-       fontSize: typography.fontSizeM,
-       textDecorationLine: 'underline',
-   },
-   selectedFileName: { // Style for the selected file name text
-    fontSize: typography.fontSizeS,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  pickerContainer: { // Container for the pickers
-     width: '100%',
-     marginBottom: spacing.lg,
-     paddingHorizontal: spacing.md, // Add some horizontal padding if needed
-   },
-   controlGroup: { // Grouping label and picker
-     marginBottom: spacing.md,
-   },
-   label: { // Style for Picker labels
-     fontSize: typography.fontSizeM,
-     fontWeight: typography.fontWeightMedium as '500',
-     color: colors.textPrimary,
-     marginBottom: spacing.xs,
-   },
-   pickerWrapper: { // Wrapper to style the Picker border
-       borderWidth: borders.widthThin,
-       borderColor: colors.borderLight,
-       borderRadius: borders.radiusSmall,
-       backgroundColor: colors.surface,
-       overflow: 'hidden', // Needed for borderRadius on Android
-   },
-   pickerWrapperDisabled: {
-       backgroundColor: colors.background, // Visually indicate disabled state
-       opacity: 0.6,
-   },
-   picker: {
-       // Default picker styles are often sufficient
-       // On iOS, height might need adjustment if items are cut off
-       height: Platform.OS === 'ios' ? 180 : 50, // Adjusted iOS height for better visibility
-   },
-   pickerLoadingContainer: {
+  rowContainer: {
+      backgroundColor: colors.surface,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: spacing.xs,
-   },
-   pickerLoadingText: {
-      marginLeft: spacing.xs,
-      fontSize: typography.fontSizeXS,
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+      minHeight: 48,
+  },
+  firstRowInSection: {
+      borderTopWidth: borders.widthHairline,
+      borderTopColor: colors.borderLight,
+  },
+  rowDisabled: {
+      opacity: 0.6,
+  },
+  rowIconContainer: {
+      marginRight: spacing.md,
+      width: 24,
+      alignItems: 'center',
+  },
+  rowLabel: {
+      fontSize: typography.fontSizeM,
+      color: colors.textPrimary,
+      flexGrow: 1,
+      flexShrink: 0,
+  },
+  rowLabelDisabled: {
+      color: colors.textDisabled,
+  },
+  rowValueContainer: {
+      flexShrink: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: spacing.sm,
+  },
+  rowValueText: {
+      fontSize: typography.fontSizeM,
       color: colors.textSecondary,
+      textAlign: 'right',
+      marginRight: spacing.xs,
+  },
+  rowValueDisabled: {
+      color: colors.textDisabled,
+      fontStyle: 'italic',
+  },
+  rowChevron: {
+  },
+  rowSpinner: {
+  },
+  fetchErrorText: {
+     color: colors.error,
+     fontSize: typography.fontSizeS,
+     textAlign: 'center',
+     paddingVertical: spacing.sm,
+     marginHorizontal: spacing.lg,
+     fontWeight: typography.fontWeightMedium as '500',
+     backgroundColor: colors.errorBg,
+     borderRadius: borders.radiusSmall,
+     marginBottom: spacing.sm,
+     borderWidth: borders.widthThin,
+     borderColor: colors.errorBorder,
    },
-   errorText: { // Error text for picker loading issues
-      color: colors.error, 
-      fontSize: typography.fontSizeS,
-      textAlign: 'center',
+  uploadSectionContent: {
+    backgroundColor: colors.surface,
+    borderTopWidth: borders.widthHairline,
+    borderTopColor: colors.borderLight,
+    borderBottomWidth: borders.widthHairline,
+    borderBottomColor: colors.borderLight,
+    paddingHorizontal: 0,
+    marginBottom: spacing.xl,
+  },
+  buttonBase: {
+      backgroundColor: colors.surface,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+      minHeight: 48,
+      width: '100%',
+      justifyContent: 'space-between',
+  },
+  buttonDisabled: {
+      opacity: 0.6,
+  },
+  buttonTextBase: {
+      fontSize: typography.fontSizeM,
+      color: colors.textPrimary,
+      flexShrink: 1,
+      marginLeft: spacing.md,
+  },
+  buttonTextDisabled: {
+      color: colors.textDisabled,
+  },
+  buttonIconContainer: {
+      width: 24,
+      alignItems: 'center',
+  },
+  buttonChevronContainer: {
+      marginLeft: spacing.sm,
+  },
+  buttonActivityIndicator: {
+  },
+  thumbnailContainer: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      backgroundColor: colors.surface,
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+      alignItems: 'center',
+      flexDirection: 'row',
+  },
+  thumbnailImage: {
+     width: 60,
+     height: 60,
+     borderRadius: borders.radiusSmall,
+     marginRight: spacing.md,
+     backgroundColor: colors.borderLight,
+  },
+  thumbnailPlaceholder: {
+     width: 60,
+     height: 60,
+     borderRadius: borders.radiusSmall,
+     marginRight: spacing.md,
+     backgroundColor: colors.surfaceAlt,
+     justifyContent: 'center',
+     alignItems: 'center',
+  },
+  thumbnailFilenameText: {
+     flex: 1,
+     fontSize: typography.fontSizeS,
+     color: colors.textSecondary,
+     fontStyle: 'italic',
+     textAlign: 'left',
+  },
+  playIconOverlay: {
+      position: 'absolute',
+      left: spacing.lg + 20,
+      top: spacing.sm + 20,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      borderRadius: 12,
+      padding: 2,
+   },
+  resultsContainerBase: {
+      marginTop: 0,
+      marginHorizontal: 0,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      backgroundColor: colors.surface,
+      borderTopWidth: borders.widthHairline,
+      borderTopColor: colors.borderLight,
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+  },
+  resultsContainerLoading: {
+      alignItems: 'center',
+  },
+  resultsContainerError: {
+  },
+  resultTextBase: {
+      fontSize: typography.fontSizeM,
+      lineHeight: typography.lineHeightM,
       marginBottom: spacing.sm,
-      fontWeight: typography.fontWeightMedium as '500',
-   },
-}); 
+      textAlign: 'left',
+  },
+  resultTextLoading: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+      fontWeight: typography.fontWeightNormal as 'normal',
+  },
+  resultTextError: {
+      color: colors.error,
+      fontWeight: typography.fontWeightNormal as 'normal',
+  },
+  resultLoadingIndicator: {
+      marginTop: spacing.sm,
+      alignSelf: 'center',
+  },
+  modalContainer: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     paddingBottom: 100,
+  },
+  videoContainer: {
+     width: Dimensions.get('window').width * 0.9,
+     height: Dimensions.get('window').height * 0.7,
+     backgroundColor: colors.background,
+     borderRadius: borders.radiusMedium,
+     overflow: 'hidden',
+     marginBottom: spacing.lg,
+  },
+  videoPlayer: {
+     width: '100%',
+     height: '100%',
+  },
+  closeButton: {
+  },
+});
+
+export default HomeScreen; 

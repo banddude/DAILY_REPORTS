@@ -25,6 +25,9 @@ import EditCompanyPhoneScreen from '../screens/EditCompanyPhoneScreen';
 import EditCompanyWebsiteScreen from '../screens/EditCompanyWebsiteScreen';
 import EditAddressScreen from '../screens/EditAddressScreen';
 import EditLogoScreen from '../screens/EditLogoScreen';
+import ProjectReportsScreen from '../screens/ProjectReportsScreen';
+import EditChatModelScreen from '../screens/EditChatModelScreen';
+import EditWhisperModelScreen from '../screens/EditWhisperModelScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
 
 // --- Define Param Lists ---
@@ -37,17 +40,20 @@ export type AuthStackParamList = {
 
 // Params for screens in the Home stack (inside the main tabs)
 export type HomeStackParamList = {
-  HomeBase: undefined; // Upload screen
-  // Add other screens related to Home/Upload flow if needed
+  HomeBase: { // Keep params HomeBase might receive (though not from SelectionScreen anymore)
+      selectedCustomer?: string;
+      selectedProject?: string;
+  } | undefined;
+  // SelectionScreen REMOVED from here
 };
 
 // Params for screens in the Browse stack (inside the main tabs)
 export type BrowseStackParamList = {
-  BrowseBase: undefined; // List screen
-  ReportViewer: { reportKey: string }; // Example: Pass S3 key or DB ID
-  WebViewer: { url: string }; // Pass the S3 viewer URL
-  ReportEditor: { reportKey: string }; // Example: Pass S3 key or DB ID
-  // Add other screens related to browsing if needed
+  BrowseBase: undefined; // Removed params as selection is inline
+  ReportViewer: { reportKey: string };
+  WebViewer: { url: string };
+  ReportEditor: { reportKey: string };
+  ProjectReports: { customer: string; project: string };
 };
 
 // New Stack for Profile/Settings Tab
@@ -63,6 +69,8 @@ export type ProfileStackParamList = {
   EditCompanyWebsite: undefined;
   EditAddress: undefined;
   EditLogo: { currentLogoUrl: string | null }; // Add EditLogo screen with param
+  EditChatModel: undefined;
+  EditWhisperModel: undefined;
 };
 
 // Params for the main bottom tabs themselves
@@ -91,6 +99,9 @@ export type EditCompanyPhoneScreenProps = NativeStackScreenProps<ProfileStackPar
 export type EditCompanyWebsiteScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditCompanyWebsite'>;
 export type EditAddressScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditAddress'>;
 export type EditLogoScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditLogo'>;
+export type ProjectReportsScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ProjectReports'>;
+export type EditChatModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditChatModel'>;
+export type EditWhisperModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditWhisperModel'>;
 
 // Define Root Stack including Auth and Main App
 export type RootStackParamList = {
@@ -123,16 +134,18 @@ function HomeStackNavigator() {
     <HomeNavStack.Navigator
         screenOptions={{
             headerStyle: { backgroundColor: colors.surface },
-            headerTintColor: colors.textPrimary,
-            headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold' },
+            headerTintColor: colors.primary,
+            headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold', color: colors.textPrimary },
         }}
     >
-      <HomeNavStack.Screen 
-        name="HomeBase" 
-        component={HomeScreen} 
-        options={{ title: 'Generate Report' }} 
+      <HomeNavStack.Screen
+        name="HomeBase"
+        component={HomeScreen}
+        options={{
+            title: 'Generate Report',
+        }}
       />
-      {/* Add other screens related to the Home/Upload flow if needed */}
+      {/* SelectionScreen component REMOVED from stack */}
     </HomeNavStack.Navigator>
   );
 }
@@ -150,7 +163,7 @@ function BrowseStackNavigator() {
             <BrowseNavStack.Screen 
                 name="BrowseBase" 
                 component={BrowseScreen} 
-                options={{ title: 'Browse Reports' }} 
+                options={{ title: 'Reports' }} 
             />
             <BrowseNavStack.Screen 
                 name="ReportViewer" 
@@ -167,6 +180,11 @@ function BrowseStackNavigator() {
                 component={ReportEditorScreen} 
                 options={{ title: 'Edit Report' }} 
             />
+             <BrowseNavStack.Screen 
+                 name="ProjectReports" 
+                 component={ProjectReportsScreen} 
+                 // options={{ title: 'Project Reports' }} // Title is set dynamically in the screen
+             />
             {/* Add other screens related to browsing if needed */}
         </BrowseNavStack.Navigator>
     );
@@ -237,6 +255,16 @@ function ProfileStackNavigator() {
                 component={EditLogoScreen}
                 options={{ title: 'Company Logo' }}
             />
+            <ProfileNavStack.Screen
+                name="EditChatModel"
+                component={EditChatModelScreen}
+                options={{ title: 'Chat Model' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditWhisperModel"
+                component={EditWhisperModelScreen}
+                options={{ title: 'Whisper Model' }}
+            />
         </ProfileNavStack.Navigator>
     );
 }
@@ -280,7 +308,7 @@ function MainTabs() {
       <Tab.Screen 
         name="BrowseTab" 
         component={BrowseStackNavigator}
-        options={{ title: 'Browse' }} 
+        options={{ title: 'Reports' }} 
       />
       <Tab.Screen 
         name="ProfileTab" // This tab now hosts the ProfileStack
