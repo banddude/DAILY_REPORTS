@@ -53,6 +53,7 @@ interface SelectedAsset {
   uri: string;
   name: string;
   size?: number;
+  mimeType?: string;
 }
 
 const HomeScreen: React.FC = () => {
@@ -368,6 +369,7 @@ const HomeScreen: React.FC = () => {
       uri: asset.uri,
       name: fileName || `${isImage ? 'image' : isVideo ? 'video' : 'file'}_${Date.now()}.${mimeType?.split('/')[1] || 'tmp'}`,
       size: fileSize,
+      mimeType: mimeType,
     });
 
     if (isImage) {
@@ -637,20 +639,36 @@ const HomeScreen: React.FC = () => {
     const formData = new FormData();
     formData.append('customer', selectedCustomer);
     formData.append('project', selectedProject);
-    formData.append('video', {
-      uri: selectedFile.uri,
-      name: selectedFile.name,
-      type: 'video/quicktime',
-    } as any);
 
     try {
+      // --- Platform Specific File Handling --- 
+      if (Platform.OS === 'web') {
+         console.log('Web platform detected: Fetching blob for URI:', selectedFile.uri);
+         const response = await fetch(selectedFile.uri);
+         const blob = await response.blob();
+         console.log(`Fetched blob: size=${blob.size}, type=${blob.type}`);
+         formData.append('video', blob, selectedFile.name);
+         console.log('Web: Appended blob to FormData');
+      } else {
+         // Native platform: append file object as before
+         console.log('Native platform detected: Appending file object');
+         formData.append('video', {
+           uri: selectedFile.uri,
+           name: selectedFile.name,
+           type: selectedFile.mimeType || 'video/mp4', // Attempt to get mimeType, fallback
+         } as any);
+         console.log('Native: Appended file object to FormData');
+      }
+      // --- End Platform Specific File Handling ---
+
       console.log('HomeScreen handleUpload: Calling /api/generate-report');
       const response = await fetch(`${API_BASE_URL}/api/generate-report`, {
         method: 'POST',
         body: formData,
         headers: {
            'Accept': 'application/json',
-           'Authorization': `Bearer ${userToken}`
+           'Authorization': `Bearer ${userToken}`,
+           // Content-Type is set automatically by browser/fetch for FormData
         },
       });
 
@@ -660,7 +678,8 @@ const HomeScreen: React.FC = () => {
           responseJson = await response.json();
       } else {
           const textResponse = await response.text();
-          throw new Error(textResponse || `Report generation failed with status: ${response.status}`);
+          // Improved error message for non-JSON responses
+          throw new Error(textResponse || `Server returned non-JSON response with status: ${response.status}`);
       }
 
       if (!response.ok) {
@@ -669,22 +688,14 @@ const HomeScreen: React.FC = () => {
       }
        const reportData = responseJson as ReportResult;
        console.log('Report generated:', reportData);
-       // Keep loading state briefly before navigation
-       // setResult({ message: 'Report Generated Successfully!', type: 'success', data: reportData });
-       
-       // Navigate directly to the viewer
        navigateToWebViewer(reportData.viewerUrl); 
-       
-       // Optionally reset file/state *after* scheduling navigation or upon returning
-       // setSelectedFile(null);
-       // setThumbnailUri(null);
 
     } catch (error) {
       console.error('Report generation error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      setResult({ message: `Error: ${errorMessage}`, type: 'error', data: null });
+      // Provide more specific error feedback to the user
+      setResult({ message: `Upload/Generation Failed: ${errorMessage}`, type: 'error', data: null });
     } finally {
-      // Set generating false after navigation call (or potentially before)
       setIsGeneratingReport(false);
     }
   }
