@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2016",             // Target widely compatible ES version
     "module": "CommonJS",           // Use CommonJS modules
-    "outDir": "./dist",              // Specify output directory for compiled JS (good practice)
-    "rootDir": "./src",                 // Specify root directory of source files
+    "outDir": "./server/dist",       // Specify output directory for compiled JS (good practice)
+    "rootDir": "./server/src",       // Specify root directory of source files
     "esModuleInterop": true,        // Still helpful for CJS/ESM interop
     "forceConsistentCasingInFileNames": true, 
     "strict": true,                 
@@ -11,6 +11,6 @@
     // "allowImportingTsExtensions": false, // Not needed for CommonJS
     // "noEmit": false // Allow emitting JS files to outDir
   },
-  "include": ["src/**/*.ts"], 
-  "exclude": ["node_modules", "dist", "mobile-app"]
+  "include": ["server/src/**/*.ts"], 
+  "exclude": ["node_modules", "server/dist", "mobile-app"]
 }

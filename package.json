@@ -2,12 +2,12 @@
   "name": "daily-reports-app",
   "version": "1.0.0",
   "description": "Daily report generation application",
-  "main": "dist/server.js",
+  "main": "server/dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run copy-assets",
-    "start": "node dist/server.js",
+    "start": "node server/dist/server.js",
     "postinstall": "npm run build",
-    "copy-assets": "cp public/* dist/ && cp data/profile.json dist/"
+    "copy-assets": "cp server/public/* server/dist/ && cp server/data/profile.json server/dist/"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",
