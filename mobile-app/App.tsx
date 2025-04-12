@@ -1,3 +1,4 @@
+import { registerRootComponent } from 'expo';
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator'; // Import the main navigator
@@ -18,3 +19,5 @@ function App(): React.ReactElement {
 // Remove old Tab, Stack, RootStackParamList, HomeStackNavigator, BrowseStackNavigator definitions
 
 export default App;
+
+registerRootComponent(App);

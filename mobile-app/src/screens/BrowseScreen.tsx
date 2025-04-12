@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
-  Button,
   StyleSheet,
   ActivityIndicator,
-  ScrollView,
   Linking,
   Alert,
   Platform,
-  TouchableOpacity // Use TouchableOpacity for better list items
+  TouchableOpacity,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Picker } from '@react-native-picker/picker'; // Import the picker
-import { useNavigation } from '@react-navigation/native'; // Import useNavigation
-import { colors, spacing, typography, borders } from '../theme/theme'; // <-- Add this import
-import { API_BASE_URL } from '../config'; // <-- Import from config
-import { useAuth } from '../context/AuthContext'; // Import the useAuth hook
+import { Picker } from '@react-native-picker/picker';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, typography, borders } from '../theme/theme';
+import { API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 // Define base URL for the API (use your actual backend URL)
 // For local development with Expo Go, use your machine's local IP
@@ -31,97 +31,143 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background, // Use theme token
   },
-  container: {
-    flex: 1,
-    padding: spacing.lg, // Use theme token
+  listContentContainer: { // Padding for FlatList content (items)
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xxl, // Space at the bottom of the list itself
+  },
+  listHeaderContainer: { // Padding for the header component within FlatList
+    padding: spacing.md, // Apply padding around the controls/status in the header
+    paddingBottom: spacing.lg, // Extra space below header content before list starts
   },
   controlsContainer: {
-    marginBottom: spacing.lg, // Use theme token
-    padding: spacing.md, // Use theme token
-    backgroundColor: colors.surface, // Use theme token
-    borderRadius: borders.radiusLarge, // Use theme token
-    boxShadow: `0px 1px 2px rgba(0, 0, 0, 0.1)`, // Modern web shadow
-    elevation: 3, // Keep for Android
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borders.radiusMedium,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   controlGroup: {
-    marginBottom: spacing.md, // Use theme token
+    marginBottom: spacing.lg,
+  },
+  controlGroupLast: {
+    marginBottom: 0,
   },
   label: {
-    fontSize: typography.fontSizeM, // Use theme token
-    fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-    color: colors.textPrimary, // Use theme token
-    marginBottom: spacing.sm, // Use theme token
+    fontSize: typography.fontSizeS,
+    fontWeight: typography.fontWeightMedium as '500',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  pickerWrapper: { // Wrapper to style the Picker border
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.borderLight, // Use theme token
-      borderRadius: borders.radiusSmall, // Use theme token
-      backgroundColor: colors.surface, // Use theme token
-      overflow: 'hidden', // Needed for borderRadius on Android
+  pickerWrapper: {
+    borderWidth: borders.widthThin,
+    borderColor: colors.border,
+    borderRadius: borders.radiusSmall,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    position: 'relative',
   },
   pickerWrapperDisabled: {
-      backgroundColor: colors.background, // Use theme token (close match)
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.borderLight,
   },
   picker: {
-      // Default picker styles are often sufficient
-      // On iOS, height might need adjustment
-      height: Platform.OS === 'ios' ? 150 : 50, // Keep platform-specific logic
+    height: Platform.OS === 'ios' ? 150 : 50,
+  },
+  pickerLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statusContainer: {
+    marginTop: spacing.lg,
     alignItems: 'center',
-    marginVertical: spacing.md, // Use theme token
+  },
+  loadingIndicator: {
+    marginBottom: spacing.xs,
   },
   statusText: {
-    marginTop: spacing.xs, // Use theme token
-    color: colors.textSecondary, // Use theme token
-    fontSize: typography.fontSizeXS, // Use theme token
+    color: colors.textSecondary,
+    fontSize: typography.fontSizeS,
+  },
+  errorContainer: {
+    backgroundColor: colors.errorBg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borders.radiusSmall,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    width: '100%',
+    alignItems: 'center',
   },
   errorText: {
-    color: colors.error, // Use theme token
-    fontWeight: typography.fontWeightBold as '600', // Use theme token and cast
+    color: colors.errorText,
+    fontWeight: typography.fontWeightMedium as '500',
     textAlign: 'center',
-    fontSize: typography.fontSizeXS, // Use theme token
+    fontSize: typography.fontSizeS,
   },
-  reportList: {
-    marginTop: spacing.sm, // Use theme token
+  emptyContainer: { // Container for the ListEmptyComponent
+    flexGrow: 1, // Allow it to take space if list is short/empty
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    marginTop: spacing.xl, // Add space above the empty message
+  },
+  noReportsText: {
+    textAlign: 'center',
+    color: colors.textSecondary,
+    fontSize: typography.fontSizeS,
+    fontStyle: 'italic',
   },
   reportItem: {
-    backgroundColor: colors.surface, // Use theme token
-    padding: spacing.md, // Use theme token
-    borderRadius: borders.radiusLarge, // Use theme token
-    marginBottom: spacing.sm, // Use theme token
+    backgroundColor: colors.surface,
+    borderRadius: borders.radiusMedium,
+    padding: spacing.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    boxShadow: `0px 1px 1px rgba(0, 0, 0, 0.05)`, // Modern web shadow
-    elevation: 2, // Keep for Android
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+    marginBottom: spacing.md,
   },
   reportInfo: {
-      flex: 1, // Allow text to take available space
+    flex: 1,
+    marginRight: spacing.md,
   },
   reportName: {
-    fontSize: typography.fontSizeM, // Use theme token
-    fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-    color: colors.textPrimary, // Use theme token
+    fontSize: typography.fontSizeM,
+    fontWeight: typography.fontWeightMedium as '500',
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
   },
-  reportLinks: {
-    flexDirection: 'row', // Arrange links horizontally
-    marginTop: Platform.OS === 'ios' ? spacing.xs : 0, // Use theme token for spacing
-    marginLeft: spacing.sm, // Use theme token
+  reportActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  linkText: {
-    color: colors.primary, // Use theme token
-    fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-    marginLeft: spacing.md, // Use theme token
-    fontSize: typography.fontSizeXS, // Use theme token
+  actionButton: {
+    padding: spacing.sm,
+    marginLeft: spacing.sm,
   },
-  noReportsText: {
-      textAlign: 'center',
-      color: colors.textSecondary, // Use theme token
-      marginTop: spacing.lg, // Use theme token
-      fontStyle: 'italic',
-      fontSize: typography.fontSizeXS, // Use theme token
-  }
 });
 
 // --- Helper Functions ---
@@ -136,35 +182,31 @@ export const fetchApi = async (endpoint: string, token: string | null): Promise<
   
   if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('Auth Header Sent:', `Bearer ${token.substring(0, 5)}...`); // Log partial token for verification
+      // console.log('Auth Header Sent:', `Bearer ${token.substring(0, 5)}...`); // Keep if needed
   } else {
       console.warn('fetchApi called without a token for endpoint:', endpoint);
-      // Depending on whether unprotected endpoints might use this, either throw or allow
-      // For browse, token is required. Throw an error or return empty array.
-      // throw new Error('Authentication token is required for this request.');
-      return []; // Return empty for now, assuming protected endpoints might fail later
+      return []; // Return empty for now
   }
 
   try {
-    const response = await fetch(url, { headers }); // Pass headers to fetch
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       let errorBody = '';
       try {
-          errorBody = await response.text(); // Read body as text first
-          const errData = JSON.parse(errorBody); // Try to parse as JSON
+          errorBody = await response.text();
+          const errData = JSON.parse(errorBody);
           throw new Error(errData.error || errData.message || `HTTP error! status: ${response.status}`);
       } catch (parseError) {
-          // If JSON parsing fails, use the raw text or a default message
           console.error("Failed to parse error response as JSON:", errorBody);
-          throw new Error(`HTTP error! status: ${response.status}. Response: ${errorBody.substring(0, 100)}`); 
+          throw new Error(`HTTP error! status: ${response.status}. Response: ${errorBody.substring(0, 100)}`);
       }
     }
     const data = await response.json();
-    console.log('Received:', data);
-    return Array.isArray(data?.items) ? data.items.filter((item: any) => typeof item === 'string') : [];
+    // console.log('Received:', data); // Keep if needed
+    return Array.isArray(data?.items) ? data.items.filter((item: any): item is string => typeof item === 'string') : [];
   } catch (error: any) {
     console.error("API Fetch Error:", error);
-    throw error;
+    throw new Error(error.message || 'An unknown API error occurred');
   }
 };
 
@@ -180,13 +222,13 @@ export const openLink = async (url: string) => {
 // --- Component ---
 function BrowseScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
-  const { userToken } = useAuth(); // Get context value safely using the hook
+  const { userToken } = useAuth();
   const [customers, setCustomers] = useState<string[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string | undefined>(undefined);
   const [projects, setProjects] = useState<string[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined);
   const [reports, setReports] = useState<string[]>([]);
-  const [loadingState, setLoadingState] = useState<'idle' | 'customers' | 'projects' | 'reports'>('customers'); // Start loading customers
+  const [loadingState, setLoadingState] = useState<'idle' | 'customers' | 'projects' | 'reports'>('customers');
   const [error, setError] = useState<string | null>(null);
 
   // Fetch initial customers
@@ -194,6 +236,12 @@ function BrowseScreen(): React.ReactElement {
     let isMounted = true;
     setLoadingState('customers');
     setError(null);
+    setCustomers([]);
+    setSelectedCustomer(undefined);
+    setProjects([]);
+    setSelectedProject(undefined);
+    setReports([]);
+
     fetchApi('/api/browse-reports', userToken)
       .then(fetchedCustomers => {
           if (isMounted) setCustomers(fetchedCustomers);
@@ -204,7 +252,7 @@ function BrowseScreen(): React.ReactElement {
       .finally(() => {
           if (isMounted) setLoadingState('idle');
       });
-      return () => { isMounted = false }; // Cleanup on unmount
+      return () => { isMounted = false };
   }, [userToken]);
 
   // Fetch projects when customer changes
@@ -213,13 +261,16 @@ function BrowseScreen(): React.ReactElement {
       setProjects([]);
       setSelectedProject(undefined);
       setReports([]);
+      setError(null); // Clear errors when customer is deselected
       return;
     }
     let isMounted = true;
     setLoadingState('projects');
     setError(null);
+    setProjects([]);
     setSelectedProject(undefined);
     setReports([]);
+
     fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken)
       .then(fetchedProjects => {
           if (isMounted) setProjects(fetchedProjects);
@@ -237,11 +288,14 @@ function BrowseScreen(): React.ReactElement {
   useEffect(() => {
     if (!selectedCustomer || !selectedProject) {
       setReports([]);
+      setError(null); // Clear errors when project is deselected
       return;
     }
     let isMounted = true;
     setLoadingState('reports');
     setError(null);
+    setReports([]);
+
     fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}&project=${encodeURIComponent(selectedProject)}`, userToken)
       .then(fetchedReports => {
           if (isMounted) setReports(fetchedReports);
@@ -255,116 +309,142 @@ function BrowseScreen(): React.ReactElement {
        return () => { isMounted = false };
   }, [selectedCustomer, selectedProject, userToken]);
 
-  // Display loading indicator
-  const renderLoading = (section: 'customers' | 'projects' | 'reports') => {
-    if (loadingState === section) {
+  // Render helper for loading inside pickers
+  const renderPickerLoading = (isLoading: boolean) => {
+      if (!isLoading) return null;
       return (
-          <View style={styles.statusContainer}>
+          <View style={styles.pickerLoadingOverlay}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.statusText}>Loading {section}...</Text>
           </View>
       );
-    }
-    return null;
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <ScrollView style={styles.container}>
-        <View style={styles.controlsContainer}>
-            {/* Customer Picker */}
-            <View style={styles.controlGroup}>
-                <Text style={styles.label}>Customer:</Text>
-                <View style={[styles.pickerWrapper, loadingState === 'customers' && styles.pickerWrapperDisabled]}>
-                    <Picker
-                        selectedValue={selectedCustomer}
-                        onValueChange={(itemValue) => setSelectedCustomer(itemValue || undefined)}
-                        enabled={loadingState !== 'customers'}
-                        style={styles.picker}
-                        prompt="Select a Customer"
-                    >
-                        <Picker.Item label="-- Select Customer --" value={undefined} />
-                        {customers.map((customer) => (
-                            <Picker.Item key={customer} label={customer} value={customer} />
-                        ))}
-                    </Picker>
-                </View>
-                 {renderLoading('customers')}
-            </View>
+  // Render helper for report list item
+  const renderReportItem = ({ item: reportFolder }: { item: string }) => {
+    if (!userToken || !selectedCustomer || !selectedProject) {
+        console.error("Missing context for rendering report item");
+        return null;
+    }
+    const baseKey = `users/${userToken}/${selectedCustomer}/${selectedProject}/${reportFolder}`;
+    const jsonKey = `${baseKey}/daily_report.json`;
+    const viewerKey = `${baseKey}/report-viewer.html`;
 
-            {/* Project Picker */} 
-            <View style={styles.controlGroup}>
-                <Text style={styles.label}>Project:</Text>
-                 <View style={[styles.pickerWrapper, (!selectedCustomer || loadingState === 'projects') && styles.pickerWrapperDisabled]}>
-                    <Picker
-                        selectedValue={selectedProject}
-                        onValueChange={(itemValue) => setSelectedProject(itemValue || undefined)}
-                        enabled={!!selectedCustomer && loadingState !== 'projects'}
-                        style={styles.picker}
-                        prompt="Select a Project"
-                    >
-                        <Picker.Item label="-- Select Project --" value={undefined} />
-                        {projects.map((project) => (
-                            <Picker.Item key={project} label={project} value={project} />
-                        ))}
-                    </Picker>
-                 </View>
-                 {renderLoading('projects')}
-            </View>
-        </View>
+    const reportDate = reportFolder.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || reportFolder;
 
-        {error && (
-            <View style={styles.statusContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-            </View>
-        )}
+    const navigateToEditor = () => {
+        console.log(`Navigating to ReportEditor with key: ${jsonKey}`);
+        navigation.navigate('ReportEditor', { reportKey: jsonKey });
+    };
 
-        {renderLoading('reports')}
+    const navigateToWebViewer = () => {
+        const viewerUrl = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${viewerKey}`;
+        console.log(`Navigating to WebViewer with URL: ${viewerUrl}`);
+        navigation.navigate('WebViewer', { url: viewerUrl });
+    };
 
-        {selectedCustomer && selectedProject && reports.length > 0 && (
-          <View style={styles.reportList}>
-            {reports.map((reportFolder) => {
-              if (!userToken) {
-                console.error("User token not available in BrowseScreen");
-                return null;
-              }
-              const baseKey = `users/${userToken}/${selectedCustomer}/${selectedProject}/${reportFolder}`;
-              const jsonKey = `${baseKey}/daily_report.json`;
-              const viewerKey = `${baseKey}/report-viewer.html`;
-              
-              const reportDate = reportFolder.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || reportFolder;
-
-              const navigateToEditor = () => {
-                  console.log(`Navigating to ReportEditor with key: ${jsonKey}`);
-                  navigation.navigate('ReportEditor', { reportKey: jsonKey });
-              };
-
-              const navigateToWebViewer = () => {
-                  const viewerUrl = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${viewerKey}`;
-                  console.log(`Navigating to WebViewer with URL: ${viewerUrl}`);
-                  navigation.navigate('WebViewer', { url: viewerUrl });
-              };
-
-              return (
-                <View key={reportFolder} style={styles.reportItem}>
-                    <View style={styles.reportInfo}>
-                        <Text style={styles.reportName}>Report: {reportDate}</Text>
-                    </View>
-                  <View style={styles.reportLinks}>
-                    <TouchableOpacity onPress={navigateToWebViewer}><Text style={styles.linkText}>View</Text></TouchableOpacity>
-                    <TouchableOpacity onPress={navigateToEditor}><Text style={styles.linkText}>Edit</Text></TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
+    return (
+      <View style={styles.reportItem}>
+          <View style={styles.reportInfo}>
+              <Text style={styles.reportName}>{`Report: ${reportDate}`}</Text>
           </View>
-        )}
+          <View style={styles.reportActions}>
+              <TouchableOpacity onPress={navigateToWebViewer} style={styles.actionButton}>
+                  <Ionicons name="eye-outline" size={24} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={navigateToEditor} style={styles.actionButton}>
+                  <Ionicons name="create-outline" size={24} color={colors.primary} />
+              </TouchableOpacity>
+          </View>
+      </View>
+    );
+  };
 
-        {selectedCustomer && selectedProject && !loadingState && reports.length === 0 && !error && (
-             <Text style={styles.noReportsText}>No reports found for this selection.</Text>
-        )}
+  const ListHeader = () => (
+      <View style={styles.listHeaderContainer}> 
+          {/* --- Controls Section --- */}
+          <View style={styles.controlsContainer}>
+              {/* Customer Picker */}
+              <View style={styles.controlGroup}>
+                  <Text style={styles.label}>Customer</Text>
+                  <View style={[styles.pickerWrapper, loadingState === 'customers' && styles.pickerWrapperDisabled]}>
+                      <Picker
+                          selectedValue={selectedCustomer}
+                          onValueChange={(itemValue) => setSelectedCustomer(itemValue == null ? undefined : String(itemValue))}
+                          enabled={loadingState !== 'customers'}
+                          style={styles.picker}
+                          prompt="Select a Customer"
+                      >
+                          <Picker.Item label="-- Select Customer --" value={undefined} color={colors.textDisabled} />
+                          {customers.map((customer) => (
+                              <Picker.Item key={customer} label={customer} value={customer} />
+                          ))}
+                      </Picker>
+                      {renderPickerLoading(loadingState === 'customers')}
+                  </View>
+              </View>
 
-      </ScrollView>
+              {/* Project Picker */}
+              <View style={[styles.controlGroup, styles.controlGroupLast]}>
+                  <Text style={styles.label}>Project</Text>
+                  <View style={[styles.pickerWrapper, (!selectedCustomer || loadingState === 'projects') && styles.pickerWrapperDisabled]}>
+                      <Picker
+                          selectedValue={selectedProject}
+                          onValueChange={(itemValue) => setSelectedProject(itemValue == null ? undefined : String(itemValue))}
+                          enabled={!!selectedCustomer && loadingState !== 'projects'}
+                          style={styles.picker}
+                          prompt="Select a Project"
+                      >
+                          <Picker.Item label={selectedCustomer ? "-- Select Project --" : "-- Select Customer First --"} value={undefined} color={colors.textDisabled} />
+                          {projects.map((project) => (
+                              <Picker.Item key={project} label={project} value={project} />
+                          ))}
+                      </Picker>
+                      {renderPickerLoading(loadingState === 'projects')}
+                  </View>
+              </View>
+          </View>
+
+          {/* --- Status/Error Display Area (below controls, before list) --- */}
+          {error && (
+              <View style={styles.statusContainer}>
+                  <View style={styles.errorContainer}>
+                      <Text style={styles.errorText}>{error}</Text>
+                  </View>
+              </View>
+          )}
+
+          {/* Loading indicator specifically for reports (shows when reports are loading) */}
+          {loadingState === 'reports' && !error && (
+              <View style={styles.statusContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} style={styles.loadingIndicator}/>
+                  <Text style={styles.statusText}>Loading reports...</Text>
+              </View>
+          )}
+      </View>
+  );
+
+  const EmptyListMessage = () => (
+      <View style={styles.emptyContainer}>
+          <Text style={styles.noReportsText}>
+              {selectedCustomer && selectedProject
+                  ? "No reports found for this selection."
+                  : "Please select a customer and project to view reports."
+              }
+          </Text>
+      </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+      <FlatList
+          data={selectedCustomer && selectedProject && loadingState === 'idle' ? reports : []} // Only pass reports when ready
+          renderItem={renderReportItem}
+          keyExtractor={(item) => item} // Report folder names should be unique in context
+          ListHeaderComponent={ListHeader} // Controls, error, loading indicator
+          ListEmptyComponent={!error && (loadingState === 'idle' || loadingState === 'reports') ? EmptyListMessage : null} // Show message when idle/loading reports but empty, hide if picker loading
+          contentContainerStyle={styles.listContentContainer} // Padding for list items
+          keyboardShouldPersistTaps="handled"
+      />
     </SafeAreaView>
   );
 }

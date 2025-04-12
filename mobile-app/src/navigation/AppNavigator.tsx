@@ -148,7 +148,7 @@ function MainTabs() {
               } else if (route.name === 'BrowseTab') {
                 iconName = focused ? 'file-tray-full' : 'file-tray-full-outline';
               } else if (route.name === 'ProfileTab') {
-                iconName = focused ? 'person-circle' : 'person-circle-outline'; // Updated icon
+                iconName = focused ? 'person-circle' : 'person-circle-outline';
               } else {
                  iconName = 'alert-circle-outline';
               }
@@ -156,17 +156,16 @@ function MainTabs() {
             },
             tabBarActiveTintColor: colors.primary,
             tabBarInactiveTintColor: colors.textSecondary,
-            headerShown: false, // Headers are handled by the inner StackNavigators
+            headerShown: false,
             tabBarStyle: {
                 backgroundColor: colors.surface,
                 borderTopColor: colors.border,
                 borderTopWidth: borders.widthThin,
-                paddingBottom: spacing.xs, // Add some padding for icon/label
-                height: 60, // Adjust height if needed
+                // Ensure no explicit height or vertical padding overrides are present
             },
             tabBarLabelStyle: {
-                fontSize: typography.fontSizeXS, 
-                paddingBottom: spacing.xxs,
+                fontSize: typography.fontSizeXS,
+                // Ensure no explicit vertical padding overrides are present
             }
           })}
     >
