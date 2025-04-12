@@ -1,11 +1,11 @@
-import React from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import React, { useLayoutEffect } from 'react';
+import { ActivityIndicator, View, StyleSheet, Button } from 'react-native';
 import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { NavigatorScreenParams } from '@react-navigation/native';
+import { NavigatorScreenParams, getFocusedRouteNameFromRoute, useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext'; // Import useAuth
+import { useAuth } from '../context/AuthContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
@@ -15,9 +15,19 @@ import ReportViewerScreen from '../screens/ReportViewerScreen';
 import ReportEditorScreen from '../screens/ReportEditorScreen';
 import WebViewerScreen from '../screens/WebViewerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EditSystemPromptScreen from '../screens/EditSystemPromptScreen';
+import EditReportSchemaScreen from '../screens/EditReportSchemaScreen';
+import EditNameScreen from '../screens/EditNameScreen';
+import EditEmailScreen from '../screens/EditEmailScreen';
+import EditPhoneScreen from '../screens/EditPhoneScreen';
+import EditCompanyNameScreen from '../screens/EditCompanyNameScreen';
+import EditCompanyPhoneScreen from '../screens/EditCompanyPhoneScreen';
+import EditCompanyWebsiteScreen from '../screens/EditCompanyWebsiteScreen';
+import EditAddressScreen from '../screens/EditAddressScreen';
+import EditLogoScreen from '../screens/EditLogoScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
 
-// --- Define Param Lists --- 
+// --- Define Param Lists ---
 
 // Params for screens in the Auth stack
 export type AuthStackParamList = {
@@ -40,11 +50,26 @@ export type BrowseStackParamList = {
   // Add other screens related to browsing if needed
 };
 
+// New Stack for Profile/Settings Tab
+export type ProfileStackParamList = {
+  ProfileBase: undefined;
+  EditSystemPrompt: undefined; // Screen to edit the system prompt
+  EditReportSchema: undefined; // Screen to edit the JSON schema
+  EditName: undefined;
+  EditEmail: undefined;
+  EditPhone: undefined;
+  EditCompanyName: undefined;
+  EditCompanyPhone: undefined;
+  EditCompanyWebsite: undefined;
+  EditAddress: undefined;
+  EditLogo: { currentLogoUrl: string | null }; // Add EditLogo screen with param
+};
+
 // Params for the main bottom tabs themselves
 export type MainTabsParamList = {
   HomeTab: NavigatorScreenParams<HomeStackParamList>; // Nested stack
   BrowseTab: NavigatorScreenParams<BrowseStackParamList>; // Nested stack
-  ProfileTab: undefined; // Direct screen, no params
+  ProfileTab: NavigatorScreenParams<ProfileStackParamList>; // Use ProfileStack
 };
 
 // Define screen prop types based on param lists (optional but good practice)
@@ -55,7 +80,17 @@ export type BrowseScreenProps = NativeStackScreenProps<BrowseStackParamList, 'Br
 export type ReportViewerScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ReportViewer'>;
 export type WebViewerScreenProps = NativeStackScreenProps<BrowseStackParamList, 'WebViewer'>;
 export type ReportEditorScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ReportEditor'>;
-export type ProfileScreenProps = BottomTabScreenProps<MainTabsParamList, 'ProfileTab'>;
+export type ProfileScreenProps = NativeStackScreenProps<ProfileStackParamList, 'ProfileBase'>;
+export type EditSystemPromptScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditSystemPrompt'>;
+export type EditReportSchemaScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditReportSchema'>;
+export type EditNameScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditName'>;
+export type EditEmailScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditEmail'>;
+export type EditPhoneScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditPhone'>;
+export type EditCompanyNameScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditCompanyName'>;
+export type EditCompanyPhoneScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditCompanyPhone'>;
+export type EditCompanyWebsiteScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditCompanyWebsite'>;
+export type EditAddressScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditAddress'>;
+export type EditLogoScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditLogo'>;
 
 // Define Root Stack including Auth and Main App
 export type RootStackParamList = {
@@ -68,6 +103,7 @@ const RootStack = createNativeStackNavigator<RootStackParamList>(); // Root stac
 const AuthNavStack = createNativeStackNavigator<AuthStackParamList>(); // Auth stack
 const HomeNavStack = createNativeStackNavigator<HomeStackParamList>();
 const BrowseNavStack = createNativeStackNavigator<BrowseStackParamList>();
+const ProfileNavStack = createNativeStackNavigator<ProfileStackParamList>(); // Create Profile stack navigator
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
 // --- Auth Stack (Login/Signup) ---
@@ -136,6 +172,75 @@ function BrowseStackNavigator() {
     );
 }
 
+// New: Profile Stack (Settings Base, Edit Screens)
+function ProfileStackNavigator() {
+    return (
+        <ProfileNavStack.Navigator
+            screenOptions={{
+                headerStyle: { backgroundColor: colors.surface }, // Standard header
+                headerTintColor: colors.primary, // Use primary color for back/buttons
+                headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold', color: colors.textPrimary },
+            }}
+        >
+            <ProfileNavStack.Screen
+                name="ProfileBase"
+                component={ProfileScreen}
+                options={{ title: 'Settings' }} // Main title for the base screen
+            />
+            <ProfileNavStack.Screen
+                name="EditSystemPrompt"
+                component={EditSystemPromptScreen}
+                options={{ title: 'System Prompt' }} // Change title
+            />
+             <ProfileNavStack.Screen
+                name="EditReportSchema"
+                component={EditReportSchemaScreen}
+                options={{ title: 'Report Schema' }} // Change title
+            />
+            <ProfileNavStack.Screen
+                name="EditName"
+                component={EditNameScreen}
+                options={{ title: 'Name' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditEmail"
+                component={EditEmailScreen}
+                options={{ title: 'Email' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditPhone"
+                component={EditPhoneScreen}
+                options={{ title: 'Phone Number' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditCompanyName"
+                component={EditCompanyNameScreen}
+                options={{ title: 'Company Name' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditCompanyPhone"
+                component={EditCompanyPhoneScreen}
+                options={{ title: 'Company Phone' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditCompanyWebsite"
+                component={EditCompanyWebsiteScreen}
+                options={{ title: 'Company Website' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditAddress"
+                component={EditAddressScreen}
+                options={{ title: 'Company Address' }}
+            />
+            <ProfileNavStack.Screen
+                name="EditLogo"
+                component={EditLogoScreen}
+                options={{ title: 'Company Logo' }}
+            />
+        </ProfileNavStack.Navigator>
+    );
+}
+
 // --- Main App Tabs ---
 function MainTabs() {
   return (
@@ -148,7 +253,7 @@ function MainTabs() {
               } else if (route.name === 'BrowseTab') {
                 iconName = focused ? 'file-tray-full' : 'file-tray-full-outline';
               } else if (route.name === 'ProfileTab') {
-                iconName = focused ? 'person-circle' : 'person-circle-outline';
+                iconName = focused ? 'settings' : 'settings-outline'; // Updated icon
               } else {
                  iconName = 'alert-circle-outline';
               }
@@ -161,11 +266,9 @@ function MainTabs() {
                 backgroundColor: colors.surface,
                 borderTopColor: colors.border,
                 borderTopWidth: borders.widthThin,
-                // Ensure no explicit height or vertical padding overrides are present
             },
             tabBarLabelStyle: {
                 fontSize: typography.fontSizeXS,
-                // Ensure no explicit vertical padding overrides are present
             }
           })}
     >
@@ -180,9 +283,11 @@ function MainTabs() {
         options={{ title: 'Browse' }} 
       />
       <Tab.Screen 
-        name="ProfileTab" 
-        component={ProfileScreen} // Directly use ProfileScreen if no stack needed
-        options={{ title: 'Profile', headerShown: true }} // Show header for Profile
+        name="ProfileTab" // This tab now hosts the ProfileStack
+        component={ProfileStackNavigator} // Use the new stack navigator
+        options={{
+            title: 'Settings', // Tab bar title
+        }}
       /> 
     </Tab.Navigator>
   );

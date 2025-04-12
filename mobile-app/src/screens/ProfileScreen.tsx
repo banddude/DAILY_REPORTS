@@ -3,25 +3,29 @@ import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
-  Alert,
   Image,
+  Switch,
+  TouchableOpacity,
+  Platform,
+  ActivityIndicator,
   Linking,
-  ImageSourcePropType,
+  Alert,
+  RefreshControl,
   TextInput,
   Button,
-  Platform,
   KeyboardAvoidingView,
-  TouchableOpacity
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
+import { useNavigation, useIsFocused } from '@react-navigation/native'; // Import useIsFocused
 import { colors, spacing, typography, borders } from '../theme/theme';
-import { API_BASE_URL } from '../config'; // <-- Import from config
-import { useAuth } from '../context/AuthContext'; // Add this import for auth context
-import * as ImagePicker from 'expo-image-picker'; // Import ImagePicker
+import { API_BASE_URL } from '../config'; // <-- Add back config
+import { useAuth } from '../context/AuthContext'; // <-- Add back AuthContext
+import * as ImagePicker from 'expo-image-picker'; // <-- Import ImagePicker
+import { ProfileScreenProps } from '../navigation/AppNavigator'; // Import navigation props type
 
-// Define the expected structure of the profile data
+// --- Define the original, full structure of the profile data ---
 interface ProfileCompanyAddress {
     street?: string;
     unit?: string;
@@ -34,15 +38,13 @@ interface ProfileCompany {
     address?: ProfileCompanyAddress;
     phone?: string;
     website?: string;
-    customer?: string;
-    project?: string;
 }
 interface ProfileConfig {
-    logoFilename?: string;
+    logoFilename?: string; // Keep for potential future use/reference
     chatModel?: string;
     whisperModel?: string;
     systemPrompt?: string;
-    reportJsonSchema?: object;
+    reportJsonSchema?: object; // Store as object, display as string
 }
 interface ProfileData {
   name?: string;
@@ -52,107 +54,128 @@ interface ProfileData {
   config?: ProfileConfig;
 }
 
-// Type for keys that can be edited directly or nested in company
-type EditableProfileKey =
-    | 'name' | 'email' | 'phone'
-    | 'company.name' | 'company.phone' | 'company.website'
-    | 'company.address.street' | 'company.address.unit' | 'company.address.city' | 'company.address.state' | 'company.address.zip'
-    | 'config.chatModel' | 'config.whisperModel' | 'config.systemPrompt' | 'config.reportJsonSchema';
-
 // --- Styles ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background, // Use theme background
+  },
+  keyboardAvoidingView: {
+      flex: 1,
   },
   scrollViewContent: {
-    padding: spacing.lg,
-    paddingBottom: 100,
+    // No vertical padding here anymore
+  },
+  contentContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md, // Reduced bottom padding
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
+    backgroundColor: colors.background,
   },
-  statusMessageContainer: {
-      paddingHorizontal: spacing.lg,
-      marginBottom: spacing.md,
-      marginTop: spacing.xs,
-  },
+  errorTextContainer: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     padding: spacing.lg,
+     backgroundColor: colors.background,
+   },
   errorText: {
     color: colors.error,
     textAlign: 'center',
     fontWeight: typography.fontWeightBold as '600',
-    fontSize: typography.fontSizeXS,
+    fontSize: typography.fontSizeM,
   },
-  successText: {
-    color: colors.success,
-    textAlign: 'center',
-    fontWeight: typography.fontWeightBold as '600',
-    fontSize: typography.fontSizeXS,
+  statusMessageContainer: { // For save status
+      paddingHorizontal: spacing.lg,
+      marginBottom: spacing.md,
+      marginTop: spacing.xs,
+  },
+  successText: { // For save status
+      color: colors.success,
+      textAlign: 'center',
+      fontWeight: typography.fontWeightBold as '600',
+      fontSize: typography.fontSizeXS,
   },
   section: {
-    marginBottom: spacing.xl,
-    backgroundColor: colors.surfaceAlt,
-    padding: spacing.lg,
-    borderRadius: borders.radiusLarge,
-    borderWidth: borders.widthThin,
-    borderColor: colors.border,
+    marginBottom: spacing.md, // Further reduce bottom margin from lg to md
   },
-  sectionTitle: {
-    fontSize: typography.fontSizeL,
-    fontWeight: typography.fontWeightBold as '600',
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-    borderBottomWidth: borders.widthThin,
-    borderBottomColor: colors.border,
-    paddingBottom: spacing.sm,
+  sectionHeader: {
+    paddingBottom: spacing.xs, // Reduce padding bottom
+    marginBottom: spacing.xxs, // Reduce margin bottom
+    color: colors.textSecondary,
+    fontSize: typography.fontSizeS,
+    fontWeight: typography.fontWeightMedium as '500',
+    textTransform: 'uppercase',
   },
-  fieldContainer: {
-    marginBottom: spacing.md,
+  rowContainer: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm, // Reduce vertical padding from md to sm
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: borders.widthHairline,
+    borderBottomColor: colors.borderLight,
+    minHeight: 44, // Reduce minHeight slightly
+  },
+  firstRowInSection: {
+    borderTopWidth: borders.widthHairline,
+    borderTopColor: colors.borderLight,
+  },
+  iconContainer: {
+    marginRight: spacing.md,
+    width: 24, // Fixed width for alignment
+    alignItems: 'center',
   },
   label: {
+    flex: 1,
     fontSize: typography.fontSizeM,
-    fontWeight: typography.fontWeightMedium as '500',
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    color: colors.textPrimary,
+  },
+  valueContainer: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
   },
   valueText: {
     fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-    paddingHorizontal: spacing.sm,
+    color: colors.textSecondary,
+    textAlign: 'right',
+  },
+  linkValueText: {
+    color: colors.primary,
+    textDecorationLine: 'underline',
+  },
+  disclosureIcon: {
+     marginLeft: spacing.xs,
+  },
+  fieldContainer: {
+      marginBottom: spacing.md,
+      backgroundColor: colors.surface,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.xs, // Less vertical padding than rows
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+  },
+  firstFieldInSection: {
+      borderTopWidth: borders.widthHairline,
+      borderTopColor: colors.borderLight,
+  },
+  fieldLabel: {
+      fontSize: typography.fontSizeS, // Smaller label above input
+      color: colors.textSecondary,
+      marginBottom: spacing.xs,
+      paddingTop: spacing.sm, // Add some top padding for the label
   },
   textInput: {
       fontSize: typography.fontSizeM,
       color: colors.textPrimary,
-      paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-      paddingHorizontal: spacing.sm,
-      borderWidth: borders.widthThin,
-      borderColor: colors.borderLight,
-      borderRadius: borders.radiusSmall,
-      backgroundColor: colors.surface,
-  },
-  textArea: {
-      minHeight: 150,
-      textAlignVertical: 'top',
-  },
-  jsonTextArea: {
-      minHeight: 250,
-      fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-      fontSize: typography.fontSizeXS,
-  },
-  linkValue: {
-      color: colors.primary,
-      textDecorationLine: 'underline',
-      paddingVertical: spacing.xs,
-  },
-  logo: {
-      width: 200,
-      height: 100,
-      marginBottom: spacing.md,
-      alignSelf: 'center',
+      paddingVertical: Platform.OS === 'ios' ? 8 : 6, // Adjust padding for input itself
   },
   saveButtonContainer: {
       paddingHorizontal: spacing.lg,
@@ -161,74 +184,23 @@ const styles = StyleSheet.create({
       bottom: 0,
       left: 0,
       right: 0,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      backgroundColor: 'rgba(255, 255, 255, 0.9)', // Semi-transparent background
       borderTopColor: colors.borderLight,
       borderTopWidth: borders.widthHairline,
   },
-  footerNote: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    fontSize: typography.fontSizeXS,
+  rowLabel: {
+    flex: 1,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  logoCaption: {
-    fontSize: typography.fontSizeM,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-  },
-  uploadButton: {
-    marginTop: spacing.md,
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borders.radiusSmall,
-  },
-  uploadButtonText: {
-    color: colors.surfaceAlt,
-    fontWeight: typography.fontWeightMedium as '500',
-  },
-  uploadingText: {
-    marginTop: spacing.sm,
-    color: colors.primary,
-    fontWeight: typography.fontWeightMedium as '500',
+  iconImage: {
+    width: 24, // Match icon container width
+    height: 24, // Match icon size
+    borderRadius: borders.radiusSmall, // Optional: round corners slightly
   },
 });
 
-// --- Helper to open links ---
-const openLink = async (url: string) => {
-  const prefixedUrl = url.startsWith('http://') || url.startsWith('https://') ? url : `http://${url}`;
-  try {
-      const supported = await Linking.canOpenURL(prefixedUrl);
-      if (supported) {
-        await Linking.openURL(prefixedUrl);
-      } else {
-        Alert.alert("Cannot Open Link", `Don't know how to open this URL: ${prefixedUrl}`);
-      }
-  } catch (error) {
-       Alert.alert("Error", `Could not open link: ${error}`);
-  }
-};
-
-// Utility to safely set nested properties
-const setNestedValue = (obj: any, path: string, value: any) => {
-    const keys = path.split('.');
-    let current = obj;
-    for (let i = 0; i < keys.length - 1; i++) {
-        const key = keys[i];
-        if (current[key] === undefined || current[key] === null) {
-            current[key] = {};
-        }
-        current = current[key];
-    }
-    current[keys[keys.length - 1]] = value;
-};
-
-// Utility to safely get nested properties
+// --- Utility to safely get/set nested properties (Adding set back) ---
 const getNestedValue = (obj: any, path: string): any => {
+    if (!obj) return undefined;
     const keys = path.split('.');
     let current = obj;
     for (const key of keys) {
@@ -240,436 +212,337 @@ const getNestedValue = (obj: any, path: string): any => {
     return current;
 };
 
-// --- Component ---
-function ProfileScreen(): React.ReactElement {
-  const [originalProfile, setOriginalProfile] = useState<ProfileData | null>(null);
-  const [editableProfile, setEditableProfile] = useState<ProfileData>({});
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const { userToken } = useAuth(); // Get authentication token from context
-  const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-
-  const fetchProfile = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    try {
-      // Check if userToken exists
-      if (!userToken) {
-        throw new Error('Authentication token not found. Please log in again.');
-      }
-      
-      // Add authorization header with the token
-      const response = await fetch(`${API_BASE_URL}/api/profile`, {
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Accept': 'application/json'
+const setNestedValue = (obj: any, path: string, value: any) => {
+    const keys = path.split('.');
+    let current = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+        const key = keys[i];
+        if (current[key] === undefined || current[key] === null) {
+            current[key] = {}; // Create nested objects if they don't exist
         }
+        current = current[key];
+    }
+    current[keys[keys.length - 1]] = value;
+};
+
+// --- Helper to open links --- (Adding back)
+const openLink = async (url: string) => {
+  if (!url) return;
+  const prefixedUrl = url.startsWith('http://') || url.startsWith('https://') ? url : `http://${url}`;
+  try {
+      const supported = await Linking.canOpenURL(prefixedUrl);
+      if (supported) {
+        await Linking.openURL(prefixedUrl);
+      } else {
+        Alert.alert("Cannot Open Link", `Don't know how to open this URL: ${prefixedUrl}`);
+      }
+  } catch (error: any) {
+       Alert.alert("Error Opening Link", `Could not open link: ${error.message}`);
+  }
+};
+
+// --- Settings Row Component Interface (Simplified: No toggles, disclosures needed now) ---
+interface SettingsRowProps {
+  icon: keyof typeof Ionicons.glyphMap | { uri: string }; // Allow Ionicon name or Image URI object
+  label?: string; // Make label optional
+  value?: string | null; // Accept null
+  isFirst?: boolean;
+  isLink?: boolean;
+  onPress?: () => void;
+  numberOfLines?: number; // For potentially long values like system prompt
+  showDisclosure?: boolean; // Add this prop
+}
+
+// --- Reusable Row Component (Adapted) ---
+const SettingsRow: React.FC<SettingsRowProps> = ({
+  icon,
+  label,
+  value,
+  isFirst,
+  isLink,
+  onPress,
+  numberOfLines = 1,
+  showDisclosure, // Use the prop
+}) => {
+  const displayValue = value ?? 'Not Set';
+
+  const rowContent = (
+    <View style={[styles.rowContainer, isFirst && styles.firstRowInSection]}>
+      <View style={styles.iconContainer}>
+        {typeof icon === 'string' ? (
+          <Ionicons name={icon} size={22} color={colors.textSecondary} />
+        ) : (
+          <Image source={icon} style={styles.iconImage} resizeMode="contain" />
+        )}
+      </View>
+      {/* Render label Text if provided, otherwise render an empty View spacer */}
+      {label ? (
+        <Text style={styles.rowLabel}>{label}</Text>
+      ) : (
+        <View style={styles.rowLabel} /> /* Spacer to push value right */
+      )}
+      <View style={styles.valueContainer}>
+         <Text
+            style={[styles.valueText, isLink && styles.linkValueText]}
+            numberOfLines={numberOfLines}
+            ellipsizeMode="tail"
+          >
+              {displayValue}
+         </Text>
+         {showDisclosure && (
+             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} style={styles.disclosureIcon} />
+         )}
+      </View>
+    </View>
+  );
+
+  // Wrap with TouchableOpacity only if it's a link or has an onPress handler
+  if (isLink || onPress) {
+      const handlePress = isLink ? () => openLink(value || '') : onPress;
+      return (
+          <TouchableOpacity onPress={handlePress} disabled={!value && isLink}>{rowContent}</TouchableOpacity>
+      );
+  }
+
+  return rowContent;
+};
+
+// Helper function to format address
+const formatAddress = (address?: ProfileCompanyAddress): string => {
+    if (!address || Object.values(address).every(v => !v)) return 'Not Set';
+    // Combine street and unit on the first line if both exist
+    const streetLine = [
+        address.street,
+        address.unit,
+    ].filter(Boolean).join(' ');
+
+    const parts = [
+        streetLine,
+        // Keep city/state/zip on the next line
+        `${address.city || ''}${address.city && address.state ? ', ' : ''}${address.state || ''} ${address.zip || ''}`.trim()
+    ];
+    return parts.filter(Boolean).join('\n'); // Join with newline for display
+};
+
+// --- Main Settings Screen Component ---
+function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
+  const isFocused = useIsFocused();
+  const [originalProfile, setOriginalProfile] = useState<ProfileData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Tracks initial load
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // Tracks pull-to-refresh
+  const [error, setError] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null); // <-- Add logoUrl state
+  const { userToken } = useAuth();
+
+  // Modify fetchProfile to accept options
+  const fetchProfile = useCallback(async (options: { isInitialLoad?: boolean, isRefresh?: boolean } = {}) => {
+    const { isInitialLoad = false, isRefresh = false } = options;
+
+    // Only show full-screen loader on initial load
+    if (isInitialLoad) {
+        setIsLoading(true);
+    }
+    // Show pull-to-refresh indicator only on refresh action
+    if (isRefresh) {
+        setIsRefreshing(true);
+    }
+
+    // Clear only fetch errors, not potential save errors shown in dedicated screens
+    setError(null); 
+
+    if (!userToken) {
+      setError('Authentication token not found.');
+      if (isInitialLoad) setIsLoading(false);
+      if (isRefresh) setIsRefreshing(false);
+      return;
+    }
+
+    try {
+      const cacheBuster = Date.now();
+      const response = await fetch(`${API_BASE_URL}/api/profile?cb=${cacheBuster}`, {
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Accept': 'application/json' }
       });
-      
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Failed to fetch profile' }));
         throw new Error(errData.error || `HTTP error! status: ${response.status}`);
       }
       const data: ProfileData = await response.json();
-      // Ensure nested objects exist even if empty in fetched data
       data.company = data.company ?? {};
       data.company.address = data.company.address ?? {};
       data.config = data.config ?? {};
       setOriginalProfile(data);
-      setEditableProfile(JSON.parse(JSON.stringify(data))); // Deep copy
+      // Initialize logo URL after profile is fetched
+      if (userToken) {
+          setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${Date.now()}`);
+      }
     } catch (err: any) {
       console.error("Error fetching profile:", err);
-      setError(`Failed to load profile: ${err.message}`);
-      setOriginalProfile({}); // Set to empty object on error
-      setEditableProfile({});
+      // Show error, but don't clear existing data if present
+      setError(`Failed to load profile: ${err.message}`); 
+      // Only clear profile if it was an initial load failure
+      if (isInitialLoad) {
+          setOriginalProfile(null);
+      }
     } finally {
-      setIsLoading(false);
+      // Always turn off indicators regardless of which one was active
+      if (isInitialLoad) setIsLoading(false);
+      if (isRefresh) setIsRefreshing(false);
     }
   }, [userToken]);
 
+  // Initial fetch on mount
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    fetchProfile({ isInitialLoad: true });
+  }, [fetchProfile]); // Depend on fetchProfile
 
-  const handleInputChange = useCallback((key: EditableProfileKey, value: string) => {
-    setError(null);
-    setSuccessMessage(null);
-    setEditableProfile(prev => {
-      const newProfile = JSON.parse(JSON.stringify(prev)); // Deep copy
-      // Special case for JSON schema - store as string until save
-      if (key === 'config.reportJsonSchema') {
-          setNestedValue(newProfile, key, value); // Store the raw string input
-      } else {
-          setNestedValue(newProfile, key, value);
+  // Re-fetch on focus to update data (including logo if changed on EditLogo screen)
+  useEffect(() => {
+    if (isFocused && !isLoading) {
+      fetchProfile(); // Re-fetch profile data
+      // Also specifically re-fetch the logo URL in case it changed
+      if (userToken) {
+        setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${Date.now()}`);
       }
-      return newProfile;
-    });
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    if (!originalProfile) return;
-
-    setIsSaving(true);
-    setError(null);
-    setSuccessMessage(null);
-
-    // Attempt to parse JSON Schema from editable state string
-    let parsedSchema: object | undefined = undefined;
-    let schemaError: string | null = null;
-    const schemaString = getNestedValue(editableProfile, 'config.reportJsonSchema');
-
-    if (typeof schemaString === 'string' && schemaString.trim()) {
-        try {
-            parsedSchema = JSON.parse(schemaString);
-        } catch (e: any) {
-            schemaError = `Invalid JSON in Report Schema: ${e.message}`;
-        }
-    } else {
-        // Allow empty/undefined schema - use original or empty object
-        parsedSchema = originalProfile.config?.reportJsonSchema ?? {};
     }
+  }, [isFocused, isLoading, fetchProfile, userToken]);
 
-    if (schemaError) {
-        setError(schemaError);
-        setIsSaving(false);
-        return;
-    }
+  // --- Loading State (Only shows on initial mount) ---
+  if (isLoading) { // This is now only true during the isInitialLoad fetch
+      return (
+        <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ marginTop: spacing.md, color: colors.textSecondary }}>Loading Settings...</Text>
+        </SafeAreaView>
+      );
+  }
 
-    // Construct payload using the editable state, ensuring all levels exist
-    const payload: ProfileData = {
-        name: editableProfile.name,
-        email: editableProfile.email,
-        phone: editableProfile.phone,
-        company: {
-          name: editableProfile.company?.name,
-          phone: editableProfile.company?.phone,
-          website: editableProfile.company?.website,
-          address: {
-            street: editableProfile.company?.address?.street,
-            unit: editableProfile.company?.address?.unit,
-            city: editableProfile.company?.address?.city,
-            state: editableProfile.company?.address?.state,
-            zip: editableProfile.company?.address?.zip,
-          },
-        },
-        config: {
-          logoFilename: originalProfile.config?.logoFilename, // Preserve original logo
-          chatModel: editableProfile.config?.chatModel,
-          whisperModel: editableProfile.config?.whisperModel,
-          systemPrompt: editableProfile.config?.systemPrompt,
-          reportJsonSchema: parsedSchema, // Use the parsed schema object
-        },
-      };
-
-    console.log("Saving profile:", JSON.stringify(payload, null, 2));
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || `Save failed: ${response.status}`);
-      }
-      setSuccessMessage('Profile saved successfully!');
-      const savedProfile = JSON.parse(JSON.stringify(payload)); // Deep copy saved state
-      setOriginalProfile(savedProfile);
-      setEditableProfile(savedProfile);
-      setTimeout(() => setSuccessMessage(null), 3000); // Hide success message after delay
-    } catch (err: any) {
-      console.error("Error saving profile:", err);
-      setError(`Failed to save profile: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [originalProfile, editableProfile, userToken]);
-
-  // Function to handle logo upload
-  const handleLogoUpload = async () => {
-    if (!userToken) return;
-    
-    try {
-      // Request permission to access the media library
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'You need to grant access to your photos to upload a logo.');
-        return;
-      }
-      
-      // Launch the image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [2, 1],
-        quality: 0.8,
-      });
-      
-      if (result.canceled) {
-        console.log('User canceled image picker');
-        return;
-      }
-      
-      if (!result.assets || result.assets.length === 0) {
-        console.log('No assets returned from image picker');
-        return;
-      }
-      
-      // Get the selected image
-      const selectedImage = result.assets[0];
-      
-      // Show uploading indicator
-      setIsUploadingLogo(true);
-      setError(null);
-      
-      // Create a form data object to send the image
-      const formData = new FormData();
-      
-      // Handle web environment vs. native environment differently
-      if (Platform.OS === 'web') {
-        // For web, fetch the blob from the URI
-        try {
-          const response = await fetch(selectedImage.uri);
-          const blob = await response.blob();
-          formData.append('logo', blob, 'logo.jpg');
-          console.log('Web: Appended blob to FormData');
-        } catch (err) {
-          console.error('Error creating blob from URI:', err);
-          setError('Failed to prepare image for upload');
-          setIsUploadingLogo(false);
-          return;
-        }
-      } else {
-        // For native (iOS/Android)
-        // @ts-ignore - TypeScript doesn't recognize the URI structure needed for React Native FormData
-        formData.append('logo', {
-          uri: selectedImage.uri,
-          type: 'image/jpeg',
-          name: 'logo.jpg',
-        });
-        console.log('Native: Appended file object to FormData');
-      }
-      
-      console.log('Uploading logo to:', `${API_BASE_URL}/api/upload-logo`);
-      
-      // Upload the logo with appropriate headers
-      const response = await fetch(`${API_BASE_URL}/api/upload-logo`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Accept': 'application/json',
-          // Don't set Content-Type here, let it be set automatically with boundary
-        },
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server response:', response.status, errorText);
-        throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
-      }
-      
-      const responseData = await response.json();
-      console.log('Upload response:', responseData);
-      
-      // Set the new logo URL with a timestamp to force refresh
-      const timestamp = Date.now();
-      setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${timestamp}`);
-      
-      // Show success message
-      setSuccessMessage('Logo uploaded successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000);
-      
-      // Refresh profile data to get updated logoFilename
-      fetchProfile();
-      
-    } catch (err: any) {
-      console.error("Error uploading logo:", err);
-      setError(`Failed to upload logo: ${err.message}`);
-    } finally {
-      setIsUploadingLogo(false);
-    }
-  };
-
-  // --- Render Helpers ---
-
-  const renderEditableField = useCallback((label: string, valueKey: EditableProfileKey, options?: { multiline?: boolean, lines?: number, isJson?: boolean, keyboard?: TextInput['props']['keyboardType'] }) => {
-    // Get the potentially nested value from editable state
-    let currentValue = getNestedValue(editableProfile, valueKey);
-
-    // Handle JSON object case - stringify for TextInput
-    if (options?.isJson && typeof currentValue === 'object' && currentValue !== null) {
-        currentValue = JSON.stringify(currentValue, null, 2); // Pretty print
-    } else if (typeof currentValue !== 'string') {
-        currentValue = currentValue?.toString() ?? ''; // Ensure it's a string for TextInput
-    }
-
-    const inputStyle = [
-        styles.textInput,
-        options?.multiline && styles.textArea,
-        options?.isJson && styles.jsonTextArea,
-    ];
-
+  // --- Error State (Shows if initial load failed AND we have no data) ---
+  if (error && !originalProfile) {
+    const handleRetry = () => fetchProfile({ isInitialLoad: true }); // Retry should be initial load
     return (
-      <View style={styles.fieldContainer}>
-        <Text style={styles.label}>{label}:</Text>
-        <TextInput
-          style={inputStyle}
-          value={currentValue}
-          onChangeText={(text) => handleInputChange(valueKey, text)}
-          placeholder={`Enter ${label}`}
-          editable={!isSaving}
-          multiline={options?.multiline}
-          numberOfLines={options?.multiline ? (options?.lines || 4) : 1}
-          keyboardType={options?.keyboard || 'default'}
-          autoCapitalize={valueKey.includes('email') || options?.isJson ? 'none' : 'sentences'}
-          autoCorrect={!options?.isJson} // Disable autocorrect for JSON
-          spellCheck={!options?.isJson}
-        />
-      </View>
-    );
-  }, [editableProfile, isSaving, handleInputChange]);
-
-  const renderLinkField = useCallback((label: string, valueKey: EditableProfileKey) => {
-    const value = getNestedValue(editableProfile, valueKey) as string | undefined;
-    if (!value) return null;
-    return (
-      <View style={styles.fieldContainer}>
-        <Text style={styles.label}>{label}:</Text>
-        <TouchableOpacity onPress={() => openLink(value)}>
-            <Text style={[styles.textInput, styles.linkValue]}>{value}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }, [editableProfile]);
-
-  const renderLogoSection = () => {
-    if (!userToken) return null;
-    
-    // Use the cached logo URL if available, otherwise build the URL
-    const displayLogoUrl = logoUrl || `${API_BASE_URL}/api/logo/${userToken}`;
-    
-    return (
-      <View style={styles.logoContainer}>
-        <Image 
-          source={{ uri: displayLogoUrl }} 
-          style={styles.logo}
-          resizeMode="contain"
-          onError={(e) => {
-            console.log('Error loading logo:', e.nativeEvent.error);
-          }}
-        />
-        <Text style={styles.logoCaption}>Company Logo</Text>
-        
-        <TouchableOpacity 
-          style={styles.uploadButton} 
-          onPress={handleLogoUpload}
-          disabled={isUploadingLogo}
-        >
-          <Text style={styles.uploadButtonText}>
-            {originalProfile?.config?.logoFilename ? 'Change Logo' : 'Upload Logo'}
-          </Text>
-        </TouchableOpacity>
-        
-        {isUploadingLogo && (
-          <View style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center' }}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.uploadingText}> Uploading...</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  // --- Main Render Logic ---
-
-  if (isLoading) {
-    return (
-      <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text>Loading Profile...</Text>
+      <SafeAreaView style={[styles.safeArea, styles.errorTextContainer]}>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+        <Text style={[styles.errorText, { marginTop: spacing.md }]}>{error}</Text>
+         <TouchableOpacity onPress={handleRetry} style={{ marginTop: spacing.lg }}>
+              <Text style={{ color: colors.primary }}>Try Again</Text>
+         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  // Use originalProfile for checks, as it reflects fetched status
-  if (!originalProfile) {
-      return (
-          <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
-              <Text style={styles.errorText}>{error || 'Profile data could not be loaded.'}</Text>
-              {/* Optional: Add a retry button */}
-              {/* <Button title="Retry" onPress={fetchProfile} /> */}
-          </SafeAreaView>
-      );
-  }
-
+  // --- Main Render Logic ---
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-      >
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
           <ScrollView
               style={styles.scrollViewContent}
+              contentContainerStyle={styles.contentContainer}
+              refreshControl={
+                  <RefreshControl
+                      refreshing={isRefreshing} // Use the dedicated refreshing state
+                      onRefresh={() => fetchProfile({ isRefresh: true })} // Trigger refresh fetch
+                      tintColor={colors.primary}
+                      colors={[colors.primary]}
+                  />
+              }
               keyboardShouldPersistTaps="handled"
           >
-            {renderLogoSection()}
-
-            {/* Display Save Status */} 
-            <View style={styles.statusMessageContainer}>
-                {error && <Text style={styles.errorText}>{error}</Text>}
-                {successMessage && <Text style={styles.successText}>{successMessage}</Text>}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>User Details</Text>
-              {renderEditableField('Name', 'name')}
-              {renderEditableField('Email', 'email', { keyboard: 'email-address' })}
-              {renderEditableField('Phone', 'phone', { keyboard: 'phone-pad' })}
-            </View>
-
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Company Details</Text>
-                {renderEditableField('Company Name', 'company.name')}
-                {renderEditableField('Street', 'company.address.street')}
-                {renderEditableField('Unit', 'company.address.unit')}
-                {renderEditableField('City', 'company.address.city')}
-                {renderEditableField('State', 'company.address.state')}
-                {renderEditableField('ZIP Code', 'company.address.zip', { keyboard: 'number-pad' })}
-                {renderEditableField('Company Phone', 'company.phone', { keyboard: 'phone-pad' })}
-                {renderLinkField('Website', 'company.website')}
-            </View>
-
-             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Configuration</Text>
-                {renderEditableField('Chat Model', 'config.chatModel')}
-                {renderEditableField('Whisper Model', 'config.whisperModel')}
-                {renderEditableField('System Prompt', 'config.systemPrompt', { multiline: true, lines: 8 })}
-                {renderEditableField('Report Schema (JSON)', 'config.reportJsonSchema', { multiline: true, lines: 12, isJson: true })}
+             {/* Display Fetch Error Inline if stale data exists */}
+             <View style={styles.statusMessageContainer}>
+                 {/* Display only general fetch errors here */}
+                 {error && originalProfile && <Text style={[styles.errorText, {marginBottom: spacing.md}]}>{`Failed to refresh: ${error}`}</Text>}
              </View>
 
-          </ScrollView>
-      </KeyboardAvoidingView>
+            {/* Render sections only if originalProfile exists */}
+            {originalProfile ? (
+              <>
+                <View style={styles.section}>
+                  <Text style={styles.sectionHeader}>Account</Text>
+                   <SettingsRow
+                       icon="person-circle-outline"
+                       value={originalProfile.name || 'Not Set'}
+                       isFirst
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditName')}
+                   />
+                   <SettingsRow
+                       icon="mail-outline"
+                       value={originalProfile.email || 'Not Set'}
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditEmail')}
+                   />
+                   <SettingsRow
+                       icon="call-outline"
+                       value={originalProfile.phone || 'Not Set'}
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditPhone')}
+                   />
+                </View>
 
-       {/* Floating Save Button */} 
-       <View style={styles.saveButtonContainer}>
-            <Button
-                title={isSaving ? "Saving..." : "Save Profile Changes"}
-                onPress={handleSave}
-                disabled={isSaving || isLoading}
-            />
-        </View>
+                <View style={styles.section}>
+                  <Text style={styles.sectionHeader}>Company</Text>
+                   <SettingsRow
+                       icon="business-outline"
+                       value={originalProfile.company?.name || 'Not Set'}
+                       isFirst
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditCompanyName')}
+                   />
+                   <SettingsRow
+                       icon="map-outline"
+                       value={formatAddress(originalProfile.company?.address)}
+                       numberOfLines={3}
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditAddress')}
+                   />
+                   <SettingsRow
+                       icon="call-outline"
+                       value={originalProfile.company?.phone || 'Not Set'}
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditCompanyPhone')}
+                   />
+                   <SettingsRow
+                       icon="link-outline"
+                       value={originalProfile.company?.website || 'Not Set'}
+                       showDisclosure={true}
+                       onPress={() => navigation.navigate('EditCompanyWebsite')}
+                   />
+                   {/* Logo Row - Moved Here */}
+                   <SettingsRow
+                     icon={logoUrl ? { uri: logoUrl } : 'image-outline'}
+                     value="Logo"
+                     onPress={() => navigation.navigate('EditLogo', { currentLogoUrl: logoUrl })}
+                     showDisclosure={true}
+                   />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.sectionHeader}>Configuration</Text>
+                   <SettingsRow
+                     icon="reader-outline"
+                     label="System Prompt"
+                     value={originalProfile.config?.systemPrompt ? 'View/Edit Prompt' : 'Not Set'}
+                     isFirst
+                     numberOfLines={1}
+                     showDisclosure={true}
+                     onPress={() => navigation.navigate('EditSystemPrompt')}
+                   />
+                   <SettingsRow
+                    icon="document-text-outline"
+                    label="Report Schema"
+                    value={originalProfile.config?.reportJsonSchema ? 'View/Edit Schema' : 'Not Set'}
+                    numberOfLines={1}
+                    showDisclosure={true}
+                    onPress={() => navigation.navigate('EditReportSchema')}
+                    isLink={false}
+                  />
+                </View>
+              </>
+            ) : (
+                 // Optional: Show a message if profile is somehow null after load/refresh
+                 <Text style={{textAlign: 'center', color: colors.textSecondary, marginTop: spacing.xl}}>Profile data unavailable.</Text>
+            )}
+
+          </ScrollView>
     </SafeAreaView>
   );
 }
