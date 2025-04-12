@@ -14,6 +14,7 @@ import {
   Modal,
   Dimensions,
   TextInput,
+  Button,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,6 +27,7 @@ import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { fetchApi } from './fetchApiHelper';
 import SelectionModal from '../components/SelectionModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 
 // Restore constant
@@ -83,6 +85,10 @@ const HomeScreen: React.FC = () => {
       isLoading: boolean;
       onSelect: (item: string) => void;
   } | null>(null);
+
+  // State for deletion confirmation
+  const [isConfirmDeleteVisible, setIsConfirmDeleteVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'customer' | 'project', name: string } | null>(null);
 
   // Log token value on every render
   console.log(`HomeScreen Render: userToken is ${userToken ? 'present' : 'null'}`);
@@ -346,198 +352,174 @@ const HomeScreen: React.FC = () => {
     setModalConfig(null);
   };
 
+  // --- Image Picker Logic ---
+  const pickImage = async () => {
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please grant permission to access the photo library.');
+      return;
+    }
+
+    // Launch image library
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Allow only images
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8, // Reduce quality slightly for upload
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      console.log('Image selected:', asset.uri);
+      setSelectedFile({
+        uri: asset.uri,
+        name: asset.fileName || `image_${Date.now()}.jpg`, // Generate a name if needed
+        size: asset.fileSize,
+      });
+      setThumbnailUri(asset.uri); // For images, thumbnail is the image itself
+      setIsPreviewModalVisible(true); // Optionally open preview right away
+      setResult({ message: '', type: null, data: null }); // Clear previous result
+    }
+  };
+
+  // --- Document/Video Picker Logic ---
   async function pickDocument() {
-    setResult({ message: '', type: null, data: null });
-    setSelectedFile(null);
-    // Clear previous states immediately
-    setIsFileProcessing(false);
-    setIsGeneratingThumbnail(false);
+    console.log('Opening document/video picker...');
+    setResult({ message: '', type: null, data: null }); // Reset result
     setThumbnailUri(null);
+    setIsFileProcessing(true);
+    setSelectedFile(null); // Clear previous selection
+    setIsPreviewModalVisible(false);
 
-    Alert.alert(
-      'Select Video Source',
-      'Where would you like to select the video from?',
-      [
-        {
-          text: 'Photo Library',
-          onPress: async () => {
-            let pickerStartTime = 0;
-            try {
-              const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (permissionResult.granted === false) {
-                Alert.alert('Permission Required', 'Photo library permission is needed to select videos.');
-                return;
-              }
+    try {
+      // Reset audio mode before picking
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true, // Important for video preview
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
 
-              console.log(`[${Date.now()}] Before ImagePicker.launchImageLibraryAsync`);
-              pickerStartTime = Date.now();
-              const pickerResult = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                allowsEditing: false,
-                quality: 0.8, // Note: quality might add processing time
-              });
-              console.log(`[${Date.now()}] After ImagePicker.launchImageLibraryAsync (took ${Date.now() - pickerStartTime}ms)`);
+      const result = await DocumentPicker.getDocumentAsync({
+        // type: ['video/*', 'image/*'], // Allow videos and images
+        type: ['video/*'], // Modify to specifically ask for video
+        copyToCacheDirectory: true,
+      });
 
-              if (pickerResult.canceled) {
-                console.log('Image picking cancelled');
-                return;
-              }
+      // Log the entire result object for debugging
+      console.log('DocumentPicker Result:', JSON.stringify(result, null, 2));
 
-              // Set processing true immediately using requestAnimationFrame
-              console.log(`[${Date.now()}] Requesting animation frame to set processing state`);
-              requestAnimationFrame(() => {
-                  console.log(`[${Date.now()}] Inside animation frame - setting isFileProcessing true`);
-                  setIsFileProcessing(true);
-              });
+      if (result.canceled) {
+        console.log('Document selection cancelled.');
+        setIsFileProcessing(false);
+        return;
+      }
 
-              // Continue processing the result asynchronously (yields thread briefly)
-              setTimeout(async () => {
-                  console.log(`[${Date.now()}] Starting post-picker processing`);
-                  if (pickerResult.assets && pickerResult.assets.length > 0) {
-                    const asset = pickerResult.assets[0];
-                    const maxSize = 100 * 1024 * 1024;
-                    if (asset.fileSize && asset.fileSize > maxSize) {
-                      Alert.alert("File Too Large", `Please select a video file smaller than ${maxSize / (1024 * 1024)} MB.`);
-                      setIsFileProcessing(false);
-                      return;
-                    }
-                    console.log(`[${Date.now()}] Setting selected file`);
-                    setIsFileProcessing(false); // Done processing *before* triggering thumbnail gen
-                    setSelectedFile({
-                      uri: asset.uri,
-                      name: asset.fileName || `video_${Date.now()}.mov`,
-                      size: asset.fileSize,
-                    });
-                  } else {
-                     console.log(`[${Date.now()}] Picker returned no assets`);
-                     setIsFileProcessing(false); // Reset if no assets
-                  }
-              }, 0); // setTimeout 0 allows RAF to run first
+      if (result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        console.log(`Selected file: Name=${asset.name}, URI=${asset.uri}, Size=${asset.size}, MIMEType=${asset.mimeType}`);
 
-            } catch (error) {
-              console.error(`[${Date.now()}] Error picking from library:`, error);
-              setResult({ message: `Error selecting file: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
-              setIsFileProcessing(false);
-            }
-          },
-        },
-        {
-          text: 'Record Video',
-          onPress: async () => {
-            let pickerStartTime = 0;
-            try {
-              const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-              if (permissionResult.granted === false) {
-                Alert.alert('Permission Required', 'Camera permission is needed to record videos.');
-                return;
-              }
-
-              console.log(`[${Date.now()}] Before ImagePicker.launchCameraAsync`);
-              pickerStartTime = Date.now();
-              const pickerResult = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                allowsEditing: false,
-                quality: 0.8,
-              });
-              console.log(`[${Date.now()}] After ImagePicker.launchCameraAsync (took ${Date.now() - pickerStartTime}ms)`);
-
-              if (pickerResult.canceled) {
-                console.log('Video recording cancelled');
-                return;
-              }
-
-              console.log(`[${Date.now()}] Requesting animation frame to set processing state`);
-              requestAnimationFrame(() => {
-                 console.log(`[${Date.now()}] Inside animation frame - setting isFileProcessing true`);
-                 setIsFileProcessing(true);
-              });
-
-              setTimeout(async () => {
-                 console.log(`[${Date.now()}] Starting post-picker processing`);
-                 if (pickerResult.assets && pickerResult.assets.length > 0) {
-                    const asset = pickerResult.assets[0];
-                    console.log(`[${Date.now()}] Setting selected file`);
-                    setIsFileProcessing(false);
-                    setSelectedFile({
-                      uri: asset.uri,
-                      name: `recorded_video_${Date.now()}.mov`,
-                      size: asset.fileSize,
-                    });
-                 } else {
-                    console.log(`[${Date.now()}] Picker returned no assets`);
-                    setIsFileProcessing(false);
-                 }
-               }, 0);
-
-            } catch (error) {
-              console.error(`[${Date.now()}] Error recording video:`, error);
-              setResult({ message: `Error recording video: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
-              setIsFileProcessing(false);
-            }
-          },
-        },
-        {
-          text: 'Files',
-          onPress: async () => {
-            let pickerStartTime = 0;
-            try {
-              console.log(`[${Date.now()}] Before DocumentPicker.getDocumentAsync`);
-              pickerStartTime = Date.now();
-              const pickerResult = await DocumentPicker.getDocumentAsync({
-                type: 'video/*',
-                copyToCacheDirectory: false,
-              });
-              console.log(`[${Date.now()}] After DocumentPicker.getDocumentAsync (took ${Date.now() - pickerStartTime}ms)`);
-
-              if (pickerResult.canceled) {
-                console.log('Document picking cancelled');
-                return;
-              }
-
-              console.log(`[${Date.now()}] Requesting animation frame to set processing state`);
-               requestAnimationFrame(() => {
-                  console.log(`[${Date.now()}] Inside animation frame - setting isFileProcessing true`);
-                  setIsFileProcessing(true);
-               });
-
-              setTimeout(async () => {
-                 console.log(`[${Date.now()}] Starting post-picker processing`);
-                 if (pickerResult.assets && pickerResult.assets.length > 0) {
-                    const asset = pickerResult.assets[0];
-                    const maxSize = 100 * 1024 * 1024;
-                    if (asset.size && asset.size > maxSize) {
-                       Alert.alert("File Too Large", `Please select a video file smaller than ${maxSize / (1024 * 1024)} MB.`);
-                       setIsFileProcessing(false);
-                       return;
-                    }
-                    console.log(`[${Date.now()}] Setting selected file`);
-                    setIsFileProcessing(false);
-                    setSelectedFile({
-                      uri: asset.uri,
-                      name: asset.name,
-                      size: asset.size,
-                    });
-                 } else {
-                    console.log(`[${Date.now()}] Picker returned no assets`);
-                    setIsFileProcessing(false);
-                 }
-               }, 0);
-
-            } catch (error) {
-              console.error(`[${Date.now()}] Error picking document:`, error);
-              setResult({ message: `Error selecting file: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
-              setIsFileProcessing(false);
-            }
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ],
-      { cancelable: true }
-    );
+        // Check if the selected file is a video based on MIME type
+        if (asset.mimeType && asset.mimeType.startsWith('video/')) {
+          setSelectedFile({
+            uri: asset.uri,
+            name: asset.name,
+            size: asset.size,
+          });
+          // Thumbnail generation is handled by the useEffect hook
+        } else {
+          // Handle non-video files if necessary, or show an error
+          console.warn('Selected file is not a video:', asset.mimeType);
+          Alert.alert('Invalid File Type', 'Please select a video file.');
+          setSelectedFile(null);
+          setThumbnailUri(null);
+        }
+      } else {
+        console.log('No assets found in DocumentPicker result.');
+        // Handle cases where assets array is unexpectedly empty
+        // Remove legacy fallback for result.uri
+        Alert.alert('Error', 'Failed to select a file.');
+        setSelectedFile(null);
+        setThumbnailUri(null);
+      }
+    } catch (err) {
+      console.error('Error picking document:', err);
+      Alert.alert('Error', 'Could not pick the document.');
+      setSelectedFile(null);
+      setThumbnailUri(null);
+    } finally {
+      setIsFileProcessing(false);
+    }
   }
+
+  // --- Delete Logic ---
+  const handleDeleteRequest = (type: 'customer' | 'project', name: string) => {
+    setItemToDelete({ type, name });
+    setIsConfirmDeleteVisible(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete || !userToken) {
+      setIsConfirmDeleteVisible(false);
+      return;
+    }
+
+    const { type, name } = itemToDelete;
+    console.log(`Attempting to delete ${type}: ${name}`);
+    setIsConfirmDeleteVisible(false); // Close modal immediately
+    setResult({ message: `Deleting ${type} '${name}'...`, type: 'loading' });
+
+    try {
+      let url = '';
+      if (type === 'customer') {
+        url = `${API_BASE_URL}/api/browse-reports?customer=${encodeURIComponent(name)}`;
+      } else if (type === 'project' && selectedCustomer) {
+        url = `${API_BASE_URL}/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}&project=${encodeURIComponent(name)}`;
+      } else {
+        throw new Error("Invalid deletion parameters.");
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `Failed to delete ${type}`);
+      }
+
+      console.log(`${type} '${name}' deleted successfully.`);
+      setResult({ message: `${type.charAt(0).toUpperCase() + type.slice(1)} '${name}' deleted successfully.`, type: 'success' });
+
+      // Refresh the relevant list
+      if (type === 'customer') {
+        setSelectedCustomer(undefined); // Reset customer selection
+        setSelectedProject(undefined);
+        loadCustomers(); // Reload customer list
+      } else {
+        setSelectedProject(undefined); // Reset project selection
+        loadProjects(); // Reload project list for the current customer
+      }
+      setItemToDelete(null);
+    } catch (err: any) {
+      console.error(`Error deleting ${type}:`, err);
+      setResult({ message: `Failed to delete ${type}: ${err.message}`, type: 'error' });
+      Alert.alert('Deletion Failed', `Could not delete ${type} '${name}'. ${err.message}`);
+      setItemToDelete(null);
+    } finally {
+        // Maybe small delay before clearing message?
+        // setTimeout(() => setResult({ message: '', type: null }), 3000);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsConfirmDeleteVisible(false);
+    setItemToDelete(null);
+  };
 
   async function handleUpload() {
     if (!selectedCustomer || !selectedProject) {
@@ -877,6 +859,20 @@ const HomeScreen: React.FC = () => {
                </TouchableOpacity>
             </View>
          </Modal>
+
+        {/* Confirmation Modal for Deletion */} 
+        {itemToDelete && (
+          <ConfirmationModal
+            isVisible={isConfirmDeleteVisible}
+            title={`Delete ${itemToDelete.type}?`}
+            message={`Are you sure you want to delete the ${itemToDelete.type} '${itemToDelete.name}'? This action cannot be undone.`}
+            confirmText="Delete"
+            cancelText="Cancel"
+            onConfirm={handleDeleteConfirm}
+            onCancel={handleDeleteCancel}
+            isDestructive={true}
+          />
+        )}
     </SafeAreaView>
   );
 }

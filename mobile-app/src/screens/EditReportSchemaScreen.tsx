@@ -10,13 +10,18 @@ import {
   Button,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { EditReportSchemaScreenProps } from '../navigation/AppNavigator';
+import ConfirmationModal from '../components/ConfirmationModal';
+import { Ionicons } from '@expo/vector-icons';
 
 // Define the expected structure of the profile data (only what's needed)
 interface ProfileConfig {
@@ -77,6 +82,42 @@ const styles = StyleSheet.create({
       marginTop: spacing.sm,
       fontSize: typography.fontSizeXS,
   },
+  imagePreviewContainer: {
+      alignItems: 'center',
+      marginVertical: spacing.lg,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      borderRadius: borders.radiusMedium,
+      padding: spacing.md,
+  },
+  imagePreview: {
+      width: 150,
+      height: 150,
+      borderRadius: borders.radiusSmall,
+      marginBottom: spacing.md,
+  },
+  imagePlaceholder: {
+      width: 150,
+      height: 150,
+      borderRadius: borders.radiusSmall,
+      backgroundColor: colors.surfaceAlt,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: spacing.md,
+  },
+  imageButton: {
+      backgroundColor: colors.primary,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: borders.radiusMedium,
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  imageButtonText: {
+      color: colors.background,
+      marginLeft: spacing.sm,
+      fontWeight: typography.fontWeightMedium as '500',
+  },
 });
 
 // --- Component ---
@@ -89,6 +130,13 @@ function EditReportSchemaScreen(): React.ReactElement {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // State for image picker (replace with actual image logic if needed)
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  // State for confirmation modal (replace with actual delete/reset logic if needed)
+  const [isConfirmVisible, setIsConfirmVisible] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, confirmText: string, isDestructive: boolean } | null>(null);
 
   // Fetch the current schema
   const fetchCurrentSchema = useCallback(async () => {
@@ -221,17 +269,98 @@ function EditReportSchemaScreen(): React.ReactElement {
     }
   }, [userToken, currentSchemaString, initialSchemaString, jsonError, navigation]);
 
-  // Configure Header Buttons
+  // --- Image Picker Logic (Example) ---
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1], // Example aspect ratio
+      quality: 0.5,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setSelectedImageUri(result.assets[0].uri);
+      // In a real scenario, you might upload this image URI or store it
+      console.log("Image selected:", result.assets[0].uri);
+    }
+  };
+
+  // --- Confirmation Logic (Example) ---
+  const showConfirmation = (config: { title: string, message: string, confirmText: string, isDestructive: boolean }, onConfirm: () => void) => {
+    setConfirmConfig(config);
+    setConfirmAction(() => onConfirm); // Store the action in state
+    setIsConfirmVisible(true);
+  };
+
+  const handleConfirm = () => {
+    if (confirmAction) {
+      confirmAction();
+    }
+    setIsConfirmVisible(false);
+    setConfirmAction(null);
+    setConfirmConfig(null);
+  };
+
+  const handleCancelConfirm = () => {
+    setIsConfirmVisible(false);
+    setConfirmAction(null);
+    setConfirmConfig(null);
+  };
+
+  // Example Usage of Confirmation:
+  const handleResetSchema = () => {
+    showConfirmation(
+      {
+        title: 'Reset Schema?',
+        message: 'Are you sure you want to reset the schema to its original state? All your changes will be lost.',
+        confirmText: 'Reset',
+        isDestructive: true,
+      },
+      () => {
+        setCurrentSchemaString(initialSchemaString);
+        setJsonError(null); // Reset JSON error too
+        console.log('Schema reset to initial state.');
+      }
+    );
+  };
+
+  // Configure Header Buttons (add reset button)
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
         <Button onPress={() => navigation.goBack()} title="Cancel" disabled={isSaving} color={Platform.OS === 'ios' ? colors.primary : undefined} />
       ),
+      // Add a reset button conditionally if changes were made
+      headerTitle: 'Edit Report Schema', // Explicitly set title
       headerRight: () => (
-        <Button onPress={handleSave} title={isSaving ? "Saving..." : "Save"} disabled={isLoading || isSaving || !!jsonError} color={Platform.OS === 'ios' ? colors.primary : undefined} />
+        <View style={{ flexDirection: 'row' }}>
+          {currentSchemaString !== initialSchemaString && (
+            <Button
+                onPress={handleResetSchema}
+                title="Reset"
+                disabled={isLoading || isSaving}
+                color={Platform.OS === 'ios' ? colors.error : undefined} // Use error color for reset
+            />
+          )}
+          {/* Wrap Save Button in View for margin */}
+          <View style={{ marginLeft: currentSchemaString !== initialSchemaString ? spacing.md : 0 }}>
+            <Button
+              onPress={handleSave}
+              title={isSaving ? "Saving..." : "Save"}
+              disabled={isLoading || isSaving || !!jsonError || currentSchemaString === initialSchemaString} // Disable if no changes
+              color={Platform.OS === 'ios' ? colors.primary : undefined}
+             />
+          </View>
+        </View>
       ),
     });
-  }, [navigation, handleSave, isLoading, isSaving, jsonError]);
+  }, [navigation, handleSave, handleResetSchema, isLoading, isSaving, jsonError, currentSchemaString, initialSchemaString]); // Add dependencies
 
   // --- Render Logic ---
   if (isLoading) {
@@ -247,28 +376,62 @@ function EditReportSchemaScreen(): React.ReactElement {
         <KeyboardAvoidingView
              behavior={Platform.OS === "ios" ? "padding" : "height"}
              style={styles.keyboardAvoidingView}
-             keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-           >
-            <ScrollView style={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
+             keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0} // Adjust offset if needed
+        >
+            <ScrollView contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
                 {error && <Text style={styles.errorText}>{error}</Text>}
 
-                <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Report Schema (JSON)</Text>
-                <TextInput
+                {/* Example Image Picker Section */} 
+                <View style={styles.imagePreviewContainer}> 
+                  <Text style={styles.label}>Report Header Image (Optional)</Text> 
+                  {selectedImageUri ? ( 
+                    <Image source={{ uri: selectedImageUri }} style={styles.imagePreview} /> 
+                  ) : ( 
+                    <View style={styles.imagePlaceholder}> 
+                      <Ionicons name="image-outline" size={50} color={colors.textSecondary} /> 
+                    </View> 
+                  )} 
+                  <TouchableOpacity onPress={pickImage} style={styles.imageButton} disabled={isSaving}> 
+                    <Ionicons name="add-circle-outline" size={20} color={colors.background} />
+                    <Text style={styles.imageButtonText}> 
+                      {selectedImageUri ? 'Change Image' : 'Select Image'} 
+                    </Text> 
+                  </TouchableOpacity> 
+                </View> 
+
+                {/* JSON Schema Editor */} 
+                <View style={styles.fieldContainer}> 
+                  <Text style={styles.label}>Report JSON Schema</Text> 
+                  <TextInput
                     style={styles.textInput}
                     value={currentSchemaString}
                     onChangeText={setCurrentSchemaString}
-                    placeholder="Enter JSON schema for reports..."
                     multiline={true}
-                    editable={!isSaving}
                     autoCapitalize="none"
                     autoCorrect={false}
                     spellCheck={false}
-                />
-                 {jsonError && <Text style={styles.jsonErrorText}>{jsonError}</Text>}
+                    placeholder="Enter JSON schema here..."
+                    placeholderTextColor={colors.textSecondary}
+                    editable={!isLoading && !isSaving}
+                  />
+                  {jsonError && <Text style={styles.jsonErrorText}>{jsonError}</Text>}
                 </View>
+
             </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Confirmation Modal */} 
+        {confirmConfig && (
+            <ConfirmationModal
+                isVisible={isConfirmVisible}
+                title={confirmConfig.title}
+                message={confirmConfig.message}
+                confirmText={confirmConfig.confirmText}
+                onConfirm={handleConfirm} // Use the wrapper handler
+                onCancel={handleCancelConfirm}
+                isDestructive={confirmConfig.isDestructive}
+            />
+        )}
     </SafeAreaView>
   );
 }
