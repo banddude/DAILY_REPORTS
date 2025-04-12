@@ -3,17 +3,18 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   StyleSheet,
   ActivityIndicator,
   Alert,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 import { colors, spacing, typography, borders } from '../theme/theme';
+import { API_BASE_URL } from '../config'; // Import API base URL
+import { useAuth } from '../context/AuthContext'; // Import useAuth
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
@@ -24,123 +25,190 @@ export default function SignUpScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth(); // Get login function from context
 
   const handleSignUp = async () => {
-    // <<< DISABLE SIGNUP FOR DEBUG MODE >>>
-    Alert.alert("Sign Up Disabled", "Account creation is currently disabled in this debug setup.");
-    return;
-    /*
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) {
-      Alert.alert('Sign Up Error', error.message);
-    } else {
-      Alert.alert('Sign Up Successful', 'Please check your email for verification.');
-      navigation.navigate('Login'); // Navigate to Login after successful sign-up
+    if (password !== confirmPassword) {
+      Alert.alert("Password Mismatch", "The passwords entered do not match.");
+      return;
     }
-    setLoading(false);
-    */
+
+    if (password.length < 6) {
+        Alert.alert("Password Too Short", "Password must be at least 6 characters long.");
+        return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      // Check if the response status indicates success before parsing JSON
+      if (response.ok) { // Status codes 200-299
+        const data = await response.json();
+        if (response.status === 201) { // Specifically check for 201 Created
+          console.log('Signup successful, attempting auto-login...');
+          // --- Auto-login after successful signup ---
+          try {
+            await login(email, password); // Use the context login function
+            console.log('Auto-login successful after signup.');
+            // Navigation should be handled by the AuthProvider upon successful login
+          } catch (loginError: any) {
+            console.error("Auto-login Error after signup:", loginError);
+            Alert.alert(
+              'Account Created, Login Failed',
+              `Your account was created, but auto-login failed: ${loginError.message}. Please try logging in manually.`,
+              [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+            );
+          }
+          // --- End Auto-login ---
+        } else {
+          // Handle unexpected success statuses if necessary
+          console.warn('Unexpected success status from signup:', response.status);
+          Alert.alert('Sign Up Info', data.message || 'Account created, but received unexpected status.');
+          navigation.navigate('Login'); 
+        }
+      } else {
+        // Handle error responses
+        let errorMessage = 'An unknown error occurred during sign up.';
+        let errorStatus = response.status; // Store status for clarity
+        
+        try {
+          // Read the response body as text first
+          const errorText = await response.text();
+          
+          try {
+            // Attempt to parse the text as JSON
+            const errorData = JSON.parse(errorText); 
+            errorMessage = errorData.message || errorText || errorMessage; // Use parsed message, fallback to text, then generic
+          } catch (jsonParseError) {
+            // If JSON parsing fails, use the raw text as the error message
+            errorMessage = errorText || errorMessage; // Use text if available, else generic
+          }
+        } catch (readError) {
+            // If even reading text fails, log it and use the generic message
+            console.error("Failed to read error response body", readError);
+        }
+
+        if (errorStatus === 409) {
+          Alert.alert('Sign Up Error', errorMessage || 'This email address is already registered.');
+        } else {
+          Alert.alert('Sign Up Error', `Error ${errorStatus}: ${errorMessage}`);
+        }
+      }
+    } catch (error: any) {
+      console.error("Signup Fetch/Network Error:", error);
+      Alert.alert('Sign Up Error', error.message || 'Could not connect to the server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <View style={styles.innerContainer}>
-        <Text style={styles.title}>Create Account</Text>
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholderTextColor={colors.textSecondary}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password (min 6 chars)"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholderTextColor={colors.textSecondary}
-        />
-         <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-          placeholderTextColor={colors.textSecondary}
-        />
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.title}>Create Account</Text>
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        placeholderTextColor={colors.textSecondary}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Password (min 6 chars)"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        placeholderTextColor={colors.textSecondary}
+      />
+       <TextInput
+        style={styles.input}
+        placeholder="Confirm Password"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry
+        placeholderTextColor={colors.textSecondary}
+      />
 
-        {loading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={styles.buttonSpacing} />
-        ) : (
-          <TouchableOpacity style={[styles.button, styles.buttonSpacing]} onPress={handleSignUp} disabled={loading}>
-            <Text style={styles.buttonText}>Sign Up</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity onPress={() => navigation.navigate('Login')} disabled={loading}>
-          <Text style={styles.switchText}>Already have an account? Login</Text>
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={styles.button} />
+      ) : (
+        <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
+          <Text style={styles.buttonText}>Sign Up</Text>
         </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      )}
+
+      <TouchableOpacity 
+        style={styles.loginLinkContainer}
+        onPress={() => navigation.navigate('Login')}
+        disabled={loading}
+      >
+        <Text style={styles.loginLinkText}>Already have an account? Login</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
   );
 }
 
-// Using the same styles as LoginScreen for consistency
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  innerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.md, // Use corrected spacing
+    paddingTop: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   title: {
-    fontSize: typography.fontSizeXXL,
+    fontSize: typography.fontSizeXL,
     fontWeight: typography.fontWeightBold as 'bold',
+    lineHeight: typography.lineHeightXL,
     color: colors.textPrimary,
     marginBottom: spacing.xl,
+    textAlign: 'center',
   },
   input: {
-    width: '100%',
-    height: 50,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
     borderWidth: borders.widthThin,
     borderRadius: borders.radiusMedium,
-    marginBottom: spacing.md, // Use corrected spacing
-    paddingHorizontal: spacing.md, // Use corrected spacing
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     fontSize: typography.fontSizeM,
     color: colors.textPrimary,
     backgroundColor: colors.surface,
   },
   button: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md, // Use corrected spacing
-    paddingHorizontal: spacing.xl,
-    borderRadius: borders.radiusMedium,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
-    width: '100%',
-  },
-  buttonSpacing: {
-    marginTop: spacing.md, // Use corrected spacing
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+    borderTopWidth: borders.widthHairline,
+    borderBottomWidth: borders.widthHairline,
+    borderTopColor: colors.borderLight,
+    borderBottomColor: colors.borderLight,
+    minHeight: 44,
   },
   buttonText: {
-    color: colors.background,
-    fontSize: typography.fontSizeL,
-    fontWeight: typography.fontWeightBold as 'bold',
-  },
-  switchText: {
     color: colors.primary,
-    marginTop: spacing.lg, // Use corrected spacing
     fontSize: typography.fontSizeM,
+    textAlign: 'center',
+  },
+  loginLinkContainer: {
+    marginTop: spacing.lg,
+    alignItems: 'center',
+  },
+  loginLinkText: {
+    color: colors.primary,
+    fontSize: typography.fontSizeS,
+    textDecorationLine: 'underline',
   },
 }); 

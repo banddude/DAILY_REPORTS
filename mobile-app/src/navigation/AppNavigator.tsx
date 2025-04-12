@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { ActivityIndicator, View, StyleSheet, Button } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Button, Platform } from 'react-native';
 import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NavigatorScreenParams, getFocusedRouteNameFromRoute, useNavigation, useRoute } from '@react-navigation/native';
@@ -273,50 +273,60 @@ function ProfileStackNavigator() {
 function MainTabs() {
   return (
     <Tab.Navigator
-        screenOptions={({ route }) => ({
-            tabBarIcon: ({ focused, color, size }) => {
-              let iconName: keyof typeof Ionicons.glyphMap;
-              if (route.name === 'HomeTab') {
-                iconName = focused ? 'cloud-upload' : 'cloud-upload-outline';
-              } else if (route.name === 'BrowseTab') {
-                iconName = focused ? 'file-tray-full' : 'file-tray-full-outline';
-              } else if (route.name === 'ProfileTab') {
-                iconName = focused ? 'settings' : 'settings-outline'; // Updated icon
-              } else {
-                 iconName = 'alert-circle-outline';
-              }
-              return <Ionicons name={iconName} size={size} color={color} />;
-            },
-            tabBarActiveTintColor: colors.primary,
-            tabBarInactiveTintColor: colors.textSecondary,
-            headerShown: false,
-            tabBarStyle: {
-                backgroundColor: colors.surface,
-                borderTopColor: colors.border,
-                borderTopWidth: borders.widthThin,
-            },
-            tabBarLabelStyle: {
-                fontSize: typography.fontSizeXS,
-            }
-          })}
+      screenOptions={({ route }) => ({
+        headerShown: false, // Hide headers for individual tabs, handled by stacks
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: keyof typeof Ionicons.glyphMap | undefined;
+
+          if (route.name === 'HomeTab') {
+            iconName = focused ? 'cloud-upload' : 'cloud-upload-outline'; // Use filled for focus
+          } else if (route.name === 'BrowseTab') {
+            iconName = focused ? 'document-text' : 'document-text-outline'; // Use document icon
+          } else if (route.name === 'ProfileTab') {
+            iconName = focused ? 'settings' : 'settings-outline'; // Use filled for focus
+          }
+
+          // Set color based on focus: Primary Text color when focused, Secondary when not
+          const iconColor = focused ? colors.textPrimary : colors.textSecondary; 
+          
+          // You can return any component that you like here!
+          return iconName ? <Ionicons name={iconName} size={size} color={iconColor} /> : null;
+        },
+        // Update tint colors for labels
+        tabBarActiveTintColor: colors.textPrimary, // Use primary text color for active label
+        tabBarInactiveTintColor: colors.textSecondary, // Use secondary text color for inactive label
+        tabBarStyle: {
+            backgroundColor: colors.surface, // Match background
+            borderTopColor: colors.borderLight, // Add light border
+            ...Platform.select({ // Apply platform-specific styles
+                web: {
+                    height: 65, // Explicit height for web
+                    paddingBottom: 5, // Add some padding for web if needed
+                },
+                // Keep default behavior for ios/android or add specific styles
+            }),
+        },
+        tabBarLabelStyle: {
+            fontSize: typography.fontSizeXS, // Adjust label size if needed
+            fontWeight: typography.fontWeightMedium as '500', // Adjust weight
+        },
+      })}
     >
       <Tab.Screen 
         name="HomeTab" 
-        component={HomeStackNavigator}
-        options={{ title: 'Generate' }}
+        component={HomeStackNavigator} 
+        options={{ title: 'Generate' }} // Label for the tab
       />
       <Tab.Screen 
         name="BrowseTab" 
-        component={BrowseStackNavigator}
-        options={{ title: 'Reports' }} 
+        component={BrowseStackNavigator} 
+        options={{ title: 'Reports' }} // Label for the tab
       />
-      <Tab.Screen 
-        name="ProfileTab" // This tab now hosts the ProfileStack
-        component={ProfileStackNavigator} // Use the new stack navigator
-        options={{
-            title: 'Settings', // Tab bar title
-        }}
-      /> 
+       <Tab.Screen 
+         name="ProfileTab" 
+         component={ProfileStackNavigator} 
+         options={{ title: 'Settings'}} // Label for the tab
+      />
     </Tab.Navigator>
   );
 }

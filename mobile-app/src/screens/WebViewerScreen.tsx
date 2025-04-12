@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity, Alert, Share, Button } from 'react-native';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing } from '../theme/theme';
+import { colors, spacing, typography } from '../theme/theme';
 import { BrowseStackParamList } from '../navigation/AppNavigator';
-import { S3_BUCKET_NAME, AWS_REGION } from '../config';
+import { S3_BUCKET_NAME, AWS_REGION, API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
+import { WebViewerScreenProps } from '../navigation/AppNavigator';
 
 // Define route prop type based on the correct stack
 type WebViewerScreenRouteProp = RouteProp<BrowseStackParamList, 'WebViewer'>;
@@ -19,12 +21,14 @@ interface Props {
   navigation: WebViewerScreenNavigationProp;
 }
 
-export default function WebViewerScreen() {
-  const route = useRoute<WebViewerScreenRouteProp>();
-  const navigation = useNavigation<WebViewerScreenNavigationProp>();
+export default function WebViewerScreen({ route, navigation }: WebViewerScreenProps) {
   const { url } = route.params;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+  const webviewRef = useRef<WebView>(null);
+  const { userToken } = useAuth();
 
   console.log("WebViewerScreen: Loading URL:", url);
 
@@ -61,27 +65,103 @@ export default function WebViewerScreen() {
 
   const reportJsonKey = getJsonKeyFromUrl(url);
 
-  // Add Edit button to header
+  // Function to fetch and inject JSON data
+  const injectReportData = async () => {
+    if (!reportJsonKey || !userToken || !webviewRef.current) return;
+
+    try {
+      // Fetch JSON data from your API endpoint
+      const apiUrl = `${API_BASE_URL}/api/report?key=${encodeURIComponent(reportJsonKey)}`;
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errorText}`);
+      }
+
+      const reportData = await response.json();
+      const script = `
+        window.reportData = ${JSON.stringify(reportData)};
+        if (window.renderReport) {
+          window.renderReport(window.reportData);
+        } else {
+          console.error('window.renderReport function not found in WebView.');
+        }
+        true; // Required for Android
+      `;
+      webviewRef.current.injectJavaScript(script);
+      console.log('Injected report data into WebView.');
+    } catch (error) {
+      console.error('Failed to fetch or inject report data:', error);
+      Alert.alert('Error', 'Could not load full report details.');
+    }
+  };
+
+  // --- Share Handler ---
+  const handleShare = async () => {
+    if (!url) {
+      Alert.alert('Error', 'Cannot share report without a URL.');
+      return;
+    }
+    try {
+      const result = await Share.share({
+        message: url,
+        url: url,
+        title: 'Daily Report',
+      });
+      // Optional: Log share result
+      console.log('Share result:', result.action);
+    } catch (error: any) {
+      console.error('Error sharing report:', error);
+      Alert.alert('Error', `Failed to share report: ${error.message}`);
+    }
+  };
+
+  // Add Edit and Share icons to header
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => {
-            if (reportJsonKey) {
-              console.log(`Navigating to ReportEditor with key: ${reportJsonKey}`);
-              navigation.navigate('ReportEditor', { reportKey: reportJsonKey });
-            } else {
-              Alert.alert("Cannot Edit", "Could not determine the report data file needed for editing.");
-            }
-          }}
-          style={styles.headerButton}
-        >
-          {/* <Ionicons name="create-outline" size={24} color={colors.primary} /> */}
-          <Text style={styles.headerButtonText}>Edit</Text>
-        </TouchableOpacity>
+         <View style={styles.headerButtonContainer}>
+           {/* Edit Icon Button */}
+           <TouchableOpacity
+             onPress={() => {
+               if (reportJsonKey) {
+                 console.log(`Navigating to ReportEditor with key: ${reportJsonKey}`);
+                 navigation.navigate('ReportEditor', { reportKey: reportJsonKey });
+               } else {
+                 Alert.alert("Cannot Edit", "Could not determine the report data file needed for editing.");
+               }
+             }}
+             style={styles.headerButton}
+             disabled={!reportJsonKey}
+           >
+             <Ionicons 
+               name="pencil-outline" 
+               size={22}
+               color={!reportJsonKey ? colors.textDisabled : colors.textSecondary}
+             />
+           </TouchableOpacity>
+           {/* Share Icon Button */}
+           <TouchableOpacity
+             onPress={handleShare}
+             style={[styles.headerButton, { marginLeft: spacing.sm }]}
+             disabled={isLoading}
+           >
+             <Ionicons 
+               name="share-outline" 
+               size={22}
+               color={isLoading ? colors.textDisabled : colors.textSecondary}
+             />
+           </TouchableOpacity>
+         </View>
       ),
     });
-  }, [navigation, reportJsonKey]); // Depend on navigation and the derived key
+  }, [navigation, reportJsonKey, handleShare, isLoading]);
 
   // --- Platform Specific Rendering --- 
   const renderContent = () => {
@@ -108,15 +188,36 @@ export default function WebViewerScreen() {
       return (
         <WebView
           source={{ uri: url }}
-          style={{ flex: 1 }}
-          onLoadStart={() => setIsLoading(true)} // Keep loading indicators for native
-          onLoadEnd={() => setIsLoading(false)}
+          style={{ flex: 1, paddingTop: 0, marginTop: 0 }}
+          onLoadStart={() => setIsLoading(true)}
+          onLoadEnd={() => {
+             setIsLoading(false);
+             // Inject JS after load finishes to remove body margin/padding
+             const jsCode = `
+               try {
+                 document.body.style.marginTop = '0px';
+                 document.body.style.paddingTop = '0px';
+                 document.documentElement.style.paddingTop = '0px'; // Also try on html element
+                 document.documentElement.style.marginTop = '0px';
+                 // Optionally find a specific wrapper if body doesn't work:
+                 // const wrapper = document.querySelector('.report-container'); // Replace .report-container if needed
+                 // if (wrapper) { wrapper.style.paddingTop = '0px'; wrapper.style.marginTop = '0px'; }
+               } catch (e) {
+                 console.error('Error injecting styles:', e);
+               }
+               true; // Required for Android
+             `;
+             webviewRef.current?.injectJavaScript(jsCode);
+             console.log('Injected style override JS');
+          }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.warn('WebView error: ', nativeEvent);
             setError(`Failed to load content: ${nativeEvent.description || nativeEvent.code}`);
             setIsLoading(false);
           }}
+          ref={webviewRef}
+          automaticallyAdjustContentInsets={false}
         />
       );
     }
@@ -141,32 +242,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    position: 'relative', // Needed for absolute positioning of loading indicator
+    position: 'relative',
+    paddingTop: 0,
+    marginTop: 0,
   },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.background, // Match theme
+    backgroundColor: colors.background,
   },
   errorText: {
     color: colors.error,
     padding: 20,
     textAlign: 'center',
   },
-  // Add basic styles for the iframe on web
   iframeStyle: {
       flex: 1,
       width: '100%',
-      height: '100%', // Ensure iframe takes full height
-      borderWidth: 0, // Remove iframe border
+      height: '100%',
+      borderWidth: 0,
   },
   headerButton: {
-      marginRight: spacing.md,
+      padding: spacing.xs,
   },
-  headerButtonText: {
-      color: colors.primary, // Use theme primary color
-      fontSize: 16,
-      fontWeight: '600', // Make it bold
-  }
+  headerButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
 }); 

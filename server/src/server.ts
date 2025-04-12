@@ -9,6 +9,7 @@ import { Readable } from 'stream'; // Import Readable for S3 upload body
 import { readFile, writeFile } from 'fs/promises'; // Added for async file operations
 import { protect } from './authMiddleware'; // Import protect middleware
 import type { User } from './authMiddleware'; // Import User type if needed for type checking req.user
+import { v4 as uuidv4 } from 'uuid'; // Import uuid
 
 const app = express();
 // Ensure PORT environment variable is set and is a number
@@ -861,6 +862,96 @@ app.post('/api/login', (async (req: Request, res: Response, next: NextFunction) 
         next(error); 
     }
 }) as RequestHandler); // Cast the async function to RequestHandler
+
+// NEW: Signup Endpoint
+app.post('/api/signup', (async (req: Request, res: Response, next: NextFunction) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    }
+
+    try {
+        console.log(`Signup attempt for email: ${email}`);
+
+        // 1. Read existing users
+        let users: any[] = [];
+        try {
+            const usersData = await readFile(USERS_JSON_PATH, 'utf-8');
+            users = JSON.parse(usersData);
+        } catch (error: any) {
+            // If file doesn't exist, we'll create it later
+            if (error.code !== 'ENOENT') {
+                throw error; // Rethrow unexpected errors
+            }
+            console.log(`${USERS_JSON_PATH} not found, will create new file.`);
+        }
+
+        // 2. Check if email already exists
+        const existingUser = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+        if (existingUser) {
+            console.log(`Signup failed: Email already exists - ${email}`);
+            return res.status(409).json({ success: false, message: 'Email already exists.' });
+        }
+
+        // 3. Generate new UUID and create user object
+        const newUUID = uuidv4();
+        const newUser = { email: email.toLowerCase(), password: password, UUID: newUUID }; // Store plain text password
+
+        // 4. Add new user to the list
+        users.push(newUser);
+
+        // 5. Write updated users back to JSON file
+        await writeFile(USERS_JSON_PATH, JSON.stringify(users, null, 2));
+        console.log(`User ${email} added to ${USERS_JSON_PATH}`);
+
+        // 6. Initialize user profile in S3
+        const userProfileKey = `users/${newUUID}/profile.json`;
+        console.log(`Initializing profile for new user ${newUUID} in S3 at ${userProfileKey}`);
+        const defaultProfilePath = path.join(DATA_DIR, 'profile.json');
+        
+        try {
+            // Read the default profile
+            const defaultProfileData = await readFile(defaultProfilePath, 'utf-8');
+            const profileData = JSON.parse(defaultProfileData);
+
+            // Save to S3 as the user's profile
+            const putCommand = new PutObjectCommand({
+                Bucket: s3Bucket,
+                Key: userProfileKey,
+                Body: JSON.stringify(profileData, null, 2),
+                ContentType: 'application/json'
+            });
+
+            await s3Client.send(putCommand);
+            console.log(`Successfully initialized profile for ${newUUID} at ${userProfileKey}`);
+
+        } catch (fsError: any) {
+            if (fsError.code === 'ENOENT') {
+                console.error(`Cannot initialize user profile: Default profile not found at ${defaultProfilePath}. Signup completed but profile is empty.`);
+                // Optionally: still return success but log the issue
+                // We'll proceed without the profile for now
+                return res.status(201).json({ 
+                    success: true, 
+                    message: 'User created, but profile initialization failed (template missing).', 
+                    token: newUUID, 
+                    email: newUser.email 
+                });
+            } else {
+                throw fsError; // Rethrow other file system errors
+            }
+        }
+
+        // 7. Return success response
+        console.log(`Signup successful: ${email} (UUID: ${newUUID})`);
+        res.status(201).json({ success: true, token: newUUID, email: newUser.email });
+
+    } catch (error: any) {
+        console.error("Error during signup:", error);
+        // Pass error to Express error handler
+        next(error);
+    }
+}) as RequestHandler);
 
 // GET endpoint to serve static files from S3 (Viewer)
 app.get('/view-s3-asset', protect, async (req: Request, res: Response) => {

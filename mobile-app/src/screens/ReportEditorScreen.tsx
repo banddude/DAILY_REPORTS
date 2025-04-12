@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useLayoutEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,13 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Platform, // Import Platform
+  Platform,
+  Button,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, spacing, typography, borders } from '../theme/theme'; // <-- Add this import
-import { API_BASE_URL } from '../config'; // <-- Import from config
-import { useAuth } from '../context/AuthContext'; // Import useAuth
+import { colors, spacing, typography, borders } from '../theme/theme';
+import { API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { ReportEditorScreenProps as NavigationProps } from '../navigation/AppNavigator';
 
 
 // --- Types (Define structures based on expected report data) ---
@@ -77,22 +80,8 @@ interface ReportData {
   images?: ReportImage[];
 }
 
-// Type for navigation props (adjust based on your navigation setup)
-type ReportEditorScreenProps = {
-  route: {
-    params: {
-      reportKey: string; // Expect reportKey to be passed
-    };
-  };
-  navigation: any; // Replace 'any' with your specific navigation type
-};
-
-// --- Configuration ---
-// TODO: Move to config.ts or environment variables
-// const API_BASE_URL = process.env.API_BASE_URL || 'https://localhost:3000';
-
 // --- Component ---
-export default function ReportEditorScreen({ route, navigation }: ReportEditorScreenProps): React.ReactElement {
+export default function ReportEditorScreen({ route, navigation }: NavigationProps): React.ReactElement {
   const { reportKey } = route.params;
   const { userToken } = useAuth(); // Get token for authenticated fetch
 
@@ -148,7 +137,7 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
         console.log("Report data loaded:", data);
         setReportData(data);
         setEditedData(JSON.parse(JSON.stringify(data))); // Initialize editedData with a deep copy
-        // setImageBaseUrl(data.reportAssetsS3Urls?.baseUrl || ''); // Keep if needed
+        setImageBaseUrl(data.reportAssetsS3Urls?.baseUrl || ''); // Uncommented to potentially fix date
       })
       .catch(err => {
         console.error('Error loading report data:', err);
@@ -507,7 +496,43 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
       setError(null);
   };
 
-  // --- Render Functions ---
+  // --- Configure Header Buttons ---
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity 
+          style={[styles.headerButton, { marginLeft: spacing.xs }]} // Add small left margin
+          onPress={() => navigation.goBack()} 
+          disabled={loading !== false}
+        >
+          <Ionicons 
+            name="close-outline" 
+            size={28} 
+            color={loading !== false ? colors.textDisabled : colors.textSecondary} 
+          />
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <TouchableOpacity 
+          style={[styles.headerButton, { marginRight: spacing.xs }]} // Add small right margin
+          onPress={saveChanges} 
+          disabled={loading !== false /* Add check for unchanged data later */} 
+        >
+          {loading === 'saving' ? (
+             <ActivityIndicator size="small" color={colors.textSecondary} />
+          ) : (
+             <Ionicons 
+               name="save-outline" 
+               size={24} 
+               color={loading !== false ? colors.textDisabled : colors.textSecondary} 
+             />
+          )}
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, saveChanges, loading]);
+
+  // --- Render Functions (Adjusted for Row Style) ---
 
   const renderMetadata = () => {
     if (!reportData || !reportData.reportMetadata) return null;
@@ -517,8 +542,47 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
     const logoUrl = reportData.reportAssetsS3Urls?.logoUrl;
     const date = meta.date || imageBaseUrl?.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || 'N/A';
 
+    // Safer address string construction
+    let addressString = '';
+    if (company.address) {
+        addressString += company.address.street || '';
+        if (company.address.unit) addressString += ` #${company.address.unit}`;
+        // Combine city, state, zip safely
+        const city = company.address.city || '';
+        const state = company.address.state || '';
+        const zip = company.address.zip || '';
+        const cityStateZipParts = [];
+        if (city) cityStateZipParts.push(city);
+        if (state) cityStateZipParts.push(state);
+        if (zip) cityStateZipParts.push(zip);
+
+        let cityStateZip = '';
+        if (cityStateZipParts.length > 0) {
+            if (city && state) {
+                // Handle comma correctly: City, State Zip
+                cityStateZip = `${city}, ${state} ${zip}`.trim();
+            } else {
+                 // Handle cases with only city/state/zip or combinations without both city and state
+                 cityStateZip = cityStateZipParts.join(' ').trim();
+            }
+        }
+
+        if (addressString && cityStateZip) addressString += '\n'; // Add newline only if both street/unit and city/state/zip exist
+        addressString += cityStateZip;
+    }
+
+    // Phone and Website string
+    let contactString = '';
+    const phone = company.phone ? `Phone: ${company.phone}` : '';
+    const website = company.website ? `Website: ${company.website}` : '';
+    if (phone && website) {
+        contactString = `${phone} | ${website}`;
+    } else {
+        contactString = phone || website; // Use whichever exists, or empty string if neither
+    }
+
     return (
-      <View style={styles.header}>
+      <View style={styles.metaContainer}>
         {logoUrl && <Image source={{ uri: logoUrl }} style={styles.logo} resizeMode="contain" />}
         <Text style={styles.mainTitle}>Edit Daily Report</Text>
         <Text style={styles.metaInfo}>Date: {date}</Text>
@@ -526,238 +590,170 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
         {company.name && (
           <View style={styles.companyInfo}>
             <Text style={styles.companyName}>{company.name}</Text>
-            {company.address && (
-              <Text style={styles.metaInfo}>
-                {company.address.street}{company.address.unit ? ` #${company.address.unit}` : ''}
-                {company.address.city || company.address.state || company.address.zip ? '\n' : ''} 
-                {company.address.city}{company.address.city && company.address.state ? ', ' : ''}{company.address.state} {company.address.zip}
-              </Text>
-            )}
-             <Text style={styles.metaInfo}>
-                {company.phone ? `Phone: ${company.phone}` : ''}
-                {company.phone && company.website ? ' | ' : ''}
-                {company.website ? `Website: ${company.website}` : ''}
-             </Text>
+            {/* Render the constructed address string */} 
+            {addressString ? <Text style={styles.metaInfo}>{addressString}</Text> : null}
+            {/* Render the constructed contact string */} 
+            {contactString ? <Text style={styles.metaInfo}>{contactString}</Text> : null}
           </View>
         )}
       </View>
     );
   };
 
-  const renderEditableField = (label: string, field: keyof ReportData, placeholder: string, multiline = true) => {
+  // Renders each item in an editable list (simple text, issue, material)
+  const renderListItem = (
+    listField: keyof ReportData,
+    item: any,
+    index: number,
+    totalItems: number,
+    itemType: 'simple' | 'issue' | 'material',
+    placeholder: string
+  ) => {
+    const isFirst = index === 0;
+    const isLast = index === totalItems - 1;
+
     return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{label}</Text>
-        <TextInput
-          style={[styles.editable, styles.textInput]}
-          value={editedData ? String(editedData[field] || '') : ''}
-          onChangeText={(text) => handleTextChange(field, text)}
-          placeholder={placeholder}
-          placeholderTextColor="#999"
-          multiline={multiline}
-          editable={loading === false} // Disable during loading/saving
-        />
+      <View 
+        key={`${listField}-${index}`} 
+        style={[
+          styles.rowContainer, // Base row style
+          isFirst && styles.firstRowInSection, // Add top border if first
+          // No bottom border needed if rendered inside a section container?
+          // isLast && { borderBottomWidth: 0 } 
+        ]}
+      >
+        <View style={styles.rowContentContainer}> 
+          {/* Render specific inputs based on type */}
+          {itemType === 'simple' && (
+            <TextInput
+              style={styles.rowInput} // Simplified input style
+              value={String(item)}
+              onChangeText={(text) => handleListChange(listField, index, null, text)}
+              placeholder={placeholder}
+              placeholderTextColor={colors.textSecondary}
+              editable={loading === false}
+              multiline
+            />
+          )}
+          {itemType === 'material' && (
+             <View style={styles.rowMultiInputContainer}>
+               <Text style={styles.fieldLabel}>Name:</Text>
+               <TextInput style={styles.rowInput} value={item.materialName || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'materialName', text)} placeholder="Material Name" placeholderTextColor={colors.textSecondary} editable={loading === false} />
+               <Text style={styles.fieldLabel}>Status:</Text>
+               <TextInput style={styles.rowInput} value={item.status || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'status', text)} placeholder="Status (e.g., Delivered, Installed)" placeholderTextColor={colors.textSecondary} editable={loading === false} />
+               <Text style={styles.fieldLabel}>Note:</Text>
+               <TextInput style={styles.rowInput} value={item.note || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'note', text)} placeholder="Optional Note" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline />
+             </View>
+          )}
+          {itemType === 'issue' && (
+            <View style={styles.rowMultiInputContainer}>
+               <Text style={styles.fieldLabel}>Description:</Text>
+               <TextInput style={styles.rowInput} value={item.description || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'description', text)} placeholder="Issue Description" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
+               <Text style={styles.fieldLabel}>Status:</Text>
+               {/* TODO: Implement Picker */} 
+               <TextInput style={styles.rowInput} value={item.status || 'Open'} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'status', text)} placeholder="Open / Resolved / Needs Monitoring" placeholderTextColor={colors.textSecondary} editable={loading === false} />
+               <Text style={styles.fieldLabel}>Impact:</Text>
+               <TextInput style={styles.rowInput} value={item.impact || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'impact', text)} placeholder="Impact (Optional)" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
+               <Text style={styles.fieldLabel}>Resolution:</Text>
+               <TextInput style={styles.rowInput} value={item.resolution || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'resolution', text)} placeholder="Resolution (Optional)" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
+             </View>
+          )}
+        </View>
+         {/* Remove Button - Positioned absolutely or within the row */}
+         <TouchableOpacity
+           style={styles.removeItemButton} // Adjusted style?
+           onPress={() => removeItemFromList(listField, index)}
+           disabled={!!loading}
+         >
+            <Ionicons name="remove-circle-outline" size={24} color={colors.error} />
+         </TouchableOpacity>
       </View>
     );
   };
 
-  const renderEditableList = (
-     label: string,
-     listField: keyof ReportData,
-     itemType: 'simple' | 'issue' | 'material',
-     placeholder: string
-   ) => {
-     const listItems = editedData ? (editedData[listField] as any[] || []) : [];
+  // Renders the button to add a new item to a list
+  const renderAddItemButton = (label: string, listField: keyof ReportData, itemType: 'simple' | 'issue' | 'material') => {
+    return (
+      <TouchableOpacity
+        style={[styles.rowContainer, styles.addItemRow]} // Style as a tappable row
+        onPress={() => addItemToList(listField, itemType)}
+        disabled={!!loading}
+      >
+         <Ionicons name="add-circle-outline" size={22} color={colors.primary} style={styles.addRowIcon} />
+         <Text style={styles.addRowText}>Add {label.slice(0,-1)}</Text>
+         <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} />
+      </TouchableOpacity>
+    );
+  };
 
-     return (
-       <View style={styles.section}>
-         <Text style={styles.sectionTitle}>{label}</Text>
-         {listItems.length === 0 && <Text style={styles.placeholderText}>No items added yet.</Text>}
-         {listItems.map((item, index) => (
-           <View key={`${listField}-${index}`} style={styles.listItem}>
-             {itemType === 'simple' && (
-               <TextInput
-                 style={[styles.editable, styles.textInput, styles.listItemInput]}
-                 value={String(item)}
-                 onChangeText={(text) => handleListChange(listField, index, null, text)}
-                 placeholder={placeholder}
-                 placeholderTextColor="#999"
-                 editable={loading === false}
-                 multiline
-               />
-             )}
-             {itemType === 'material' && (
-               <View>
-                 <Text style={styles.fieldLabel}>Name:</Text>
-                 <TextInput
-                   style={[styles.editable, styles.textInput, styles.listItemInput]}
-                   value={item.materialName || ''}
-                   onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'materialName', text)}
-                   placeholder="Material Name"
-                   placeholderTextColor="#999"
-                   editable={loading === false}
-                 />
-                  <Text style={styles.fieldLabel}>Status:</Text>
-                  <TextInput
-                    style={[styles.editable, styles.textInput, styles.listItemInput]}
-                    value={item.status || ''}
-                    onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'status', text)}
-                    placeholder="Status (e.g., Delivered, Installed)"
-                    placeholderTextColor="#999"
-                    editable={loading === false}
-                  />
-                   <Text style={styles.fieldLabel}>Note:</Text>
-                   <TextInput
-                     style={[styles.editable, styles.textInput, styles.listItemInput]}
-                     value={item.note || ''}
-                     onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'note', text)}
-                     placeholder="Optional Note"
-                     placeholderTextColor="#999"
-                     editable={loading === false}
-                     multiline
-                   />
-               </View>
-             )}
-              {itemType === 'issue' && (
-                <View>
-                  <Text style={styles.fieldLabel}>Description:</Text>
-                  <TextInput
-                    style={[styles.editable, styles.textInput, styles.listItemInput]}
-                    value={item.description || ''}
-                    onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'description', text)}
-                    placeholder="Issue Description"
-                    placeholderTextColor="#999"
-                    editable={loading === false}
-                    multiline
-                  />
-                   {/* TODO: Implement a Picker for status */}
-                   <Text style={styles.fieldLabel}>Status:</Text>
-                   <TextInput
-                       style={[styles.editable, styles.textInput, styles.listItemInput]}
-                       value={item.status || 'Open'}
-                       onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'status', text)}
-                       placeholder="Open / Resolved / Needs Monitoring"
-                       placeholderTextColor="#999"
-                       editable={loading === false}
-                   />
-                   <Text style={styles.fieldLabel}>Impact:</Text>
-                   <TextInput
-                     style={[styles.editable, styles.textInput, styles.listItemInput]}
-                     value={item.impact || ''}
-                     onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'impact', text)}
-                     placeholder="Impact (Optional)"
-                     placeholderTextColor="#999"
-                     editable={loading === false}
-                     multiline
-                   />
-                    <Text style={styles.fieldLabel}>Resolution:</Text>
-                    <TextInput
-                      style={[styles.editable, styles.textInput, styles.listItemInput]}
-                      value={item.resolution || ''}
-                      onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'resolution', text)}
-                      placeholder="Resolution (Optional)"
-                      placeholderTextColor="#999"
-                      editable={loading === false}
-                      multiline
-                    />
+  // Renders each image item (preview, caption input, remove button)
+  const renderImageItem = (img: ReportImage, index: number, totalItems: number) => {
+    const imageUrl = img.s3Url || null; 
+    const isFirst = index === 0;
+    const isLast = index === totalItems - 1;
+
+    return (
+      <View 
+        key={img.fileName || index} 
+        style={[ 
+          styles.rowContainer, // Use row style
+          styles.imageItemRow, // Specific padding/style for image row
+          isFirst && styles.firstRowInSection, 
+        ]}
+      >
+        <View style={styles.imageItemContent}> 
+            {imageUrl ? (
+                <Image source={{ uri: imageUrl }} style={styles.imagePreview} resizeMode="cover" />
+            ) : (
+                <View style={styles.imagePreviewPlaceholder}>
+                    <Ionicons name="image-outline" size={40} color={colors.border} />
+                    <Text style={styles.placeholderTextSmall}>Preview unavailable</Text>
                 </View>
-              )}
-              <TouchableOpacity
-                style={styles.removeItemButton}
-                onPress={() => removeItemFromList(listField, index)}
-                disabled={!!loading} // Disable button when loading
-              >
-                 <Text style={styles.removeItemButtonText}>&times;</Text>
-              </TouchableOpacity>
-           </View>
-         ))}
+            )}
+            <View style={styles.captionContainer}>
+                <Text style={styles.fieldLabel}>Caption:</Text>
+                <TextInput
+                    style={styles.rowInput} // Use row input style
+                    value={img.caption || ''}
+                    onChangeText={(text) => handleCaptionChange(index, text)}
+                    placeholder="Enter caption..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    editable={loading === false}
+                />
+            </View>
+        </View>
          <TouchableOpacity
-           style={styles.addItemButton}
-           onPress={() => addItemToList(listField, itemType)}
-           disabled={!!loading} // Disable button when loading
+             style={styles.removeImageButton} // Specific style for image remove
+             onPress={() => handleRemoveImage(img.fileName)}
+             disabled={!!loading}
          >
-            <Text style={styles.addItemButtonText}>+ Add {itemType === 'simple' ? 'Item' : label.slice(0,-1)}</Text>
+            <Ionicons name="trash-outline" size={22} color={colors.error} />
          </TouchableOpacity>
-       </View>
-     );
-   };
+      </View>
+    );
+  };
 
-  const renderImageGallery = () => {
-     const images = editedData?.images || [];
-     // Function to construct full URL safely
-     const getImageUrl = (img: ReportImage): string | null => {
-        if (img.s3Url) return img.s3Url;
-        if (imageBaseUrl && img.fileName) {
-            const base = imageBaseUrl.endsWith('/') ? imageBaseUrl : imageBaseUrl + '/';
-            return `${base}extracted_frames/${img.fileName}`;
-        }
-        return null; // Cannot determine URL
-     };
-
-
-     return (
-       <View style={styles.section}>
-         <Text style={styles.sectionTitle}>Images</Text>
-         <Text style={styles.descriptionText}>Edit captions or remove images. Add new images using the button below.</Text>
-         {editedData && images.length === 0 && loading === false && (
-             <Text style={styles.placeholderText}>No images currently added to the report.</Text>
+ // Renders the button to trigger image upload
+  const renderUploadImageButton = () => {
+    return (
+      <TouchableOpacity
+        style={[styles.rowContainer, styles.addItemRow]} // Style as tappable row
+        onPress={pickImage}
+        disabled={!!loading}
+      >
+         <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} style={styles.addRowIcon}/>
+         <Text style={styles.addRowText}>Choose & Upload Image</Text>
+         {loading === 'uploading' ? (
+             <ActivityIndicator size="small" color={colors.textSecondary} />
+         ) : (
+             <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} />
          )}
-         {loading === 'removing' && <ActivityIndicator style={{ marginVertical: 10 }} />}
-         {images.map((img, index) => {
-           const imageUrl = getImageUrl(img);
-           return (
-               <View key={img.fileName || index} style={styles.imageItem}>
-                    {imageUrl ? (
-                       <Image
-                           source={{ uri: imageUrl }}
-                           style={styles.imagePreview}
-                           resizeMode="contain"
-                       />
-                    ) : (
-                        <Text style={styles.errorTextSmall}>Could not load image: {img.fileName}</Text>
-                    )}
-                   <Text style={styles.fieldLabel}>Caption:</Text>
-                   <TextInput
-                       style={[styles.editable, styles.textInput, styles.captionInput]}
-                       value={img.caption || ''}
-                       onChangeText={(text) => handleCaptionChange(index, text)}
-                       placeholder="Enter caption..."
-                       placeholderTextColor="#999"
-                       multiline
-                       editable={loading === false}
-                   />
-                   <TouchableOpacity
-                       style={[styles.actionButton, styles.removeButton]}
-                       onPress={() => handleRemoveImage(img.fileName)}
-                       disabled={!!loading}
-                   >
-                      <Text style={styles.actionButtonText}>Remove from Report</Text>
-                   </TouchableOpacity>
-               </View>
-           );
-         })}
+      </TouchableOpacity>
+    );
+  };
 
-          {/* Upload Section */}
-         <View style={styles.uploadContainer}>
-            <TouchableOpacity
-                style={[styles.actionButton, styles.uploadButton]}
-                onPress={pickImage}
-                disabled={!!loading} // Disable while initial loading, saving, removing, or uploading
-            >
-                <Text style={styles.actionButtonText}>Choose & Upload Image</Text>
-            </TouchableOpacity>
-             {loading === 'uploading' && (
-               <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10 }}>
-                  <ActivityIndicator size="small" />
-                  <Text style={{ marginLeft: 5, color: '#666' }}>Uploading...</Text>
-               </View>
-             )}
-         </View>
-       </View>
-     );
-   };
-
-  // --- Main Return ---
+  // --- Main Return (Structure uses Sections and Rows)
 
   if (loading === 'initial') {
     return (
@@ -789,315 +785,380 @@ export default function ReportEditorScreen({ route, navigation }: ReportEditorSc
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
          {renderMetadata()}
 
-          {/* Save Button and Status */}
-          <View style={styles.saveSection}>
-             <TouchableOpacity
-               style={[styles.button, styles.saveButton, loading !== false && styles.buttonDisabled]}
-               onPress={saveChanges}
-               disabled={loading !== false}
-             >
-                {loading === 'saving' ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                    <Text style={styles.buttonText}>Save Changes</Text>
-                )}
-             </TouchableOpacity>
-          </View>
+         {/* Status Messages */} 
           {statusMessage && (
-             <Text style={[styles.statusText, statusMessage.type === 'success' ? styles.statusSuccess : styles.statusError]}>
-               {statusMessage.message}
-             </Text>
+             <View style={styles.statusContainer}> 
+               <Text style={[styles.statusText, statusMessage.type === 'success' ? styles.statusSuccess : styles.statusError]}>
+                 {statusMessage.message}
+               </Text>
+             </View>
           )}
-          {error && !statusMessage && <Text style={styles.statusError}>{error}</Text> }
+          {error && !statusMessage && 
+            <View style={styles.statusContainer}>
+              {/* Ensure error text gets base styles too */}
+              <Text style={[styles.statusText, styles.statusError]}>{error}</Text>
+            </View> 
+          }
 
-          {/* Render editable sections only if data is loaded */}
+         {/* Render sections using row components */} 
          {editedData ? (
              <>
-                {renderEditableField('Narrative', 'narrative', 'Enter narrative...', true)}
-                {renderEditableList('Work Completed', 'workCompleted', 'simple', 'Describe work completed...')}
-                {renderEditableList('Issues', 'issues', 'issue', 'Describe issue...')}
-                {renderEditableList('Materials', 'materials', 'material', 'Material name...')}
-                {renderEditableField('Safety Observations', 'safetyObservations', 'Enter safety observations...', true)}
-                {renderEditableList('Next Steps', 'nextSteps', 'simple', 'Describe next step...')}
-                {renderImageGallery()}
-            </>
+               {/* Narrative Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Narrative</Text>
+                 <View style={[styles.rowContainer, styles.firstRowInSection]}> 
+                    <TextInput
+                      style={styles.rowInput} // Use row input style
+                      value={editedData.narrative || ''}
+                      onChangeText={(text) => handleTextChange('narrative', text)}
+                      placeholder="Enter narrative..."
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      editable={loading === false}
+                    />
+                  </View>
+               </View>
+
+               {/* Work Completed Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Work Completed</Text>
+                 <>
+                   {(editedData.workCompleted || []).map((item, index, arr) => 
+                      renderListItem('workCompleted', item, index, arr.length, 'simple', 'Describe work completed...')
+                   )}
+                 </>
+                 {renderAddItemButton('Work Completed', 'workCompleted', 'simple')}
+               </View>
+
+               {/* Issues Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Issues</Text>
+                 <>
+                   {(editedData.issues || []).map((item, index, arr) => 
+                     renderListItem('issues', item, index, arr.length, 'issue', 'Describe issue...')
+                   )}
+                 </>
+                 {renderAddItemButton('Issues', 'issues', 'issue')}
+               </View>
+
+               {/* Materials Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Materials</Text>
+                 <>
+                   {(editedData.materials || []).map((item, index, arr) => 
+                      renderListItem('materials', item, index, arr.length, 'material', 'Material name...')
+                   )}
+                 </>
+                 {renderAddItemButton('Materials', 'materials', 'material')}
+               </View>
+
+               {/* Safety Observations Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Safety Observations</Text>
+                 <View style={[styles.rowContainer, styles.firstRowInSection]}> 
+                    <TextInput
+                      style={styles.rowInput}
+                      value={editedData.safetyObservations || ''}
+                      onChangeText={(text) => handleTextChange('safetyObservations', text)}
+                      placeholder="Enter safety observations..."
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      editable={loading === false}
+                    />
+                 </View>
+               </View>
+
+               {/* Next Steps Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Next Steps</Text>
+                 <>
+                   {(editedData.nextSteps || []).map((item, index, arr) => 
+                     renderListItem('nextSteps', item, index, arr.length, 'simple', 'Describe next step...')
+                   )}
+                 </>
+                 {renderAddItemButton('Next Steps', 'nextSteps', 'simple')}
+               </View>
+
+               {/* Images Section */} 
+               <View style={styles.sectionContainer}>
+                 <Text style={styles.sectionHeader}>Images</Text>
+                 <>
+                   {(editedData.images || []).map((item, index, arr) => 
+                     renderImageItem(item, index, arr.length)
+                   )}
+                 </>
+                 {renderUploadImageButton()}
+               </View>
+             </>
          ) : (
-             <Text style={styles.placeholderText}>Report data could not be loaded or is empty.</Text> // Should not happen if error handling is correct
+             !error && <View style={styles.sectionContainer}><Text style={styles.placeholderText}>Report data not available.</Text></View> 
          )}
 
-         {/* Add some bottom padding */}
-         <View style={{ height: 40 }} />
+         <View style={{ height: 60 }} /> {/* Extra bottom padding */} 
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 
-// --- Styles --- (Adapted from report-editor.html and general RN practices)
+// --- Styles --- (Row-based Refactor)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background, // Use theme token
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
-    padding: spacing.md, // Use theme token
+    // No outer padding, sections handle it?
   },
-  centered: {
+  centered: { // For loading/error states
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.lg, // Use theme token
+    padding: spacing.lg,
+    backgroundColor: colors.background,
   },
   loadingText: {
-    marginTop: spacing.sm, // Use theme token
-    fontSize: typography.fontSizeM, // Use theme token
-    color: colors.textSecondary, // Use theme token
+    marginTop: spacing.sm,
+    fontSize: typography.fontSizeM,
+    color: colors.textSecondary,
   },
-  errorText: {
-    color: colors.error, // Use theme token
-    fontSize: typography.fontSizeM, // Use theme token
+  errorText: { 
+    color: colors.error,
+    fontSize: typography.fontSizeM,
     textAlign: 'center',
-    marginBottom: spacing.md, // Use theme token
-    fontWeight: typography.fontWeightBold as '600', // Use theme token and cast
+    marginBottom: spacing.md,
+    fontWeight: typography.fontWeightBold as '600',
   },
-   errorTextSmall: {
-      color: colors.error, // Use theme token
-      fontSize: typography.fontSizeXS, // Use theme token
+  placeholderText: { // Used when lists are empty
+      fontSize: typography.fontSizeS,
+      color: colors.textSecondary,
+      fontStyle: 'italic',
+      textAlign: 'center', 
+      paddingVertical: spacing.lg, // Add padding if it's the only thing shown
+  },
+   placeholderTextSmall: { // Used inside image placeholder
+      fontSize: typography.fontSizeXS,
+      color: colors.textSecondary,
+      fontStyle: 'italic',
       textAlign: 'center',
-      marginVertical: spacing.sm, // Use theme token
+      marginTop: spacing.xs,
    },
-  header: {
+  metaContainer: { // Container for top metadata
     alignItems: 'center',
-    marginBottom: spacing.lg, // Use theme token
-    paddingBottom: spacing.md, // Use theme token
-    borderBottomWidth: borders.widthThin, // Use theme token
-    borderBottomColor: colors.border, // Use theme token
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md, 
   },
   logo: {
-    maxHeight: 60,
-    width: '60%', // Adjust width as needed
-    marginBottom: spacing.md, // Use theme token
+    maxHeight: 50, // Slightly smaller logo
+    width: '50%',
+    marginBottom: spacing.md,
   },
   mainTitle: {
-    fontSize: typography.fontSizeXL, // Use theme token (Adjusted from 22)
-    fontWeight: typography.fontWeightBold as '600', // Use theme token and cast
-    color: colors.textPrimary, // Use theme token
-    marginBottom: spacing.xs, // Use theme token
+    fontSize: typography.fontSizeXL,
+    fontWeight: typography.fontWeightBold as '600',
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
   },
   metaInfo: {
-    fontSize: typography.fontSizeXS, // Use theme token (Adjusted from 13)
-    color: colors.textSecondary, // Use theme token
+    fontSize: typography.fontSizeS,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.xs, // Use theme token
-    lineHeight: typography.lineHeightS, // Use lineHeightS
+    marginBottom: spacing.xs,
+    lineHeight: typography.lineHeightS,
   },
   companyInfo: {
-    marginTop: spacing.sm, // Use theme token
+    marginTop: spacing.md,
   },
   companyName: {
-      fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-      fontSize: typography.fontSizeXS, // Use theme token
-      color: colors.textPrimary, // Use theme token
+      fontWeight: typography.fontWeightMedium as '500',
+      fontSize: typography.fontSizeS,
+      color: colors.textPrimary,
       textAlign: 'center',
-      marginBottom: spacing.xs, // Use theme token
+      marginBottom: spacing.xs,
   },
-  saveSection: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      marginBottom: spacing.md, // Use theme token
-      marginTop: -spacing.xs, // Use theme token (Adjusted)
+  statusContainer: {
+     marginHorizontal: spacing.lg,
+     marginBottom: spacing.md, // Space below status
   },
-  button: {
-    paddingVertical: spacing.sm, // Use theme token (Adjusted from 10)
-    paddingHorizontal: spacing.lg, // Use theme token
-    borderRadius: borders.radiusMedium, // Use theme token
-    backgroundColor: colors.primary, // Use theme token
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 100,
-  },
-  saveButton: {
-      // Specific styles if needed, uses general button style
-  },
-  buttonText: {
-    color: colors.surface, // Use theme token (for white)
-    fontSize: typography.fontSizeM, // Use theme token
-    fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-  },
-  buttonDisabled: {
-    backgroundColor: colors.textDisabled, // Use theme token
-  },
-  statusText: {
+  statusText: { // Base style for status messages (success/error)
       textAlign: 'center',
-      marginTop: -spacing.xs, // Use theme token (Adjusted)
-      marginBottom: spacing.md, // Use theme token
-      paddingVertical: spacing.sm, // Use theme token
-      paddingHorizontal: spacing.sm, // Use theme token
-      borderRadius: borders.radiusMedium, // Use theme token
-      fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-      fontSize: typography.fontSizeXS, // Use theme token
-      overflow: 'hidden', // Ensure background color respects border radius
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      borderRadius: borders.radiusSmall, // Smaller radius
+      fontWeight: typography.fontWeightMedium as '500',
+      fontSize: typography.fontSizeXS,
+      overflow: 'hidden',
+      borderWidth: borders.widthThin,
   },
   statusSuccess: {
-      backgroundColor: colors.successBg, // Use theme token
-      color: colors.successText, // Use theme token
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.successBorder, // Use theme token
+      backgroundColor: colors.successBg,
+      color: colors.successText,
+      borderColor: colors.successBorder,
   },
   statusError: {
-      backgroundColor: colors.errorBg, // Use theme token
-      color: colors.error, // Use theme token
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.errorBorder, // Use theme token
+      backgroundColor: colors.errorBg,
+      color: colors.error,
+      borderColor: colors.errorBorder,
   },
-  section: {
-    marginBottom: spacing.xl, // Use theme token
-    backgroundColor: colors.surface, // Use theme token
-    padding: spacing.md, // Use theme token
-    borderRadius: borders.radiusLarge, // Use theme token
-    borderWidth: borders.widthThin, // Use theme token
-    borderColor: colors.border, // Use theme token (Adjusted from #e0e0e0)
+  sectionContainer: { // Wrapper for a logical section (Header + Rows)
+      marginBottom: spacing.xl, // Space between sections
   },
-  sectionTitle: {
-    fontSize: typography.fontSizeL, // Use theme token (Adjusted from 18)
-    fontWeight: typography.fontWeightBold as '600', // Use theme token and cast
-    color: colors.textPrimary, // Use theme token
-    marginBottom: spacing.md, // Use theme token
-    paddingBottom: spacing.sm, // Use theme token
-    borderBottomWidth: borders.widthThin, // Use theme token
-    borderBottomColor: colors.border, // Use theme token (Adjusted from #eee)
+  sectionHeader: { // Style for the header text of each section
+      paddingBottom: spacing.xs,
+      marginBottom: spacing.xxs,
+      paddingHorizontal: spacing.lg,
+      color: colors.textSecondary,
+      fontSize: typography.fontSizeS,
+      fontWeight: typography.fontWeightMedium as '500',
+      textTransform: 'uppercase',
   },
-  descriptionText: {
-      fontSize: typography.fontSizeXS, // Use theme token (Adjusted from 13)
-      color: colors.textSecondary, // Use theme token
-      marginBottom: spacing.md, // Use theme token
-      fontStyle: 'italic',
-      lineHeight: typography.lineHeightS, // Use lineHeightS
+  rowContainer: { // Base style for a row containing inputs or text
+      backgroundColor: colors.surface,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'flex-start', // Align items to top for multiline text
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+      minHeight: 48, 
   },
-  editable: {
-    fontSize: typography.fontSizeS, // Use theme token
-    lineHeight: typography.lineHeightS, // Use lineHeightS
+  firstRowInSection: { // Style applied to the first row in a section
+      borderTopWidth: borders.widthHairline,
+      borderTopColor: colors.borderLight,
   },
-  textInput: {
-    borderColor: colors.border, // Use theme token
-    borderWidth: borders.widthThin, // Use theme token
-    borderRadius: borders.radiusMedium, // Use theme token
-    padding: spacing.sm, // Use theme token
-    backgroundColor: colors.surface, // Use theme token
-    minHeight: 50, // Minimum height for single/multi-line
-    textAlignVertical: 'top', // Align text to top for multiline
+  rowContentContainer: { // Holds the main content (inputs) within a row
+     flex: 1, // Take available space
+     marginRight: spacing.sm, // Space before remove button
   },
-  listItem: {
-      backgroundColor: colors.surfaceAlt, // Use theme token
-      padding: spacing.sm, // Use theme token
-      borderRadius: borders.radiusMedium, // Use theme token
-      marginBottom: spacing.sm, // Use theme token
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.border, // Use theme token (Adjusted from #eee)
-      position: 'relative', // For absolute positioning remove button
+  rowInput: { // Style for TextInput within a row
+      fontSize: typography.fontSizeM,
+      color: colors.textPrimary,
+      paddingVertical: Platform.OS === 'ios' ? 6 : 4, // Minimal vertical padding
+      paddingHorizontal: 0, // No horizontal padding, handled by rowContainer
+      // Remove background/border, handled by rowContainer
+      // backgroundColor: colors.surface, 
+      // borderWidth: borders.widthThin, 
+      // borderColor: colors.borderLight, 
+      // borderRadius: borders.radiusMedium, 
+      textAlignVertical: 'top',
   },
-  listItemInput: {
-      marginBottom: spacing.sm, // Use theme token
-      minHeight: 40, // Smaller min height for list items
+  rowMultiInputContainer: { // Container for multiple labeled inputs within one row (e.g., Material/Issue)
+     // No specific style needed, just structure
   },
-  fieldLabel: {
-      fontSize: typography.fontSizeXS, // Use theme token (Adjusted from 13)
-      fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-      color: colors.textPrimary, // Use theme token (Adjusted from #444)
-      marginBottom: spacing.xs, // Use theme token
+  fieldLabel: { // Label for fields WITHIN a row (e.g., Issue Description)
+      fontSize: typography.fontSizeXS,
+      fontWeight: typography.fontWeightMedium as '500',
+      color: colors.textSecondary, 
+      marginBottom: spacing.xxs, // Less space for sub-labels
+      marginTop: spacing.xs, // Add some top margin if not the first label
   },
-  removeItemButton: {
-      position: 'absolute',
-      top: spacing.sm, // Use theme token
-      right: spacing.sm, // Use theme token
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: colors.errorBg, // Use theme token (Approximate match)
+  removeItemButton: { // Button to remove an item from a list (e.g., Issue)
+      padding: spacing.sm, // Tap area
+      // Position absolutely or adjust layout
+      // position: 'absolute', 
+      // top: spacing.sm,
+      // right: spacing.xs, 
+      marginLeft: 'auto', // Push to the right if in row direction
       justifyContent: 'center',
       alignItems: 'center',
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.errorBorder, // Use theme token (Approximate match)
   },
-  removeItemButtonText: {
-      color: colors.error, // Use theme token (Approximate match)
-      fontSize: typography.fontSizeL, // Use theme token (Adjusted from 18)
-      fontWeight: typography.fontWeightBold as '600', // Use theme token and cast
-      lineHeight: typography.fontSizeL, // Adjust for vertical centering
+  addItemRow: { // Style for the tappable row used to add items
+     justifyContent: 'space-between',
+     alignItems: 'center', // Center items vertically for add row
+     minHeight: 44, // Slightly smaller min height
+     paddingVertical: spacing.xs, // Less vertical padding
+     borderBottomWidth: 0, // No bottom border typically on add row
   },
-  addItemButton: {
-      marginTop: spacing.sm, // Use theme token
-      paddingVertical: spacing.sm, // Use theme token
-      paddingHorizontal: spacing.sm, // Use theme token
-      backgroundColor: colors.successBg, // Use theme token (Approximate match)
-      borderRadius: borders.radiusMedium, // Use theme token
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.successBorder, // Use theme token (Approximate match)
-      alignSelf: 'flex-start', // Align button to the left
+  addRowIcon: {
+     marginRight: spacing.md,
   },
-  addItemButtonText: {
-      color: colors.successText, // Use theme token (Approximate match)
-      fontSize: typography.fontSizeXS, // Use theme token
-      fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
+  addRowText: {
+     flex: 1,
+     fontSize: typography.fontSizeM,
+     color: colors.primary, 
+     fontWeight: typography.fontWeightMedium as '500',
   },
-  placeholderText: {
-      fontSize: typography.fontSizeXS, // Use theme token
-      color: colors.textSecondary, // Use theme token
-      fontStyle: 'italic',
-      textAlign: 'center',
-      marginTop: spacing.sm, // Use theme token
+  imageItemRow: { // Specific styles for image item rows
+     flexDirection: 'column', // Stack image, caption, button vertically
+     alignItems: 'stretch', // Stretch items horizontally
+     paddingVertical: spacing.md, // More vertical padding
   },
-  imageItem: {
-      backgroundColor: colors.surfaceAlt, // Use theme token
-      padding: spacing.sm, // Use theme token
-      borderRadius: borders.radiusLarge, // Use theme token
-      marginBottom: spacing.md, // Use theme token
-      borderWidth: borders.widthThin, // Use theme token
-      borderColor: colors.border, // Use theme token (Adjusted from #eee)
-      alignItems: 'center', // Center image and button
+  imageItemContent: {
+     // Holds image and caption
+     marginBottom: spacing.md, // Space before remove button
   },
   imagePreview: {
       width: '100%',
-      aspectRatio: 16 / 9, // Adjust aspect ratio as needed
-      marginBottom: spacing.sm, // Use theme token
-      borderRadius: borders.radiusMedium, // Use theme token
-      backgroundColor: colors.border, // Use theme token (Placeholder background)
+      aspectRatio: 16 / 9,
+      borderRadius: borders.radiusSmall,
+      backgroundColor: colors.borderLight,
+      marginBottom: spacing.md, // Space between preview and caption
   },
-  captionInput: {
-      minHeight: 40, // Shorter caption input
-      width: '100%', // Take full width
-      marginTop: spacing.xs, // Use theme token
-      marginBottom: spacing.sm, // Use theme token
+  imagePreviewPlaceholder: {
+      width: '100%',
+      aspectRatio: 16 / 9,
+      borderRadius: borders.radiusSmall,
+      backgroundColor: colors.surfaceAlt,
+      borderWidth: borders.widthHairline,
+      borderColor: colors.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: spacing.md,
   },
-  uploadContainer: {
-      marginTop: spacing.lg, // Use theme token
-      paddingTop: spacing.md, // Use theme token
-      borderTopWidth: borders.widthThin, // Use theme token
-      borderTopColor: colors.border, // Use theme token (Adjusted from #eee)
+  captionContainer: {
+     // Container for caption label + input
+  },
+  // captionInput uses rowInput style
+  removeImageButton: { // Button specifically for removing an image
+      alignSelf: 'flex-end', // Align button to the right
       flexDirection: 'row',
       alignItems: 'center',
+      padding: spacing.sm,
+      // Use error colors
+      // backgroundColor: colors.errorBg,
+      borderRadius: borders.radiusMedium,
+      borderWidth: borders.widthThin,
+      borderColor: colors.error,
   },
-  actionButton: {
-      paddingVertical: spacing.sm, // Use theme token
-      paddingHorizontal: spacing.md, // Use theme token
-      borderRadius: borders.radiusMedium, // Use theme token
-      alignSelf: 'center', // Center button in its container
-      marginTop: spacing.xs, // Use theme token
+  removeButtonText: { // Text for remove image button
+      color: colors.error,
+      fontSize: typography.fontSizeS,
+      fontWeight: typography.fontWeightMedium as '500',
+      marginLeft: spacing.xs,
   },
-  actionButtonText: {
-       color: colors.surface, // Use theme token (for white)
-       fontSize: typography.fontSizeXS, // Use theme token
-       fontWeight: typography.fontWeightMedium as '500', // Use theme token and cast
-   },
-  removeButton: {
-      backgroundColor: colors.errorBg, // Use theme token
-      borderColor: colors.errorBorder, // Use theme token
+  // uploadContainer removed as upload button is rendered via renderUploadImageButton
+  uploadActivityContainer: { // Style for upload spinner + text
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginLeft: spacing.sm,
+     paddingVertical: spacing.xs,
   },
-  removeButtonText: { // This style seems unused as remove button uses actionButtonText style?
-      color: colors.error, // Use theme token
+  uploadActivityText: {
+     marginLeft: spacing.xs,
+     color: colors.textSecondary,
+     fontSize: typography.fontSizeXS,
+     fontStyle: 'italic',
   },
-  uploadButton: {
-      backgroundColor: colors.primary, // Use theme token
+  // Uncomment base button styles needed for error state button
+  button: { 
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borders.radiusMedium,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44, 
+  },
+  buttonText: {
+    color: colors.textOnPrimary,
+    fontSize: typography.fontSizeM,
+    fontWeight: typography.fontWeightMedium as '500',
+  },
+  headerButton: { // Style for header icon buttons
+      paddingHorizontal: spacing.sm, // Reduce horizontal padding slightly
+      paddingVertical: spacing.xs, 
   },
 }); 

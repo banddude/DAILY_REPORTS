@@ -196,6 +196,25 @@ const styles = StyleSheet.create({
     height: 24, // Match icon size
     borderRadius: borders.radiusSmall, // Optional: round corners slightly
   },
+  logoutButtonContainer: {
+      backgroundColor: colors.surface, // Match row background
+      paddingHorizontal: spacing.lg, // Match row horizontal padding
+      paddingVertical: spacing.sm, // Match row vertical padding (use sm like other rows)
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center', // Center the text
+      borderBottomWidth: borders.widthHairline, // Match row border
+      borderBottomColor: colors.borderLight, // Match row border color
+      borderTopWidth: borders.widthHairline, // Match row border (as first in section)
+      borderTopColor: colors.borderLight, // Match row border color
+      minHeight: 44, // Match row min height
+  },
+  logoutButtonText: {
+      fontSize: typography.fontSizeM, // Match row label font size
+      color: colors.error, // Keep error color for logout
+      // fontWeight: typography.fontWeightMedium as '500', // Remove potential bolding to match standard labels
+      textAlign: 'center', // Keep text centered
+  },
 });
 
 // --- Utility to safely get/set nested properties (Adding set back) ---
@@ -332,7 +351,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // Tracks pull-to-refresh
   const [error, setError] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null); // <-- Add logoUrl state
-  const { userToken } = useAuth();
+  const { userToken, signOut } = useAuth(); // <-- Add signOut from useAuth
 
   // Modify fetchProfile to accept options
   const fetchProfile = useCallback(async (options: { isInitialLoad?: boolean, isRefresh?: boolean } = {}) => {
@@ -549,6 +568,14 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                     onPress={() => navigation.navigate('EditReportSchema')}
                     isLink={false}
                   />
+                </View>
+
+                {/* Logout Section */}
+                <View style={styles.section}>
+                  {/* Reuse existing TouchableOpacity and Text, just rely on updated styles */}
+                  <TouchableOpacity style={styles.logoutButtonContainer} onPress={signOut}>
+                      <Text style={styles.logoutButtonText}>Log Out</Text>
+                  </TouchableOpacity>
                 </View>
               </>
             ) : (

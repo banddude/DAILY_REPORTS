@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,14 @@ import {
   Image,
   Linking,
   Alert,
+  Share,
+  Button,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config';
+import { ReportViewerScreenProps as NavigationProps } from '../navigation/AppNavigator';
 
 // --- Types (Reusing types similar to ReportEditorScreen) ---
 interface CompanyInfo {
@@ -72,22 +76,15 @@ interface ReportData {
   images?: ReportImage[];
 }
 
-// Type for navigation props
-type ReportViewerScreenProps = {
-  route: {
-    params: {
-      reportKey: string;
-    };
-  };
-  navigation: any; // Replace with specific navigation type
-};
-
 // --- Configuration ---
 // TODO: Move to config.ts or environment variables
 // const API_BASE_URL = 'https://reports.shaffercon.com'; // <-- REMOVE THIS LINE
 
+// Define base URL for sharing - adjust if needed
+const REPORT_VIEWER_BASE_URL = 'https://reports.shaffercon.com/view';
+
 // --- Component ---
-export default function ReportViewerScreen({ route, navigation }: ReportViewerScreenProps): React.ReactElement {
+export default function ReportViewerScreen({ route, navigation }: NavigationProps): React.ReactElement {
   const { reportKey } = route.params;
 
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -95,7 +92,55 @@ export default function ReportViewerScreen({ route, navigation }: ReportViewerSc
   const [error, setError] = useState<string | null>(null);
   const [imageBaseUrl, setImageBaseUrl] = useState<string>('');
 
+  // --- Share Handler ---
+  const handleShare = async () => {
+    console.log('[ReportViewer] handleShare called. reportKey:', reportKey);
+    if (!reportKey) {
+      Alert.alert('Error', 'Cannot share report without a key.');
+      return;
+    }
+    const shareUrl = `${REPORT_VIEWER_BASE_URL}?key=${encodeURIComponent(reportKey)}`;
+    try {
+      const result = await Share.share({
+        message: 'View the daily report:',
+        url: shareUrl, // For iOS
+        title: 'Daily Report', // For Android
+      });
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          console.log('Shared with activity type:', result.activityType);
+        } else {
+          console.log('Shared successfully');
+        }
+      } else if (result.action === Share.dismissedAction) {
+        console.log('Share dismissed');
+      }
+    } catch (error: any) {
+      console.error('Error sharing report:', error);
+      Alert.alert('Error', `Failed to share report: ${error.message}`);
+    }
+  };
+
+  // --- Add Share Button to Header ---
+  useLayoutEffect(() => {
+    console.log(`[ReportViewer] useLayoutEffect running. Loading: ${loading}, Error: ${error}`);
+    navigation.setOptions({
+      headerRight: () => {
+        console.log(`[ReportViewer] Rendering headerRight. Disabled: ${loading || !!error}`);
+        return (
+          <Button
+             onPress={handleShare}
+             title="Share"
+             disabled={loading || !!error} // Disable if loading or error
+             color={Platform.OS === 'ios' ? colors.primary : undefined}
+           />
+        );
+      },
+    });
+  }, [navigation, handleShare, loading, error]); // Add dependencies
+
   useEffect(() => {
+    console.log('[ReportViewer] Main useEffect running. reportKey:', reportKey);
     if (!reportKey) {
       setError("Report key is missing. Cannot load report.");
       setLoading(false);

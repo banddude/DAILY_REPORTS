@@ -3,5 +3,15 @@
     "email": "mikejshaffer@gmail.com",
     "password": "password",
     "UUID": "3d9f9e22-bd78-447d-aa5f-2709027f704c"
+  },
+  {
+    "email": "mike@test.com",
+    "password": "tewKu8-vicryk-maxdos",
+    "UUID": "26540a4d-7520-4a1c-a889-0a8f872b8c90"
+  },
+  {
+    "email": "mike@mike.com",
+    "password": "hithere",
+    "UUID": "68a8dcbe-00a0-4903-96e3-78f9fb6d0603"
   }
-] 
+]
