@@ -15,6 +15,7 @@ import {
   Dimensions,
   TextInput,
   Button,
+  AlertButton,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -352,62 +353,167 @@ const HomeScreen: React.FC = () => {
     setModalConfig(null);
   };
 
-  // --- Image Picker Logic ---
-  const pickImage = async () => {
-    // Request permission
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please grant permission to access the photo library.');
-      return;
-    }
+  // --- Helper Function to process selected asset ---
+  const processSelectedAsset = (asset: ImagePicker.ImagePickerAsset | DocumentPicker.DocumentPickerAsset) => {
+    console.log('Processing asset:', asset.uri);
+    const isImage = asset.mimeType?.startsWith('image/');
+    const isVideo = asset.mimeType?.startsWith('video/');
 
-    // Launch image library
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Allow only images
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8, // Reduce quality slightly for upload
+    // Handle type differences for name and size correctly
+    const fileName = 'fileName' in asset ? asset.fileName : ('name' in asset ? asset.name : undefined);
+    const fileSize = 'fileSize' in asset ? asset.fileSize : ('size' in asset ? asset.size : undefined);
+    const mimeType = asset.mimeType;
+
+    setSelectedFile({
+      uri: asset.uri,
+      name: fileName || `${isImage ? 'image' : isVideo ? 'video' : 'file'}_${Date.now()}.${mimeType?.split('/')[1] || 'tmp'}`,
+      size: fileSize,
     });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const asset = result.assets[0];
-      console.log('Image selected:', asset.uri);
-      setSelectedFile({
-        uri: asset.uri,
-        name: asset.fileName || `image_${Date.now()}.jpg`, // Generate a name if needed
-        size: asset.fileSize,
-      });
-      setThumbnailUri(asset.uri); // For images, thumbnail is the image itself
-      setIsPreviewModalVisible(true); // Optionally open preview right away
-      setResult({ message: '', type: null, data: null }); // Clear previous result
+    if (isImage) {
+      setThumbnailUri(asset.uri); // Use image URI directly for thumbnail
+      setIsPreviewModalVisible(true);
+    } else if (isVideo) {
+      // Thumbnail generation for video is handled by the useEffect hook
+      setIsPreviewModalVisible(true); // Show preview modal for video too
+    } else {
+        Alert.alert('Unsupported File', 'Selected file is not a supported image or video.');
+        setSelectedFile(null);
+        setThumbnailUri(null);
+    }
+    setResult({ message: '', type: null, data: null }); // Clear previous result
+  };
+
+  // --- Media Source Selection ---
+  const showMediaSourceOptions = () => {
+    // Options specifically requested by user
+    const options: AlertButton[] = [
+      {
+        text: 'Photo Library', // Was 'Choose Video from Library'
+        onPress: () => pickMedia('library', 'video'),
+      },
+      {
+        text: 'Take Video', // Same as before
+        onPress: () => pickMedia('camera', 'video'),
+      },
+      {
+        text: 'Choose File', // Uses DocumentPicker
+        onPress: () => pickDocumentFile(), // Call separate function for DocumentPicker
+      },
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+    ];
+
+    // Web doesn't have the same camera/library/file distinction easily
+    // Keep it simple for web: choose video file (uses ImagePicker fallback)
+    const webOptions: AlertButton[] = [
+       { text: 'Choose Video', onPress: () => pickMedia('library', 'video') },
+       { text: 'Cancel', style: 'cancel' },
+    ];
+
+    Alert.alert(
+      'Select Video Source', // Updated title
+      'How would you like to select the video?', // Updated message
+      Platform.OS === 'web' ? webOptions : options, // Use correct options array
+      { cancelable: true }
+    );
+  };
+
+  // --- Unified Media Picker Logic (Handles Camera/Library via ImagePicker) ---
+  const pickMedia = async (source: 'camera' | 'library', type: 'video') => { // Only video type needed here now
+    let hasPermission = false;
+    if (source === 'camera') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+          Alert.alert('Permission Required', 'Camera permission is needed.');
+          return;
+      }
+      hasPermission = true;
+    } else { // source === 'library'
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+          Alert.alert('Permission Required', 'Media Library permission is needed.');
+          return;
+      }
+      hasPermission = true;
+    }
+
+    if (!hasPermission) return;
+
+    setResult({ message: '', type: null, data: null });
+    setThumbnailUri(null);
+    setSelectedFile(null);
+    setIsPreviewModalVisible(false);
+    setIsFileProcessing(true);
+
+    try {
+      let result: ImagePicker.ImagePickerResult | null = null;
+
+      if (source === 'camera') {
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          allowsEditing: false, // Editing usually not needed for video reports
+          quality: 0.8,
+        });
+      } else { // source === 'library'
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      }
+
+      console.log(`${source} ${type} Picker Result:`, JSON.stringify(result, null, 2));
+
+      if (result === null || result.canceled) {
+        console.log('Media selection cancelled or failed.');
+        setIsFileProcessing(false);
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0) {
+        // Use the existing helper to set state
+        processSelectedAsset(result.assets[0]);
+      } else {
+        console.log('No assets found in picker result.');
+        Alert.alert('Error', 'Failed to select media.');
+        setSelectedFile(null);
+        setThumbnailUri(null);
+      }
+    } catch (err) {
+      console.error(`Error picking media (${source}/${type}):`, err);
+      Alert.alert('Error', `Could not select media. ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setSelectedFile(null);
+      setThumbnailUri(null);
+    } finally {
+      setIsFileProcessing(false);
     }
   };
 
-  // --- Document/Video Picker Logic ---
-  async function pickDocument() {
-    console.log('Opening document/video picker...');
-    setResult({ message: '', type: null, data: null }); // Reset result
+  // --- Document Picker Logic (Handles 'Choose File') ---
+  const pickDocumentFile = async () => {
+    setResult({ message: '', type: null, data: null });
     setThumbnailUri(null);
-    setIsFileProcessing(true);
-    setSelectedFile(null); // Clear previous selection
+    setSelectedFile(null);
     setIsPreviewModalVisible(false);
+    setIsFileProcessing(true);
 
     try {
-      // Reset audio mode before picking
+      // Reset audio mode before picking if necessary (optional)
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
-        playsInSilentModeIOS: true, // Important for video preview
+        playsInSilentModeIOS: true,
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
 
       const result = await DocumentPicker.getDocumentAsync({
-        // type: ['video/*', 'image/*'], // Allow videos and images
-        type: ['video/*'], // Modify to specifically ask for video
+        type: 'video/*', // Only allow video selection
         copyToCacheDirectory: true,
       });
 
-      // Log the entire result object for debugging
       console.log('DocumentPicker Result:', JSON.stringify(result, null, 2));
 
       if (result.canceled) {
@@ -418,40 +524,30 @@ const HomeScreen: React.FC = () => {
 
       if (result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        console.log(`Selected file: Name=${asset.name}, URI=${asset.uri}, Size=${asset.size}, MIMEType=${asset.mimeType}`);
-
-        // Check if the selected file is a video based on MIME type
-        if (asset.mimeType && asset.mimeType.startsWith('video/')) {
-          setSelectedFile({
-            uri: asset.uri,
-            name: asset.name,
-            size: asset.size,
-          });
-          // Thumbnail generation is handled by the useEffect hook
+        // Basic check if it seems like a video
+        if (asset.mimeType?.startsWith('video/') || asset.name?.match(/\.(mov|mp4|avi|mkv|wmv)$/i)) {
+            processSelectedAsset(asset);
         } else {
-          // Handle non-video files if necessary, or show an error
-          console.warn('Selected file is not a video:', asset.mimeType);
-          Alert.alert('Invalid File Type', 'Please select a video file.');
-          setSelectedFile(null);
-          setThumbnailUri(null);
+            console.warn('Selected file via DocumentPicker might not be a video:', asset.mimeType, asset.name);
+            Alert.alert('Invalid File Type', 'Please select a valid video file.');
+            setSelectedFile(null);
+            setThumbnailUri(null);
         }
       } else {
         console.log('No assets found in DocumentPicker result.');
-        // Handle cases where assets array is unexpectedly empty
-        // Remove legacy fallback for result.uri
-        Alert.alert('Error', 'Failed to select a file.');
+        Alert.alert('Error', 'Failed to select file.');
         setSelectedFile(null);
         setThumbnailUri(null);
       }
     } catch (err) {
       console.error('Error picking document:', err);
-      Alert.alert('Error', 'Could not pick the document.');
+      Alert.alert('Error', `Could not pick the document. ${err instanceof Error ? err.message : 'Unknown error'}`);
       setSelectedFile(null);
       setThumbnailUri(null);
     } finally {
       setIsFileProcessing(false);
     }
-  }
+  };
 
   // --- Delete Logic ---
   const handleDeleteRequest = (type: 'customer' | 'project', name: string) => {
@@ -720,91 +816,59 @@ const HomeScreen: React.FC = () => {
             </View>
 
             <View style={styles.sectionContainer}>
-                <Text style={styles.sectionHeaderText}>Video</Text>
-                <View style={styles.uploadSectionContent}>
-                    <TouchableOpacity
-                      style={[
-                        styles.buttonBase,
-                        isGeneratingReport && styles.buttonDisabled,
-                        { borderTopWidth: borders.widthHairline, borderTopColor: colors.borderLight }
-                      ]}
-                      onPress={pickDocument}
-                      disabled={isGeneratingReport}
-                    >
-                        <View style={styles.buttonIconContainer}>
-                           <Ionicons name="videocam-outline" size={22} color={isGeneratingReport ? colors.textDisabled : colors.textSecondary} />
-                        </View>
-                        <Text style={[
-                            styles.buttonTextBase,
-                            isGeneratingReport && styles.buttonTextDisabled
-                        ]}>
-                            {selectedFile ? 'Change Video File' : 'Select or Record Video'}
-                        </Text>
-                        <View style={styles.buttonChevronContainer}>
-                           <Ionicons name="chevron-forward" size={22} color={isGeneratingReport ? colors.textDisabled : colors.textSecondary} />
-                        </View>
-                    </TouchableOpacity>
+                <Text style={styles.sectionHeaderText}>Media</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.buttonBase,
+                    isGeneratingReport && styles.buttonDisabled,
+                    { borderTopWidth: borders.widthHairline, borderTopColor: colors.borderLight }
+                  ]}
+                  // Temporarily bypass Alert on web for testing
+                  onPress={Platform.OS === 'web' ? () => pickMedia('library', 'video') : showMediaSourceOptions} 
+                  disabled={isGeneratingReport || isFileProcessing} // Disable during processing too
+                >
+                  <View style={styles.buttonIconContainer}>
+                     <Ionicons name={selectedFile ? "checkmark-circle-outline" : "add-circle-outline"} size={22} color={isGeneratingReport || isFileProcessing ? colors.textDisabled : (selectedFile ? colors.success : colors.textSecondary)} />
+                  </View>
+                  <Text style={[
+                      styles.buttonTextBase,
+                      (isGeneratingReport || isFileProcessing) && styles.buttonTextDisabled
+                  ]}>
+                      {isFileProcessing ? 'Processing...' : (selectedFile ? 'Change Media' : 'Select Image or Video')}
+                  </Text>
+                  <View style={styles.buttonChevronContainer}>
+                     {isFileProcessing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : <Ionicons name="chevron-forward" size={22} color={isGeneratingReport || isFileProcessing ? colors.textDisabled : colors.textSecondary} />} 
+                  </View>
+                </TouchableOpacity>
 
-                    {selectedFile && (
-                        <TouchableOpacity
-                            style={styles.thumbnailContainer}
-                            onPress={() => {
-                                console.log('Opening preview for video:', JSON.stringify(selectedFile, null, 2));
-                                setIsPreviewModalVisible(true);
-                            }}
-                            disabled={!thumbnailUri && !isFileProcessing}
-                        >
-                          {thumbnailUri ? (
-                              <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} resizeMode="cover" />
-                          ) : (isFileProcessing || isGeneratingThumbnail) ? (
-                              <View style={styles.thumbnailPlaceholder}>
-                                 <ActivityIndicator size="small" color={colors.textSecondary} />
-                              </View>
-                          ) : (
-                             <View style={styles.thumbnailPlaceholder}>
-                                <Ionicons name="image-outline" size={24} color={colors.textSecondary} />
-                             </View>
-                          )}
-                          <Text style={styles.thumbnailFilenameText} numberOfLines={1} ellipsizeMode="middle">
-                              {selectedFile.name}
-                          </Text>
-                          <View style={styles.playIconOverlay}>
-                             <Ionicons name="play-circle-outline" size={24} color="rgba(255, 255, 255, 0.8)" />
-                          </View>
+                {/* Preview Area - simplified, relies on thumbnailUri */} 
+                {(isGeneratingThumbnail || selectedFile) && (
+                  <View style={styles.thumbnailContainer}> 
+                     {isGeneratingThumbnail ? (
+                        <View style={styles.thumbnailPlaceholder}> 
+                            <ActivityIndicator size="small" color={colors.textSecondary} />
+                            <Text style={styles.thumbnailPlaceholderText}>Generating preview...</Text>
+                        </View>
+                     ) : thumbnailUri ? (
+                        <TouchableOpacity onPress={() => selectedFile && setIsPreviewModalVisible(true)}> 
+                           <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} /> 
                         </TouchableOpacity>
-                    )}
-
-                    <TouchableOpacity
-                        style={[
-                            styles.buttonBase,
-                            (!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport) && styles.buttonDisabled,
-                            { borderBottomWidth: 0 }
-                        ]}
-                        onPress={handleUpload}
-                        disabled={!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport}
-                    >
-                        <View style={styles.buttonIconContainer}>
-                           <Ionicons name="document-text-outline" size={22} color={(!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport) ? colors.textDisabled : colors.textSecondary} />
+                     ) : (
+                        <View style={styles.thumbnailPlaceholder}> 
+                            <Ionicons name="videocam-off-outline" size={30} color={colors.border} /> 
+                            <Text style={styles.thumbnailPlaceholderText}>Preview unavailable</Text>
                         </View>
-                        <Text style={[
-                            styles.buttonTextBase,
-                            !((!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport)) && { color: colors.textPrimary },
-                            (!selectedFile || !selectedCustomer || !selectedProject || isGeneratingReport) && styles.buttonTextDisabled
-                        ]}>
-                            {isGeneratingReport ? 'Generating...' : 'Generate Report'}
-                        </Text>
-                        <View style={styles.buttonChevronContainer}>
-                            {isGeneratingReport ? (
-                                <ActivityIndicator
-                                    size="small"
-                                    color={colors.textDisabled}
-                                />
-                            ) : (
-                               <Ionicons name="chevron-forward" size={22} color={(!selectedFile || !selectedCustomer || !selectedProject) ? colors.textDisabled : colors.textSecondary} />
-                            )}
-                        </View>
-                    </TouchableOpacity>
-                 </View>
+                     )}
+                     {selectedFile && !isGeneratingThumbnail && (
+                         <View style={styles.thumbnailInfoContainer}> 
+                             <Text style={styles.thumbnailFileName} numberOfLines={1}>{selectedFile.name}</Text> 
+                             <TouchableOpacity onPress={() => { setSelectedFile(null); setThumbnailUri(null); }} style={styles.thumbnailClearButton}> 
+                                 <Ionicons name="close-circle" size={20} color={colors.textSecondary} /> 
+                             </TouchableOpacity> 
+                         </View>
+                     )}
+                  </View>
+                )}
             </View>
 
             {renderResultArea()}
@@ -1023,45 +1087,55 @@ const styles = StyleSheet.create({
   buttonActivityIndicator: {
   },
   thumbnailContainer: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.lg,
-      backgroundColor: colors.surface,
-      borderBottomWidth: borders.widthHairline,
-      borderBottomColor: colors.borderLight,
-      alignItems: 'center',
-      flexDirection: 'row',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    padding: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: borders.radiusMedium,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  thumbnailImage: {
-     width: 60,
-     height: 60,
-     borderRadius: borders.radiusSmall,
-     marginRight: spacing.md,
-     backgroundColor: colors.borderLight,
+  thumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: borders.radiusSmall,
+    backgroundColor: colors.borderLight,
   },
   thumbnailPlaceholder: {
-     width: 60,
-     height: 60,
-     borderRadius: borders.radiusSmall,
-     marginRight: spacing.md,
-     backgroundColor: colors.surfaceAlt,
-     justifyContent: 'center',
-     alignItems: 'center',
+    width: 60,
+    height: 60,
+    borderRadius: borders.radiusSmall,
+    backgroundColor: colors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.xs,
   },
-  thumbnailFilenameText: {
-     flex: 1,
-     fontSize: typography.fontSizeS,
-     color: colors.textSecondary,
-     fontStyle: 'italic',
-     textAlign: 'left',
+  thumbnailPlaceholderText: {
+      fontSize: typography.fontSizeXS,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: spacing.xxs,
   },
-  playIconOverlay: {
-      position: 'absolute',
-      left: spacing.lg + 20,
-      top: spacing.sm + 20,
-      backgroundColor: 'rgba(0, 0, 0, 0.4)',
-      borderRadius: 12,
-      padding: 2,
-   },
+  thumbnailInfoContainer: {
+      flex: 1,
+      marginLeft: spacing.md,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  thumbnailFileName: {
+    fontSize: typography.fontSizeS,
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeightMedium as '500',
+    flexShrink: 1, // Allow text to shrink
+    marginRight: spacing.xs, // Space before clear button
+  },
+  thumbnailClearButton: {
+     padding: spacing.xs,
+  },
   resultsContainerBase: {
       marginTop: 0,
       marginHorizontal: 0,

@@ -12,6 +12,7 @@ import {
   Platform,
   TouchableOpacity,
   Image,
+  AlertButton,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -269,25 +270,60 @@ function EditReportSchemaScreen(): React.ReactElement {
     }
   }, [userToken, currentSchemaString, initialSchemaString, jsonError, navigation]);
 
-  // --- Image Picker Logic (Example) ---
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
-      return;
-    }
+  // --- Image Picker Logic ---
+  const showImageSourceOptions = () => {
+    const options: AlertButton[] = [
+      { text: 'Take Photo', onPress: () => pickImage('camera') },
+      { text: 'Choose from Library', onPress: () => pickImage('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ];
 
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1], // Example aspect ratio
-      quality: 0.5,
-    });
+    Alert.alert(
+      'Select Image Source',
+      'How would you like to select the image?',
+      options,
+      { cancelable: true }
+    );
+  };
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setSelectedImageUri(result.assets[0].uri);
-      // In a real scenario, you might upload this image URI or store it
-      console.log("Image selected:", result.assets[0].uri);
+  const pickImage = async (source: 'camera' | 'library') => {
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (permission.status !== 'granted') {
+          Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.5,
+        });
+      } else { // source === 'library'
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== 'granted') {
+          Alert.alert('Permission Required', 'Media Library permission is needed to choose photos.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.5,
+        });
+      }
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImageUri(result.assets[0].uri);
+        console.log("Image selected:", result.assets[0].uri);
+        // TODO: Add logic here to actually upload/save the selectedImageUri if needed
+        // For now, it just updates the preview
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert('Image Error', 'Could not select or capture image.');
     }
   };
 
@@ -391,7 +427,7 @@ function EditReportSchemaScreen(): React.ReactElement {
                       <Ionicons name="image-outline" size={50} color={colors.textSecondary} /> 
                     </View> 
                   )} 
-                  <TouchableOpacity onPress={pickImage} style={styles.imageButton} disabled={isSaving}> 
+                  <TouchableOpacity onPress={showImageSourceOptions} style={styles.imageButton} disabled={isSaving}> 
                     <Ionicons name="add-circle-outline" size={20} color={colors.background} />
                     <Text style={styles.imageButtonText}> 
                       {selectedImageUri ? 'Change Image' : 'Select Image'} 
