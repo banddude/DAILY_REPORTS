@@ -9,7 +9,7 @@
     "build:mobile-web": "cd mobile-app && npx expo export:web",
     "build": "npm run install:mobile && npm run build:server && npm run build:mobile-web && npm run copy-assets",
     "start": "node server/dist/server.js",
-    "postinstall": "npm install && npm run install:mobile",
+    "postinstall": "npm run install:mobile",
     "copy-assets": "cp -R mobile-app/web-build/* server/dist/ && cp server/data/profile.json server/dist/"
   },
   "dependencies": {
