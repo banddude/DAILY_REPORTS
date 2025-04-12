@@ -13,6 +13,7 @@ import {
   Image,
   Modal,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,6 +27,10 @@ import { useAuth } from '../context/AuthContext';
 import { fetchApi } from './fetchApiHelper';
 import SelectionModal from '../components/SelectionModal';
 import { Ionicons } from '@expo/vector-icons';
+
+// Restore constant
+const ADD_NEW_CUSTOMER_OPTION = "Add New Customer...";
+const ADD_NEW_PROJECT_OPTION = "Add New Project...";
 
 // Basic type for the result object expected from the server
 interface ReportResult {
@@ -63,7 +68,7 @@ const HomeScreen: React.FC = () => {
   // State for pickers
   const [selectedCustomer, setSelectedCustomer] = useState<string | undefined>(undefined);
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined);
-  const [fetchedCustomers, setFetchedCustomers] = useState<string[]>([]);
+  const [fetchedCustomers, setFetchedCustomers] = useState<string[]>([ADD_NEW_CUSTOMER_OPTION]);
   const [fetchedProjects, setFetchedProjects] = useState<string[]>([]);
   const [isFetchingCustomers, setIsFetchingCustomers] = useState(false);
   const [isFetchingProjects, setIsFetchingProjects] = useState(false);
@@ -82,11 +87,12 @@ const HomeScreen: React.FC = () => {
   // Log token value on every render
   console.log(`HomeScreen Render: userToken is ${userToken ? 'present' : 'null'}`);
 
-  // Fetch customers - Refactored Logic
+  // Restore and adapt Fetch customers function
   const loadCustomers = useCallback(async () => {
     if (!userToken) {
-      console.log('HomeScreen Customer Effect: No userToken, clearing customers.');
-      setFetchedCustomers([]);
+      console.log('HomeScreen Customer Effect: No userToken, setting defaults.');
+      // Only include ADD_NEW option if no token
+      setFetchedCustomers([ADD_NEW_CUSTOMER_OPTION]); 
       setSelectedCustomer(undefined);
       setIsFetchingCustomers(false);
       return;
@@ -95,24 +101,73 @@ const HomeScreen: React.FC = () => {
     console.log('HomeScreen: Attempting to fetch customers...');
     setIsFetchingCustomers(true);
     setFetchError(null);
-    setFetchedCustomers([]);
-    setSelectedCustomer(undefined);
+    const previouslySelectedCustomer = selectedCustomer;
 
     try {
-      const customersData: string[] = await fetchApi('/api/browse-reports', userToken);
-      console.log('HomeScreen: Successfully fetched customers.', customersData.length);
-      setFetchedCustomers(customersData);
+      const fetchedData: string[] = await fetchApi('/api/browse-reports', userToken);
+      console.log('HomeScreen: Successfully fetched customers from server:', fetchedData.length);
+
+      // Merge fetched data with existing local state, keep ADD_NEW first, ensure uniqueness
+      setFetchedCustomers(prevLocalCustomers => {
+          const combined = [
+              ADD_NEW_CUSTOMER_OPTION,
+              ...fetchedData,
+              // Add any from previous state that weren't fetched (locally added)
+              ...prevLocalCustomers.filter(c => c !== ADD_NEW_CUSTOMER_OPTION && !fetchedData.includes(c))
+          ];
+          // Remove duplicates
+          const uniqueCombined = combined.filter((v, i, a) => a.indexOf(v) === i);
+          console.log('HomeScreen: Merged customer list:', uniqueCombined);
+          return uniqueCombined;
+      });
+
+      // Check if the PREVIOUSLY selected customer is still valid in the NEW merged list
+      // We need to check against the latest state after the update
+      setFetchedCustomers(currentMergedCustomers => {
+          if (previouslySelectedCustomer &&
+              previouslySelectedCustomer !== ADD_NEW_CUSTOMER_OPTION &&
+              !currentMergedCustomers.includes(previouslySelectedCustomer)) {
+              console.log(`HomeScreen loadCustomers: Previously selected customer '${previouslySelectedCustomer}' no longer exists. Resetting selection.`);
+              setSelectedCustomer(undefined);
+              setSelectedProject(undefined);
+          } else {
+              console.log(`HomeScreen loadCustomers: Keeping current selection: ${previouslySelectedCustomer}`);
+          }
+          return currentMergedCustomers; // Return the state unchanged from this check
+      });
+
     } catch (err: any) {
       const errorMessage = `Failed to load customers: ${err?.message || 'Unknown error'}`;
       console.error("HomeScreen Fetch customers error:", errorMessage, err);
       setFetchError(errorMessage);
-      setFetchedCustomers([]);
+      // On error, revert to just the Add New option? Or keep local ones?
+      // Let's keep local ones + Add New for now
+      setFetchedCustomers(prev => prev.filter(c => c !== ADD_NEW_CUSTOMER_OPTION).length > 0 
+          ? [ADD_NEW_CUSTOMER_OPTION, ...prev.filter(c => c !== ADD_NEW_CUSTOMER_OPTION)]
+          : [ADD_NEW_CUSTOMER_OPTION]);
       setSelectedCustomer(undefined);
       setSelectedProject(undefined);
     } finally {
       setIsFetchingCustomers(false);
     }
-  }, [userToken]);
+  // Re-add selectedCustomer dependency here as we check it
+  }, [userToken, selectedCustomer]); 
+
+  // Restore Effect to load customers on focus
+  useEffect(() => {
+    if (isFocused && userToken) {
+       console.log("HomeScreen Focus Effect: Triggering loadCustomers.");
+       loadCustomers();
+    } else if (!userToken) {
+      // Ensure list is reset correctly if user logs out
+      setFetchedCustomers([ADD_NEW_CUSTOMER_OPTION]);
+      setFetchedProjects([]);
+      setSelectedCustomer(undefined);
+      setSelectedProject(undefined);
+      setFetchError(null);
+    }
+  // Add loadCustomers back to dependencies
+  }, [isFocused, userToken, loadCustomers]); 
 
   // Fetch projects - Refactored Logic
   const loadProjects = useCallback(async () => {
@@ -131,7 +186,8 @@ const HomeScreen: React.FC = () => {
     try {
       const projectsData: string[] = await fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken);
       console.log(`HomeScreen: Successfully fetched projects for ${selectedCustomer}.`, projectsData.length);
-      setFetchedProjects(projectsData);
+      // Ensure "Add New" option is always first
+      setFetchedProjects([ADD_NEW_PROJECT_OPTION, ...projectsData.filter(p => p !== ADD_NEW_PROJECT_OPTION)]);
     } catch (err: any) {
       const errorMessage = `Failed to load projects: ${err?.message || 'Unknown error'}`;
       console.error("HomeScreen Fetch projects error:", errorMessage, err);
@@ -142,19 +198,6 @@ const HomeScreen: React.FC = () => {
       setIsFetchingProjects(false);
     }
   }, [selectedCustomer, userToken]);
-
-  // Effect to load customers when screen focuses or token changes
-  useEffect(() => {
-    if (isFocused && userToken) {
-      loadCustomers();
-    } else if (!userToken) {
-      setFetchedCustomers([]);
-      setFetchedProjects([]);
-      setSelectedCustomer(undefined);
-      setSelectedProject(undefined);
-      setFetchError(null);
-    }
-  }, [isFocused, userToken, loadCustomers]);
 
   // Effect to load projects when selectedCustomer changes
   useEffect(() => {
@@ -235,14 +278,28 @@ const HomeScreen: React.FC = () => {
   const openCustomerModal = () => {
     setModalConfig({
         title: 'Select Customer',
-        data: fetchedCustomers,
+        data: fetchedCustomers, 
         currentSelection: selectedCustomer,
-        isLoading: isFetchingCustomers,
+        isLoading: isFetchingCustomers, // Pass loading state
         onSelect: (customer) => {
+            console.log(`HomeScreen onSelect called with: ${customer}`);
+            // Add to list if it's a new name saved from the modal
+            if (!fetchedCustomers.includes(customer)) {
+                console.log(`Adding new customer ${customer} to fetchedCustomers list`);
+                // Ensure ADD_NEW option stays at the start
+                setFetchedCustomers(prev => [
+                    ADD_NEW_CUSTOMER_OPTION,
+                    // Keep existing items (excluding ADD_NEW if present)
+                    ...prev.filter(c => c !== ADD_NEW_CUSTOMER_OPTION),
+                    customer // Add the new one
+                ].filter((v, i, a) => a.indexOf(v) === i)); // Ensure uniqueness 
+            }
+            // Select the customer
             if (customer !== selectedCustomer) {
                 setSelectedCustomer(customer);
-                setSelectedProject(undefined);
+                setSelectedProject(undefined); 
             }
+            closeModal(); 
         },
     });
     setIsModalVisible(true);
@@ -256,7 +313,29 @@ const HomeScreen: React.FC = () => {
         currentSelection: selectedProject,
         isLoading: isFetchingProjects,
         onSelect: (project) => {
-            setSelectedProject(project);
+            // REMOVED check for ADD_NEW_PROJECT_OPTION - modal handles this now
+            /*
+            if (project === ADD_NEW_PROJECT_OPTION) {
+                console.log("Navigating to Add Project Screen");
+                navigation.navigate('AddProject', { customer: selectedCustomer });
+            } else */
+            // This runs for existing selections OR newly saved items from the modal
+            console.log(`HomeScreen project onSelect called with: ${project}`);
+            // Add to list if it's a new name saved from the modal
+            if (!fetchedProjects.filter(p => p !== ADD_NEW_PROJECT_OPTION).includes(project)) {
+                 console.log(`Adding new project ${project} to fetchedProjects list`);
+                 setFetchedProjects(prev => [
+                     ADD_NEW_PROJECT_OPTION, // Keep Add New first
+                     // Keep existing items (excluding Add New)
+                     ...prev.filter(p => p !== ADD_NEW_PROJECT_OPTION),
+                     project // Add the new one
+                 ].filter((v, i, a) => a.indexOf(v) === i)); // Ensure uniqueness
+            }
+            // Select the project
+            if (project !== selectedProject) {
+                setSelectedProject(project);
+            }
+            closeModal(); 
         },
     });
     setIsModalVisible(true);
@@ -625,6 +704,7 @@ const HomeScreen: React.FC = () => {
                 <Text style={styles.sectionHeaderText}>Details</Text>
                  {fetchError && <Text style={styles.fetchErrorText}>{fetchError}</Text>}
 
+                {/* Restore Original Customer Row */}
                 <TouchableOpacity
                     style={[styles.rowContainer, styles.firstRowInSection]}
                     onPress={openCustomerModal}
@@ -637,9 +717,10 @@ const HomeScreen: React.FC = () => {
                     <View style={styles.rowValueContainer}>
                         <Text style={styles.rowValueText} numberOfLines={1}>{isFetchingCustomers ? 'Loading...' : (selectedCustomer || 'Select')}</Text>
                         {isFetchingCustomers ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} style={styles.rowChevron} />}
-                   </View>
+                    </View>
                 </TouchableOpacity>
 
+                {/* Project Row - Renders normally */}
                 <TouchableOpacity
                     style={[styles.rowContainer, !selectedCustomer && styles.rowDisabled]}
                     onPress={openProjectModal}
@@ -649,9 +730,9 @@ const HomeScreen: React.FC = () => {
                          <Ionicons name="folder-outline" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} />
                      </View>
                     <Text style={[styles.rowLabel, !selectedCustomer && styles.rowLabelDisabled]}>Project</Text>
-                     <View style={styles.rowValueContainer}>
+                    <View style={styles.rowValueContainer}>
                          <Text style={[styles.rowValueText, !selectedCustomer && styles.rowValueDisabled]} numberOfLines={1}>{!selectedCustomer ? 'Select Customer First' : (isFetchingProjects ? 'Loading...' : (selectedProject || 'Select'))}</Text>
-                         {isFetchingProjects ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} style={styles.rowChevron} />}
+                        {isFetchingProjects ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} style={styles.rowChevron} />}
                     </View>
                 </TouchableOpacity>
             </View>
@@ -888,6 +969,7 @@ const styles = StyleSheet.create({
   rowChevron: {
   },
   rowSpinner: {
+      marginLeft: spacing.xs, // Add some space for spinner
   },
   fetchErrorText: {
      color: colors.error,

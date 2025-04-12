@@ -1,8 +1,8 @@
 import React, { useLayoutEffect } from 'react';
 import { ActivityIndicator, View, StyleSheet, Button, Platform } from 'react-native';
-import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { NavigatorScreenParams, getFocusedRouteNameFromRoute, useNavigation, useRoute } from '@react-navigation/native';
+import { NavigatorScreenParams, getFocusedRouteNameFromRoute, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,7 @@ import EditLogoScreen from '../screens/EditLogoScreen';
 import ProjectReportsScreen from '../screens/ProjectReportsScreen';
 import EditChatModelScreen from '../screens/EditChatModelScreen';
 import EditWhisperModelScreen from '../screens/EditWhisperModelScreen';
+import AddProjectScreen from '../screens/AddProjectScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
 
 // --- Define Param Lists ---
@@ -40,11 +41,13 @@ export type AuthStackParamList = {
 
 // Params for screens in the Home stack (inside the main tabs)
 export type HomeStackParamList = {
-  HomeBase: { // Keep params HomeBase might receive (though not from SelectionScreen anymore)
-      selectedCustomer?: string;
-      selectedProject?: string;
+  HomeBase: { // Keep params HomeBase might receive
+      selectedCustomer?: string; // From old logic, maybe remove later
+      selectedProject?: string; // From old logic, maybe remove later
+      newCustomerName?: string; // Added param for new customer
+      newProjectForCustomer?: string; // Added param for customer context of new project
+      newProjectName?: string; // Added param for new project name
   } | undefined;
-  // SelectionScreen REMOVED from here
 };
 
 // Params for screens in the Browse stack (inside the main tabs)
@@ -102,11 +105,14 @@ export type EditLogoScreenProps = NativeStackScreenProps<ProfileStackParamList, 
 export type ProjectReportsScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ProjectReports'>;
 export type EditChatModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditChatModel'>;
 export type EditWhisperModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditWhisperModel'>;
+export type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>; // For navigating *out* to modals
+export type HomeScreenRouteProp = RouteProp<HomeStackParamList, 'HomeBase'>; // For receiving params
 
-// Define Root Stack including Auth and Main App
+// Define Root Stack including Auth, Main App, and Modal/Top-Level Screens
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   MainAppTabs: NavigatorScreenParams<MainTabsParamList>;
+  AddProject: { customer?: string };
 };
 
 // Define Stack Navigators
@@ -331,12 +337,12 @@ function MainTabs() {
   );
 }
 
-// --- Root Navigator (Handles Auth Flow) ---
-export default function AppNavigator() {
-  const { userToken, loading } = useAuth(); // Get token and loading state
+// --- Root Stack (Handles Auth vs Main App and Modals) ---
+function RootStackContainer() {
+  const { userToken, loading } = useAuth();
 
-  // Display a loading indicator while the auth state is being determined (e.g., on initial load)
   if (loading) {
+    // Show a loading spinner or splash screen while checking token
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -345,16 +351,41 @@ export default function AppNavigator() {
   }
 
   return (
+    <RootStack.Navigator
+       screenOptions={{
+          headerShown: false // Generally hide header for root, let inner stacks manage
+       }}
+    >
+      {userToken ? (
+        // User is signed in, show main app with tabs
+        <>
+            <RootStack.Screen name="MainAppTabs" component={MainTabs} />
+            {/* Define Modal/Top-Level Screens accessible from anywhere when logged in */}
+             <RootStack.Screen
+                name="AddProject"
+                component={AddProjectScreen}
+                options={{
+                    presentation: 'modal', // Present as a modal
+                    headerShown: true, // Show header for modal
+                    title: 'Add Project',
+                    headerStyle: { backgroundColor: colors.surface },
+                    headerTintColor: colors.primary,
+                    headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold', color: colors.textPrimary },
+                }}
+            />
+        </>
+      ) : (
+        // User is not signed in, show auth flow
+        <RootStack.Screen name="Auth" component={AuthStack} />
+      )}
+    </RootStack.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  return (
     <NavigationContainer>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {userToken ? (
-          // User is signed in - Show main app tabs
-          <RootStack.Screen name="MainAppTabs" component={MainTabs} />
-        ) : (
-          // No token found, user isn't signed in - Show auth flow
-          <RootStack.Screen name="Auth" component={AuthStack} />
-        )}
-      </RootStack.Navigator>
+      <RootStackContainer />
     </NavigationContainer>
   );
 }
@@ -366,4 +397,34 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: colors.background,
     },
-}); 
+    // Add any other styles needed
+});
+
+// Helper function (optional, for tab bar visibility based on route)
+// ... (getTabBarVisibility function remains the same) ...
+function getTabBarVisibility(route: any) {
+    const routeName = getFocusedRouteNameFromRoute(route) ?? '';
+    // Hide tab bar for specific screens within BrowseTab or ProfileTab
+    const screensToHideTabBar = [
+        'ReportViewer',
+        'WebViewer',
+        'ReportEditor',
+        'ProjectReports',
+        'EditSystemPrompt',
+        'EditReportSchema',
+        'EditName',
+        'EditEmail',
+        'EditPhone',
+        'EditCompanyName',
+        'EditCompanyPhone',
+        'EditCompanyWebsite',
+        'EditAddress',
+        'EditLogo',
+        'EditChatModel',
+        'EditWhisperModel'
+    ];
+    if (screensToHideTabBar.includes(routeName)) {
+        return false;
+    }
+    return true;
+} 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Platform,
   Dimensions,
+  Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,10 +33,18 @@ const { height: deviceHeight } = Dimensions.get('window');
 
 // --- Styles ---
 const styles = StyleSheet.create({
+  keyboardAvoidingContainer: {
+    flex: 1, // Make it fill the modal area
+    // justifyContent: 'flex-end', // Keep content at the bottom
+  },
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)', // Semi-transparent background
-    justifyContent: 'flex-end', // Position modal at the bottom
+    // Make overlay cover the entire screen behind the KAV
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   safeAreaContainer: {
       backgroundColor: colors.background, // Background for the modal content area
@@ -119,7 +129,52 @@ const styles = StyleSheet.create({
   loadingContainer: {
       paddingVertical: spacing.xl * 2,
       alignItems: 'center',
-  }
+  },
+  addViewContainer: {
+      backgroundColor: colors.surface,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: borders.widthHairline,
+      borderBottomColor: colors.borderLight,
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  inlineInput: {
+      flex: 1,
+      color: colors.textPrimary,
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+      fontSize: typography.fontSizeM,
+      marginRight: spacing.md,
+  },
+  addButtonsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  inlineButton: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: borders.radiusMedium,
+      marginLeft: spacing.sm,
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  cancelButton: {
+      padding: spacing.sm,
+  },
+  saveButton: {
+      backgroundColor: colors.primary,
+      minWidth: 50,
+  },
+  inlineButtonText: {
+      fontSize: typography.fontSizeS,
+      fontWeight: typography.fontWeightBold as 'bold',
+      color: colors.textSecondary,
+  },
+  saveButtonText: {
+      color: colors.background,
+      fontSize: typography.fontSizeM,
+  },
 });
 
 // --- Selection Modal Component ---
@@ -133,6 +188,8 @@ const SelectionModal: React.FC<SelectionModalProps> = ({
   isLoading = false, // Default isLoading to false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
 
   // Filter data based on search query
   const filteredData = useMemo(() => {
@@ -146,32 +203,55 @@ const SelectionModal: React.FC<SelectionModalProps> = ({
   }, [data, searchQuery]);
 
   // Reset search when modal closes or data changes
-  React.useEffect(() => {
-      if (!isVisible) {
-          setSearchQuery('');
-      }
+  useEffect(() => {
+    if (!isVisible) {
+      setSearchQuery('');
+      setIsAdding(false);
+      setNewItemName('');
+    }
   }, [isVisible]);
 
-  // Handle selection
-  const handleSelectItem = (item: string) => {
-    onSelect(item);
-    onClose(); // Close modal after selection
+  const handleSelectItem = (item: string, index: number) => {
+    // Check if the selected item is the FIRST item in the data array
+    if (index === 0) { 
+        console.log("Add New Item selected (first item), switching to input mode.");
+        setIsAdding(true); // Enter inline add mode
+    } else {
+        onSelect(item); // Call original onSelect for existing items
+    }
+  };
+
+  const handleSaveNewItem = () => {
+      const nameToSave = newItemName.trim();
+      if (!nameToSave) {
+          Alert.alert('Input Required', 'Please enter a name.');
+          return;
+      }
+      console.log(`Saving new item from modal: ${nameToSave}`);
+      onSelect(nameToSave); // Call the main onSelect handler with the new name
+      // Reset state and potentially close (HomeScreen's onSelect closes it)
+      setIsAdding(false);
+      setNewItemName('');
+      // onClose(); // Let HomeScreen handle closing via its onSelect -> closeModal flow
   };
 
   // Render item in the list
-  const renderItem = ({ item }: { item: string }) => (
+  const renderItem = ({ item, index }: { item: string, index: number }) => (
     <TouchableOpacity
       style={styles.rowContainer}
-      onPress={() => handleSelectItem(item)}
+      onPress={() => handleSelectItem(item, index)} // Pass index here
     >
-      <Text style={styles.rowText}>{item}</Text>
+      <Text
+        style={[
+          styles.rowText,
+          item === currentSelection && { fontWeight: 'bold', color: colors.textPrimary },
+          index === 0 && { color: colors.textPrimary, fontStyle: 'italic' }, // Style first item as "Add New..."
+        ]}
+      >
+        {item}
+      </Text>
       {item === currentSelection && (
-         <Ionicons
-           name="checkmark-circle"
-           size={22}
-           color={colors.primary}
-           style={styles.checkmarkIcon}
-          />
+        <Ionicons name="checkmark-circle" size={20} color={colors.textPrimary} />
       )}
     </TouchableOpacity>
   );
@@ -206,42 +286,71 @@ const SelectionModal: React.FC<SelectionModalProps> = ({
       visible={isVisible}
       onRequestClose={onClose} // For Android back button
     >
-      {/* Semi-transparent overlay */}
-      <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={onClose} // Close when tapping overlay
-      />
+      {/* Wrap the entire interactive area in KeyboardAvoidingView */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingContainer} // Use a style that allows flex positioning
+      >
+        {/* Semi-transparent overlay */}
+        <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={onClose} // Close when tapping overlay
+        />
 
-      {/* Actual Modal Content Area */}
-      <SafeAreaView style={styles.safeAreaContainer} edges={['bottom', 'left', 'right']}>
-        <View style={styles.modalContent}>
-            {/* Header with Title and Close Button */}
-            <View style={styles.headerContainer}>
-                <Text style={styles.titleText}>{title}</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                    <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
-                </TouchableOpacity>
-            </View>
+        {/* Actual Modal Content Area */}
+        <SafeAreaView style={styles.safeAreaContainer} edges={['bottom', 'left', 'right']}>
+          <View style={styles.modalContent}>
+              {/* Header with Title and Close Button */}
+              <View style={styles.headerContainer}>
+                  <Text style={styles.titleText}>{title}</Text>
+                  <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                      <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+                  </TouchableOpacity>
+              </View>
 
-            {/* Loading Indicator or List */}
-            {isLoading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
-            ) : (
-                <FlatList
-                    ListHeaderComponent={ListHeaderComponent}
-                    data={filteredData}
-                    renderItem={renderItem}
-                    keyExtractor={(item, index) => `${item}-${index}`}
-                    ListEmptyComponent={ListEmptyComponent}
-                    keyboardShouldPersistTaps="handled"
-                    style={styles.listContainer}
-                />
-            )}
-        </View>
-      </SafeAreaView>
+              {/* Loading Indicator or List */}
+              {isLoading ? (
+                  <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="large" color={colors.primary} />
+                  </View>
+              ) : isAdding ? (
+                  // Inline Add View
+                  <View style={styles.addViewContainer}>
+                       <TextInput
+                          style={styles.inlineInput}
+                          placeholder={`Enter new ${title.replace('Select ', '').toLowerCase()} name`}
+                          placeholderTextColor={colors.textSecondary}
+                          value={newItemName}
+                          onChangeText={setNewItemName}
+                          autoFocus={true}
+                          autoCapitalize="words"
+                          returnKeyType="done"
+                          onSubmitEditing={handleSaveNewItem}
+                       />
+                       <View style={styles.addButtonsContainer}>
+                           <TouchableOpacity onPress={() => { setIsAdding(false); setNewItemName(''); }} style={styles.cancelButton}>
+                               <Text style={styles.inlineButtonText}>Cancel</Text>
+                           </TouchableOpacity>
+                           <TouchableOpacity onPress={handleSaveNewItem} style={[styles.inlineButton, styles.saveButton]}>
+                               <Text style={[styles.inlineButtonText, styles.saveButtonText]}>Save</Text>
+                           </TouchableOpacity>
+                       </View>
+                  </View>
+              ) : (
+                  <FlatList
+                      ListHeaderComponent={ListHeaderComponent}
+                      data={filteredData}
+                      renderItem={renderItem}
+                      keyExtractor={(item, index) => `${item}-${index}`}
+                      ListEmptyComponent={ListEmptyComponent}
+                      keyboardShouldPersistTaps="handled"
+                      style={styles.listContainer}
+                  />
+              )}
+          </View>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
