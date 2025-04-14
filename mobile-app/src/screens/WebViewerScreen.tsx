@@ -125,6 +125,8 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   // Add Edit and Share icons to header
   useLayoutEffect(() => {
     navigation.setOptions({
+      title: 'Report View',
+      headerBackVisible: true,
       headerRight: () => (
          <View style={styles.headerButtonContainer}>
            {/* Edit Icon Button */}
@@ -140,8 +142,8 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
              style={styles.headerButton}
              disabled={!reportJsonKey}
            >
-             <Ionicons 
-               name="pencil-outline" 
+             <Ionicons
+               name="pencil-outline"
                size={22}
                color={!reportJsonKey ? colors.textDisabled : colors.textSecondary}
              />
@@ -152,8 +154,8 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
              style={[styles.headerButton, { marginLeft: spacing.sm }]}
              disabled={isLoading}
            >
-             <Ionicons 
-               name="share-outline" 
+             <Ionicons
+               name="share-outline"
                size={22}
                color={isLoading ? colors.textDisabled : colors.textSecondary}
              />

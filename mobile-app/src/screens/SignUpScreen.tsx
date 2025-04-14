@@ -15,6 +15,7 @@ import { AuthStackParamList } from '../navigation/AppNavigator';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config'; // Import API base URL
 import { useAuth } from '../context/AuthContext'; // Import useAuth
+import { Ionicons } from '@expo/vector-icons';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
@@ -110,55 +111,90 @@ export default function SignUpScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* --- Marketing Card --- */}
+        <View style={styles.marketingCard}>
+          <Text style={styles.marketingHeadline}>Create Your Account</Text>
+          <Text style={styles.marketingSubheadline}>Sign up to start generating instant, professional reports from your field videos.</Text>
+          <View style={styles.marketingWorkflowRow}>
+            <View style={styles.workflowStep}>
+              <Ionicons name="person-add-outline" size={28} color={colors.textPrimary} style={styles.workflowIcon} />
+              <Text style={styles.workflowLabel}>Sign up</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={colors.borderLight} style={styles.workflowArrow} />
+            <View style={styles.workflowStep}>
+              <Ionicons name="videocam-outline" size={28} color={colors.textPrimary} style={styles.workflowIcon} />
+              <Text style={styles.workflowLabel}>Upload a video</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={colors.borderLight} style={styles.workflowArrow} />
+            <View style={styles.workflowStep}>
+              <Ionicons name="document-text-outline" size={28} color={colors.textPrimary} style={styles.workflowIcon} />
+              <Text style={styles.workflowLabel}>Get your report</Text>
+            </View>
+          </View>
+        </View>
+        {/* ---------------------- */}
+
+        <Text style={styles.title}>Sign Up</Text>
       
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        placeholderTextColor={colors.textSecondary}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password (min 6 chars)"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        placeholderTextColor={colors.textSecondary}
-      />
-       <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-        placeholderTextColor={colors.textSecondary}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholderTextColor={colors.textSecondary}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password (min 6 chars)"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          placeholderTextColor={colors.textSecondary}
+        />
+         <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+          placeholderTextColor={colors.textSecondary}
+        />
 
-      {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={styles.button} />
-      ) : (
-        <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
-          <Text style={styles.buttonText}>Sign Up</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSignUp}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Text style={styles.buttonText}>Sign Up</Text>
+          )}
         </TouchableOpacity>
-      )}
 
-      <TouchableOpacity 
-        style={styles.loginLinkContainer}
-        onPress={() => navigation.navigate('Login')}
-        disabled={loading}
-      >
-        <Text style={styles.loginLinkText}>Already have an account? Login</Text>
-      </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.loginLinkContainer}
+          onPress={() => navigation.navigate('Login')}
+          disabled={loading}
+        >
+          <Text style={styles.loginLinkText}>Already have an account? Login</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -184,13 +220,74 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     backgroundColor: colors.surface,
   },
+  marketingCard: {
+    backgroundColor: colors.surfaceAlt || '#f7f7f9',
+    padding: spacing.lg,
+    borderRadius: borders.radiusLarge,
+    marginBottom: spacing.md,
+    maxWidth: 420,
+    alignSelf: 'center',
+    width: '100%',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    shadowColor: colors.textPrimary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  marketingHeadline: {
+    fontSize: typography.fontSizeL,
+    fontWeight: typography.fontWeightBold as 'bold',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  marketingSubheadline: {
+    fontSize: typography.fontSizeS,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  marketingWorkflowRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    flexWrap: 'wrap',
+    width: '100%',
+  },
+  workflowStep: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minWidth: 80,
+    flex: 1,
+    maxWidth: 120,
+  },
+  workflowIcon: {
+    marginBottom: spacing.xxs,
+  },
+  workflowLabel: {
+    fontSize: typography.fontSizeS,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    minHeight: 36,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workflowArrow: {
+    marginHorizontal: spacing.xs,
+    alignSelf: 'center',
+  },
   button: {
     backgroundColor: colors.surface,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.lg,
+    marginTop: 0,
     borderTopWidth: borders.widthHairline,
     borderBottomWidth: borders.widthHairline,
     borderTopColor: colors.borderLight,
@@ -198,9 +295,11 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   buttonText: {
-    color: colors.primary,
     fontSize: typography.fontSizeM,
+    color: colors.textPrimary,
     textAlign: 'center',
+    fontWeight: typography.fontWeightNormal as 'normal',
+    flex: 0,
   },
   loginLinkContainer: {
     marginTop: spacing.lg,

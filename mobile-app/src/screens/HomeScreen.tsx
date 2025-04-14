@@ -92,6 +92,9 @@ const HomeScreen: React.FC = () => {
   const [isConfirmDeleteVisible, setIsConfirmDeleteVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'customer' | 'project', name: string } | null>(null);
 
+  // State for tips modal
+  const [showTipsModal, setShowTipsModal] = useState(false);
+
   // Log token value on every render
   console.log(`HomeScreen Render: userToken is ${userToken ? 'present' : 'null'}`);
 
@@ -784,10 +787,53 @@ const HomeScreen: React.FC = () => {
          keyboardShouldPersistTaps="handled"
          showsVerticalScrollIndicator={false}
        >
-            <Text style={styles.title}>Daily Report Generator</Text>
+            <View style={styles.headerRow}>
+              <Text style={styles.title}>Daily Report Generator</Text>
+              <TouchableOpacity onPress={() => setShowTipsModal(true)} style={styles.tipsButton} accessibilityLabel="How to Get the Best Report">
+                <Ionicons name="help-circle-outline" size={28} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
             <Text style={styles.description}>
                 Select customer & project, then upload or record a video walkthrough to generate a report.
             </Text>
+
+            {/* --- Tips Modal --- */}
+            <Modal
+              visible={showTipsModal}
+              animationType="slide"
+              transparent
+              onRequestClose={() => setShowTipsModal(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.tipsModalContainer}>
+                  <View style={styles.tipsModalHeader}>
+                    <Text style={styles.tipsModalTitle}>How to Get the Best Report</Text>
+                    <TouchableOpacity onPress={() => setShowTipsModal(false)} style={styles.tipsModalCloseButton} accessibilityLabel="Close Tips">
+                      <Ionicons name="close" size={28} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.tipsList}>
+                    <View style={styles.tipRow}>
+                      <Ionicons name="mic-outline" size={22} color={colors.primary} style={styles.tipIcon} />
+                      <Text style={styles.tipText}><Text style={styles.tipBold}>Speak Clearly:</Text> Enunciate near your device's mic. The AI transcribes exactly what it hears.</Text>
+                    </View>
+                    <View style={styles.tipRow}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} style={styles.tipIcon} />
+                      <Text style={styles.tipText}><Text style={styles.tipBold}>Verbalize Everything:</Text> Mention details, observations, measurements, and even the desired tone or sections for your report (e.g., "In the summary, mention that the framing is complete."). The AI uses your words to write the report.</Text>
+                    </View>
+                    <View style={styles.tipRow}>
+                      <Ionicons name="camera-outline" size={22} color={colors.primary} style={styles.tipIcon} />
+                      <Text style={styles.tipText}><Text style={styles.tipBold}>Steady Camera for Images:</Text> The AI selects images based on your speech timestamps. When describing something you want a picture of, <Text style={styles.tipBold}>hold the camera steady on the subject for a few seconds while speaking about it.</Text></Text>
+                    </View>
+                    <View style={styles.tipRow}>
+                      <Ionicons name="sunny-outline" size={22} color={colors.primary} style={styles.tipIcon} />
+                      <Text style={styles.tipText}><Text style={styles.tipBold}>Good Lighting & Minimal Noise:</Text> Ensure the environment is well-lit and reasonably quiet for best results.</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+            {/* ------------------- */}
 
             <View style={styles.sectionContainer}>
                 <Text style={styles.sectionHeaderText}>Details</Text>
@@ -892,7 +938,7 @@ const HomeScreen: React.FC = () => {
                 disabled={!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport}
             >
                 {isGeneratingReport ? (
-                    <ActivityIndicator color={colors.textOnPrimary} />
+                    <ActivityIndicator color={colors.textPrimary} />
                 ) : (
                     <Text style={styles.generateButtonText}>Generate Report</Text>
                 )}
@@ -1219,22 +1265,115 @@ const styles = StyleSheet.create({
   closeButton: {
   },
   generateButton: {
-    backgroundColor: colors.success,
-    padding: spacing.md,
-    borderRadius: borders.radiusMedium,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: spacing.xl,
     marginHorizontal: spacing.lg,
-    minHeight: 48,
-    justifyContent: 'center',
+    minHeight: 44,
+    borderTopWidth: borders.widthHairline,
+    borderBottomWidth: borders.widthHairline,
+    borderTopColor: colors.borderLight,
+    borderBottomColor: colors.borderLight,
   },
   disabledButton: {
-    backgroundColor: colors.textDisabled,
+    opacity: 0.6,
   },
   generateButtonText: {
     fontSize: typography.fontSizeM,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    fontWeight: typography.fontWeightNormal as 'normal',
+  },
+  // --- Instruction Styles ---
+  instructionsContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface, 
+    borderRadius: borders.radiusMedium,
+    padding: spacing.md,
+    marginBottom: spacing.lg, // Space before the next section
+    borderWidth: borders.widthThin,
+    borderColor: colors.borderLight,
+  },
+  instructionsIcon: {
+    marginRight: spacing.sm,
+    marginTop: 1, // Align icon slightly better
+  },
+  instructionsTextContainer: {
+    flex: 1,
+  },
+  instructionsTitle: {
+    fontSize: typography.fontSizeS,
     fontWeight: typography.fontWeightBold as 'bold',
-    color: colors.textOnPrimary,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  instructionsText: {
+    fontSize: typography.fontSizeS-1, // Slightly smaller
+    lineHeight: typography.lineHeightS,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  instructionsBold: {
+    fontWeight: typography.fontWeightBold as 'bold',
+    color: colors.textPrimary, // Make bold parts stand out more
+  },
+  // -------------------------
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  tipsButton: {
+    padding: spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tipsModalContainer: {
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: borders.radiusMedium,
+    width: Dimensions.get('window').width * 0.9,
+    maxHeight: Dimensions.get('window').height * 0.9,
+  },
+  tipsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  tipsModalTitle: {
+    fontSize: typography.fontSizeM,
+    fontWeight: typography.fontWeightBold as 'bold',
+    color: colors.textPrimary,
+  },
+  tipsModalCloseButton: {
+    padding: spacing.sm,
+  },
+  tipsList: {
+    marginBottom: spacing.lg,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  tipIcon: {
+    marginRight: spacing.sm,
+  },
+  tipText: {
+    flex: 1,
+  },
+  tipBold: {
+    fontWeight: typography.fontWeightBold as 'bold',
+    color: colors.textPrimary,
   },
 });
 
