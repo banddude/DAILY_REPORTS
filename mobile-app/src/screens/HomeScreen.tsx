@@ -691,13 +691,8 @@ const HomeScreen: React.FC = () => {
        const reportData = responseJson as ReportResult;
        console.log('Report generated:', reportData);
        
-       // Add a delay before navigating to allow S3 consistency
-       const navigationDelay = 2000; // 2 seconds
-       console.log(`Waiting ${navigationDelay}ms before navigating to viewer...`);
-       setTimeout(() => {
-           console.log('Navigating to viewer now...');
-           navigateToWebViewer(reportData.viewerUrl);
-       }, navigationDelay); 
+       // Remove the delay - navigate immediately
+       navigateToWebViewer(reportData.viewerUrl);
 
     } catch (error) {
       console.error('Report generation error:', error);
