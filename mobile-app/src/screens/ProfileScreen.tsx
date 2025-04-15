@@ -346,69 +346,89 @@ const formatAddress = (address?: ProfileCompanyAddress): string => {
 
 // --- Main Settings Screen Component ---
 function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
+  const auth = useAuth();
   const isFocused = useIsFocused();
-  const [originalProfile, setOriginalProfile] = useState<ProfileData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Tracks initial load
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // Tracks pull-to-refresh
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [initialProfileData, setInitialProfileData] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null); // <-- Add logoUrl state
-  const { userToken, signOut } = useAuth(); // <-- Add signOut from useAuth
+  const [refreshing, setRefreshing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [logoTimestamp, setLogoTimestamp] = useState(Date.now()); // For cache busting
 
-  // Modify fetchProfile to accept options
-  const fetchProfile = useCallback(async (options: { isInitialLoad?: boolean, isRefresh?: boolean } = {}) => {
-    const { isInitialLoad = false, isRefresh = false } = options;
-
-    // Only show full-screen loader on initial load
-    if (isInitialLoad) {
-        setIsLoading(true);
-    }
-    // Show pull-to-refresh indicator only on refresh action
-    if (isRefresh) {
-        setIsRefreshing(true);
-    }
-
-    // Clear only fetch errors, not potential save errors shown in dedicated screens
-    setError(null); 
-
-    if (!userToken) {
-      setError('Authentication token not found.');
-      if (isInitialLoad) setIsLoading(false);
-      if (isRefresh) setIsRefreshing(false);
+  const fetchProfile = useCallback(async ({ isInitialLoad = false } = {}) => {
+    if (!auth.userToken) {
+      setError('Authentication token is missing.');
+      setLoading(false);
       return;
     }
+    if (isInitialLoad) setLoading(true);
+    setError(null);
+    setSaveStatus(null); // Clear save status on fetch
 
     try {
-      const cacheBuster = Date.now();
-      const response = await fetch(`${API_BASE_URL}/api/profile?cb=${cacheBuster}`, {
-        headers: { 'Authorization': `Bearer ${userToken}`, 'Accept': 'application/json' }
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${auth.userToken}`,
+          'Accept': 'application/json',
+        },
       });
+      const data = await response.json();
+
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({ error: 'Failed to fetch profile' }));
-        throw new Error(errData.error || `HTTP error! status: ${response.status}`);
-      }
-      const data: ProfileData = await response.json();
-      data.company = data.company ?? {};
-      data.company.address = data.company.address ?? {};
-      data.config = data.config ?? {};
-      setOriginalProfile(data);
-      // Initialize logo URL after profile is fetched
-      if (userToken) {
-          setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${Date.now()}`);
+          // Check if the error indicates profile needs initialization
+          if (response.status === 404 && data?.needsInitialization) {
+              console.log('Profile needs initialization.');
+              setError('User profile not found. Please initialize your profile first.'); 
+              // Keep profileData null or set to an empty object if needed for UI
+              setProfileData(null); // Or setProfileData({});
+          } else {
+              throw new Error(data.error || `HTTP error! status: ${response.status}`);
+          }
+      } else {
+         // Convert snake_case from server to camelCase for local state
+         const camelCaseData: ProfileData = {
+             name: data.full_name, // Map full_name to name
+             email: data.email || auth.user?.email, // Use server email or fallback to auth context
+             phone: data.phone,
+             company: {
+                 name: data.company_name,
+                 address: {
+                     street: data.company_street,
+                     unit: data.company_unit,
+                     city: data.company_city,
+                     state: data.company_state,
+                     zip: data.company_zip,
+                 },
+                 phone: data.company_phone,
+                 website: data.company_website,
+             },
+             config: {
+                 logoFilename: data.config_logo_filename,
+                 chatModel: data.config_chat_model,
+                 systemPrompt: data.config_system_prompt,
+                 reportJsonSchema: typeof data.config_report_json_schema === 'string' 
+                                    ? JSON.parse(data.config_report_json_schema) 
+                                    : data.config_report_json_schema, // Parse schema string
+             }
+         };
+         setProfileData(camelCaseData);
+         if (isInitialLoad) {
+             setInitialProfileData(camelCaseData); // Store initial state only once
+         }
       }
     } catch (err: any) {
       console.error("Error fetching profile:", err);
-      // Show error, but don't clear existing data if present
-      setError(`Failed to load profile: ${err.message}`); 
-      // Only clear profile if it was an initial load failure
-      if (isInitialLoad) {
-          setOriginalProfile(null);
-      }
+      setError(`Failed to load profile: ${err.message}`);
+      // Only clear profile if it was an initialization error maybe?
+      // setProfileData(null);
     } finally {
-      // Always turn off indicators regardless of which one was active
-      if (isInitialLoad) setIsLoading(false);
-      if (isRefresh) setIsRefreshing(false);
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [userToken]);
+  }, [auth.userToken, auth.user?.email]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -417,17 +437,17 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
 
   // Re-fetch on focus to update data (including logo if changed on EditLogo screen)
   useEffect(() => {
-    if (isFocused && !isLoading) {
+    if (isFocused && !loading) {
       fetchProfile(); // Re-fetch profile data
       // Also specifically re-fetch the logo URL in case it changed
-      if (userToken) {
-        setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${Date.now()}`);
+      if (auth.userToken) {
+        setLogoTimestamp(Date.now()); // Refresh logo timestamp on focus
       }
     }
-  }, [isFocused, isLoading, fetchProfile, userToken]);
+  }, [isFocused, loading, fetchProfile, auth.userToken]);
 
   // --- Loading State (Only shows on initial mount) ---
-  if (isLoading) { // This is now only true during the isInitialLoad fetch
+  if (loading) { // This is now only true during the isInitialLoad fetch
       return (
         <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -437,7 +457,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
   }
 
   // --- Error State (Shows if initial load failed AND we have no data) ---
-  if (error && !originalProfile) {
+  if (error && !profileData) {
     const handleRetry = () => fetchProfile({ isInitialLoad: true }); // Retry should be initial load
     return (
       <SafeAreaView style={[styles.safeArea, styles.errorTextContainer]}>
@@ -458,8 +478,8 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
               contentContainerStyle={styles.contentContainer}
               refreshControl={
                   <RefreshControl
-                      refreshing={isRefreshing} // Use the dedicated refreshing state
-                      onRefresh={() => fetchProfile({ isRefresh: true })} // Trigger refresh fetch
+                      refreshing={refreshing} // Use the dedicated refreshing state
+                      onRefresh={() => fetchProfile({ isInitialLoad: true })} // Trigger refresh fetch
                       tintColor={colors.primary}
                       colors={[colors.primary]}
                   />
@@ -469,30 +489,30 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
              {/* Display Fetch Error Inline if stale data exists */}
              <View style={styles.statusMessageContainer}>
                  {/* Display only general fetch errors here */}
-                 {error && originalProfile && <Text style={[styles.errorText, {marginBottom: spacing.md}]}>{`Failed to refresh: ${error}`}</Text>}
+                 {error && profileData && <Text style={[styles.errorText, {marginBottom: spacing.md}]}>{`Failed to refresh: ${error}`}</Text>}
              </View>
 
-            {/* Render sections only if originalProfile exists */}
-            {originalProfile ? (
+            {/* Render sections only if profileData exists */}
+            {profileData ? (
               <>
                 <View style={styles.section}>
                   <Text style={styles.sectionHeader}>Account</Text>
                    <SettingsRow
                        icon="person-circle-outline"
-                       value={originalProfile.name || 'Not Set'}
+                       value={profileData.name || 'Not Set'}
                        isFirst
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditName')}
                    />
                    <SettingsRow
                        icon="mail-outline"
-                       value={originalProfile.email || 'Not Set'}
+                       value={profileData.email || 'Not Set'}
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditEmail')}
                    />
                    <SettingsRow
                        icon="call-outline"
-                       value={originalProfile.phone || 'Not Set'}
+                       value={profileData.phone || 'Not Set'}
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditPhone')}
                    />
@@ -502,35 +522,35 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                   <Text style={styles.sectionHeader}>Company</Text>
                    <SettingsRow
                        icon="business-outline"
-                       value={originalProfile.company?.name || 'Not Set'}
+                       value={profileData.company?.name || 'Not Set'}
                        isFirst
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditCompanyName')}
                    />
                    <SettingsRow
                        icon="map-outline"
-                       value={formatAddress(originalProfile.company?.address)}
+                       value={formatAddress(profileData.company?.address)}
                        numberOfLines={3}
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditAddress')}
                    />
                    <SettingsRow
                        icon="call-outline"
-                       value={originalProfile.company?.phone || 'Not Set'}
+                       value={profileData.company?.phone || 'Not Set'}
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditCompanyPhone')}
                    />
                    <SettingsRow
                        icon="link-outline"
-                       value={originalProfile.company?.website || 'Not Set'}
+                       value={profileData.company?.website || 'Not Set'}
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditCompanyWebsite')}
                    />
                    {/* Logo Row - Moved Here */}
                    <SettingsRow
-                     icon={logoUrl ? { uri: logoUrl } : 'image-outline'}
+                     icon={profileData.config?.logoFilename ? { uri: `${API_BASE_URL}/api/logo/${auth.user?.id}?t=${logoTimestamp}` } : 'image-outline'}
                      value="Logo"
-                     onPress={() => navigation.navigate('EditLogo', { currentLogoUrl: logoUrl })}
+                     onPress={() => navigation.navigate('EditLogo', { currentLogoUrl: `${API_BASE_URL}/api/logo/${auth.user?.id}?t=${logoTimestamp}` })}
                      showDisclosure={true}
                    />
                 </View>
@@ -540,7 +560,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                    <SettingsRow
                      icon="chatbubbles-outline"
                      label="Chat Model"
-                     value={originalProfile.config?.chatModel || 'Not Set'}
+                     value={profileData.config?.chatModel || 'Not Set'}
                      isFirst
                      showDisclosure={true}
                      onPress={() => navigation.navigate('EditChatModel')}
@@ -548,7 +568,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                    <SettingsRow
                      icon="reader-outline"
                      label="System Prompt"
-                     value={originalProfile.config?.systemPrompt ? 'View/Edit Prompt' : 'Not Set'}
+                     value={profileData.config?.systemPrompt ? 'View/Edit Prompt' : 'Not Set'}
                      numberOfLines={1}
                      showDisclosure={true}
                      onPress={() => navigation.navigate('EditSystemPrompt')}
@@ -556,7 +576,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                    <SettingsRow
                     icon="document-text-outline"
                     label="Report Schema"
-                    value={originalProfile.config?.reportJsonSchema ? 'View/Edit Schema' : 'Not Set'}
+                    value={profileData.config?.reportJsonSchema ? 'View/Edit Schema' : 'Not Set'}
                     numberOfLines={1}
                     showDisclosure={true}
                     onPress={() => navigation.navigate('EditReportSchema')}
@@ -567,7 +587,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                     icon="log-out-outline"
                     label="Log Out"
                     value=""
-                    onPress={signOut}
+                    onPress={auth.signOut}
                     isFirst={false}
                     showDisclosure={true}
                     // Custom label style for red color and centering

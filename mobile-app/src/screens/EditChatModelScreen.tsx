@@ -17,14 +17,6 @@ import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { EditChatModelScreenProps } from '../navigation/AppNavigator';
 
-// Define only necessary parts of the profile data
-interface ProfileConfig {
-  chatModel?: string;
-}
-interface ProfileData {
-  config?: ProfileConfig;
-}
-
 // --- Styles ---
 const styles = StyleSheet.create({
   safeArea: {
@@ -74,48 +66,76 @@ function EditChatModelScreen(): React.ReactElement {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch the current model name
   const fetchCurrentModel = useCallback(async () => {
-    // ... (Similar fetch logic as EditSystemPrompt, getting config.chatModel) ...
     if (!userToken) { /* ... handle error ... */ return; }
-    setIsLoading(true);
-    setError(null);
+    setIsLoading(true); setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, { headers: { 'Authorization': `Bearer ${userToken}` } });
-      if (!response.ok) throw new Error('Failed to fetch profile');
+      // Fetch the full profile to get the current chat model
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+         method: 'GET',
+         headers: { 
+             'Authorization': `Bearer ${userToken}`,
+             'Accept': 'application/json' 
+         }
+      });
+      if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          if (response.status === 404) {
+              throw new Error('Profile not found. Cannot edit chat model.');
+          }
+          throw new Error(errData.error || 'Fetch failed');
+       }
       const data = await response.json();
-      const model = data?.config?.chatModel || '';
+      // --- FIX: Extract config_chat_model from the response --- 
+      const model = data?.config_chat_model || ''; 
       setInitialModel(model);
       setCurrentModel(model);
     } catch (err: any) { setError(`Failed to load model: ${err.message}`); } 
     finally { setIsLoading(false); }
   }, [userToken]);
 
-  useEffect(() => {
-    fetchCurrentModel();
-  }, [fetchCurrentModel]);
+  useEffect(() => { fetchCurrentModel(); }, [fetchCurrentModel]);
 
-  // Save the updated model name
   const handleSave = useCallback(async () => {
-     // ... (Similar save logic: fetch full profile, update only config.chatModel, POST) ...
-    if (!userToken || currentModel === initialModel) { navigation.goBack(); return; }
-    setIsSaving(true);
-    setError(null);
+    // Exit early if not authenticated or value hasn't changed
+    if (!userToken || currentModel.trim() === initialModel.trim()) { 
+        navigation.goBack(); 
+        return; 
+    }
+    setIsSaving(true); setError(null);
     try {
-      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, { headers: { 'Authorization': `Bearer ${userToken}` } });
-      if (!profileResponse.ok) throw new Error('Failed to fetch current profile');
-      const fullProfile = await profileResponse.json();
-      const payload = { ...fullProfile, config: { ...(fullProfile.config || {}), chatModel: currentModel } };
-      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` }, body: JSON.stringify(payload) });
-      if (!saveResponse.ok) {
-        const errData = await saveResponse.json().catch(() => ({}));
-        throw new Error(errData.error || 'Save failed');
+      // --- FIX: Construct payload with only the snake_case field --- 
+      const payload = { 
+          config_chat_model: currentModel.trim() // Send the correct field name
+      };
+
+      console.log("Saving Chat Model:", payload);
+
+      // --- FIX: Send only the specific field to update --- 
+      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, { 
+          method: 'POST', 
+          headers: { 
+              'Content-Type': 'application/json', 
+              'Authorization': `Bearer ${userToken}`,
+              'Accept': 'application/json'
+          }, 
+          body: JSON.stringify(payload)
+      });
+
+      if (!saveResponse.ok) { 
+          const d = await saveResponse.json().catch(() => ({})); 
+          throw new Error(d.error || 'Save failed'); 
       }
-      navigation.goBack();
-    } catch (err: any) {
-      setError(`Save failed: ${err.message}`);
-      Alert.alert('Save Failed', err.message);
-    } finally { setIsSaving(false); }
+      
+      console.log("Chat Model save successful");
+      navigation.goBack(); // Go back after successful save
+
+    } catch (err: any) { 
+        setError(`Save failed: ${err.message}`); 
+        Alert.alert('Save Failed', err.message); 
+    } finally { 
+        setIsSaving(false); 
+    }
   }, [userToken, currentModel, initialModel, navigation]);
 
   // Configure Header Buttons

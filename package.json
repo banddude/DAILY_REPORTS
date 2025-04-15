@@ -16,11 +16,8 @@
     "@aws-sdk/client-s3": "^3.782.0",
     "@react-navigation/native-stack": "^7.3.10",
     "@react-navigation/stack": "^7.2.10",
-    "@types/express": "^5.0.1",
-    "@types/multer": "^1.4.12",
-    "@types/node": "^22.14.0",
+    "@supabase/supabase-js": "^2.49.4",
     "@types/pdfkit": "^0.13.9",
-    "@types/uuid": "^10.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
@@ -34,6 +31,10 @@
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.14.1",
+    "@types/uuid": "^10.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }

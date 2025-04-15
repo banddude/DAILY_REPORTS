@@ -10,8 +10,6 @@ import { toFile } from 'openai/uploads'; // Add this import
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"; // Import S3 client
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
-import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
-import { supabase } from './config'; // <<< Import Supabase client
 
 // --- Path Constants (relative to project root) ---
 const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
@@ -61,72 +59,30 @@ interface FullTranscription {
   // Potentially other fields from verbose_json if needed
 }
 
-// User-specific profile helper - Get profile from SUPABASE
+// User-specific profile helper - Get profile from S3
 async function getUserProfile(userId: string): Promise<any> {
   try {
-    console.log(`Fetching user profile from Supabase for user: ${userId}`);
-
-    // Select ALL columns from the profiles table
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('*') // Fetch all columns
-      .eq('id', userId)
-      .single();
-
-    if (profileError) {
-      console.error(`Supabase error fetching profile for user ${userId}:`, profileError);
-      if (profileError.code === 'PGRST116') {
-         throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
-      }
-      throw new Error(`Supabase error: ${profileError.message}`);
-    }
-
-    if (!profileData) {
-       throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
+    const userProfileKey = `users/${userId}/profile.json`;
+    console.log(`Fetching user profile from S3: ${userProfileKey}`);
+    
+    const getCommand = new GetObjectCommand({
+      Bucket: s3Bucket,
+      Key: userProfileKey
+    });
+    
+    const response = await s3Client.send(getCommand);
+    if (!response.Body) {
+      throw new Error("Empty response body from S3");
     }
     
-    console.log(`Successfully fetched profile from Supabase for user ${userId}`);
-
-    // Reconstruct the nested profile structure using ALL fetched data
-    const reconstructedProfile = {
-        // Top-level fields (map snake_case to camelCase/expected names)
-        name: profileData.full_name, 
-        username: profileData.username,
-        email: profileData.email, // Assuming email might be needed downstream (though not fetched explicitly before)
-        phone: profileData.phone,
-        
-        // Nested company object
-        company: {
-            name: profileData.company_name,
-            street: profileData.company_street, // Map address fields
-            unit: profileData.company_unit,
-            city: profileData.company_city,
-            state: profileData.company_state,
-            zip: profileData.company_zip,
-            phone: profileData.company_phone,
-            website: profileData.company_website
-        },
-        
-        // Nested config object
-        config: {
-            chatModel: profileData.config_chat_model,
-            whisperModel: profileData.config_whisper_model,
-            systemPrompt: profileData.config_system_prompt,
-            // Parse JSON string back into an object, handle null/undefined
-            reportJsonSchema: profileData.config_report_json_schema 
-                                ? JSON.parse(profileData.config_report_json_schema) 
-                                : null, 
-            logoFilename: profileData.config_logo_filename
-        }
-    };
-
-    return reconstructedProfile;
-
+    const profileString = await response.Body.transformToString('utf-8');
+    return JSON.parse(profileString);
   } catch (error: any) {
-    // Catch errors from the try block (includes Supabase errors thrown)
-    console.error(`Error in getUserProfile for ${userId}:`, error);
-    // Re-throw the specific error message
-    throw new Error(`Failed to get user profile from Supabase: ${error.message}`);
+    if (error.name === 'NoSuchKey') {
+      throw new Error(`User profile not found in S3: ${userId}. Initialize the user profile first.`);
+    }
+    console.error(`Error fetching user profile for ${userId}:`, error);
+    throw new Error(`Failed to get user profile: ${error.message}`);
   }
 }
 
@@ -139,7 +95,7 @@ async function getDailyReport(transcription: FullTranscription, profileData: any
     // Prepare a more readable transcript format for the LLM, including timestamps
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
-    // --- Read Config from profileData (using reconstructed structure) ---
+    // --- Read Config from profileData (NO DEFAULTS) ---
     const chatModel = profileData.config.chatModel; 
     const systemPromptContent = profileData.config.systemPrompt;
     const reportSchema = profileData.config.reportJsonSchema;
@@ -519,12 +475,11 @@ async function selectFrameTimestamps(transcription: FullTranscription, numFrames
  * video -> audio -> transcription -> report JSON -> frame timestamps -> frame extraction -> PDF (optional) -> S3 upload.
  * Returns the S3 key of the generated report JSON file.
  */
-export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string): Promise<string> { 
-    // Ensure defaults are applied immediately
-    const customerName = customerNameInput || 'UnknownCustomer';
-    const projectName = projectNameInput || 'UnknownProject';
-    
-    const startTime = Date.now();
+export async function generateReport(inputVideoPath: string, userId: string, customerName?: string, projectName?: string): Promise<string> { 
+    if (!userId) {
+        throw new Error("User ID is required to generate a report.");
+    }
+    const totalStart = Date.now();
     function logStep(msg: string, start?: number) {
       const now = Date.now();
       if (start) {
@@ -536,7 +491,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
     }
     logStep(`Generating report for user: ${userId}`);
     logStep(`Processing video: ${inputVideoPath}`);
-    logStep(`Report path will use customer: ${customerName}, project: ${projectName}`);
+    logStep(`Report path will use customer: ${customerName || 'Unknown'}, project: ${projectName || 'Unknown'}`);
 
     // 1. Create a unique directory for this processing job
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -598,25 +553,30 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         logStep('Extracted frames', stepStart);
 
         // 8. Construct S3 Keys
-        const customer = customerName || 'UnknownCustomer';
-        const project = projectName || 'UnknownProject';
+        const customer = customerName || profileData.company?.customer;
+        const project = projectName || profileData.company?.project;
+        if (!customer || !project) {
+            throw new Error("Customer and project must be provided either as parameters or in the user profile");
+        }
         logStep(`Using customer=${customer}, project=${project} for S3 paths`);
-        
         const s3BaseKey = `users/${userId}/${customer}/${project}/report_${timestamp}`;
         const s3ReportJsonKey = `${s3BaseKey}/daily_report.json`;
         const s3FramesBaseKey = `${s3BaseKey}/extracted_frames/`;
         const s3ViewerHtmlKey = `${s3BaseKey}/report-viewer.html`;
         const s3TranscriptionKey = `${s3BaseKey}/transcription.json`;
         const s3VideoKey = `${s3BaseKey}/source_video${path.extname(inputVideoPath)}`;
-        const s3PdfKey = `${s3BaseKey}/daily_report.pdf`; // S3 Key for PDF
-
-        // Get logo key directly from profile data (fetched earlier by getUserProfile)
-        const s3LogoKey = profileData.config.logoFilename; 
-        if (s3LogoKey) {
-            logStep(`Found logo filename in profile: ${s3LogoKey}. Will use for PDF.`);
-        } else {
-            logStep(`No logo filename found in profile. Report PDF will not have a logo.`);
-            // DO NOT throw an error here - allow generation without logo
+        let s3LogoKey = '';
+        try {
+          const userProfileLogoKey = `users/${userId}/logo.png`;
+          logStep(`Checking for user logo at S3 key: ${userProfileLogoKey}`);
+          const getLogoCommand = new GetObjectCommand({ Bucket: s3Bucket, Key: userProfileLogoKey });
+          await s3Client.send(getLogoCommand);
+          logStep(`User has a custom logo at ${userProfileLogoKey}, using it for the report`);
+          s3LogoKey = userProfileLogoKey;
+          logStep(`Will reference existing user logo at s3://${s3Bucket}/${s3LogoKey}`);
+        } catch (error) {
+          logStep(`Error or logo not found: ${error}`);
+          throw new Error("No logo found for user. Cannot proceed without a logo.");
         }
 
         // 9. Add Image URLs to Report JSON (and upload frames)
@@ -684,28 +644,14 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
           videoUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3VideoKey}`
         };
         await writeFile(reportJsonPath, JSON.stringify(reportJson, null, 2));
-        logStep('Updated report JSON with metadata and asset URLs');
+        logStep('Updated report JSON with asset URLs');
 
         // 11. Upload Report Files to S3
         stepStart = logStep('Uploading report assets to S3...');
-        
-        // ---> Add specific logging for the main JSON upload <---
-        logStep(`Attempting to upload: ${reportJsonPath} to S3 key: ${s3ReportJsonKey}`);
-        try {
-            await uploadFileToS3(reportJsonPath, s3ReportJsonKey, 'application/json');
-            logStep(`Successfully completed upload call for: ${s3ReportJsonKey}`);
-        } catch (jsonUploadError) {
-            logStep(`!!! FAILED to upload main report JSON (${s3ReportJsonKey}): ${jsonUploadError}`);
-            // Re-throw the error to ensure the main catch block handles it
-            throw jsonUploadError; 
-        }
-        // ---> End specific logging <---
-        
+        await uploadFileToS3(reportJsonPath, s3ReportJsonKey, 'application/json');
         await uploadFileToS3(REPORT_VIEWER_HTML_PATH, s3ViewerHtmlKey, 'text/html');
         await uploadFileToS3(transcriptionJsonPath, s3TranscriptionKey, 'application/json');
-        if (fs.existsSync(frameTimestampsPath)) { // Only upload if it exists
-             await uploadFileToS3(frameTimestampsPath, `${s3BaseKey}/frame_timestamps.json`, 'application/json');
-        }
+        await uploadFileToS3(frameTimestampsPath, `${s3BaseKey}/frame_timestamps.json`, 'application/json');
         if (process.env.UPLOAD_SOURCE_VIDEO !== 'false') {
             logStep(`Uploading source video to S3: ${s3VideoKey}`);
             await uploadFileToS3(inputVideoPath, s3VideoKey, `video/${path.extname(inputVideoPath).substring(1)}`);
@@ -713,24 +659,8 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         logStep('Uploaded all report assets to S3', stepStart);
         logStep(`Report uploaded successfully to S3 bucket: ${s3Bucket}, base key: ${s3BaseKey}`);
 
-        // 12. Generate and Upload Report Viewer HTML using the helper function
-        logStep('Generating and uploading report viewer HTML');
-        if (!s3Bucket) {
-            throw new Error("Internal Server Error: S3 bucket configuration is missing.");
-        }
-        await generateAndUploadViewerHtml(
-            s3Client,
-            s3Bucket,
-            reportJson, 
-            userId,
-            customerName,
-            projectName,
-            processingDir
-        );
-        logStep('Report viewer HTML generated and uploaded', startTime);
-
-        // 13. Return the S3 key of the report JSON
-        logStep('Report generation complete', startTime);
+        // 12. Return the S3 key of the report JSON
+        logStep('Report generation complete', totalStart);
         return s3ReportJsonKey;
 
     } catch (error: any) {

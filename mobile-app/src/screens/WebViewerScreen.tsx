@@ -29,8 +29,22 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
   const { userToken } = useAuth();
+  // State for the URL with a cache-busting parameter
+  const [refreshableUrl, setRefreshableUrl] = useState<string>('');
 
-  console.log("WebViewerScreen: Loading URL:", url);
+  console.log("WebViewerScreen: Original URL:", url);
+
+  // Effect to update the refreshable URL with a timestamp when the original URL changes
+  useEffect(() => {
+    if (url && typeof url === 'string') {
+      const timestamp = Date.now();
+      const newUrl = url.includes('?') ? `${url}&t=${timestamp}` : `${url}?t=${timestamp}`;
+      setRefreshableUrl(newUrl);
+      console.log("WebViewerScreen: Set refreshable URL:", newUrl);
+    } else {
+        setRefreshableUrl(''); // Clear if URL is invalid/missing
+    }
+  }, [url]);
 
   // Basic error handling for invalid URL format (optional)
   useEffect(() => {
@@ -234,8 +248,10 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
       // Use react-native-webview for native platforms
       return (
         <WebView
-          source={{ uri: url }}
+          source={{ uri: refreshableUrl }} // Use the state variable with timestamp
           style={{ flex: 1, paddingTop: 0, marginTop: 0 }}
+          cacheEnabled={false}
+          incognito={true}
           onLoadStart={() => setIsLoading(true)}
           onLoadEnd={() => {
              setIsLoading(false);

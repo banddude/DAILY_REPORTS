@@ -112,6 +112,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
     // Use the backend endpoint which enforces auth via protect middleware
     const url = `${API_BASE_URL}/api/report?key=${encodeURIComponent(reportKey)}`;
     console.log(`ReportEditor: Fetching data from ${url}`);
+    console.log(`ReportEditor: Using raw reportKey: "${reportKey}"`);
     
     fetch(url, {
         headers: {

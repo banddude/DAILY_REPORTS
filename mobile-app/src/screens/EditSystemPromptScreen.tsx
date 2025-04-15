@@ -19,14 +19,6 @@ import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { EditSystemPromptScreenProps } from '../navigation/AppNavigator'; // Import navigation props type
 
-// Define the expected structure of the profile data (only what's needed)
-interface ProfileConfig {
-  systemPrompt?: string;
-}
-interface ProfileData {
-  config?: ProfileConfig;
-}
-
 // --- Styles (Inspired by the screenshot) ---
 const styles = StyleSheet.create({
   safeArea: {
@@ -100,10 +92,7 @@ function EditSystemPromptScreen(): React.ReactElement {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  // Example state for a toggle if needed, adapt as necessary
-  const [isEnabled, setIsEnabled] = useState(true);
 
-  // Fetch the current system prompt
   const fetchCurrentPrompt = useCallback(async () => {
     if (!userToken) {
         setError('Authentication required.');
@@ -121,7 +110,7 @@ function EditSystemPromptScreen(): React.ReactElement {
       });
       if (!response.ok) throw new Error('Failed to fetch profile');
       const data = await response.json();
-      const prompt = data?.config?.systemPrompt || '';
+      const prompt = data?.config_system_prompt || '';
       setInitialPrompt(prompt);
       setCurrentPrompt(prompt);
     } catch (err: any) {
@@ -136,43 +125,20 @@ function EditSystemPromptScreen(): React.ReactElement {
     fetchCurrentPrompt();
   }, [fetchCurrentPrompt]);
 
-  // Save the updated prompt
   const handleSave = useCallback(async () => {
-    if (!userToken) {
-      Alert.alert('Error', 'Authentication required.');
-      return;
-    }
-
-    // Prevent saving if no changes
-    if (currentPrompt === initialPrompt) {
+    if (!userToken || currentPrompt.trim() === initialPrompt.trim()) {
         navigation.goBack();
         return;
     }
-
     setIsSaving(true);
     setError(null);
-
     try {
-      // 1. Fetch the *entire* current profile first
-      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Accept': 'application/json'
-        }
-      });
-      if (!profileResponse.ok) throw new Error('Failed to fetch current profile before saving');
-      const fullProfile = await profileResponse.json();
-
-      // 2. Create the payload by updating only the system prompt
       const payload = {
-          ...fullProfile,
-          config: {
-              ...(fullProfile.config || {}), // Ensure config object exists
-              systemPrompt: currentPrompt,
-          },
+          config_system_prompt: currentPrompt.trim()
       };
 
-      // 3. Send the updated profile
+      console.log("Saving System Prompt:", payload);
+
       const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
         method: 'POST',
         headers: {
@@ -180,17 +146,16 @@ function EditSystemPromptScreen(): React.ReactElement {
           'Authorization': `Bearer ${userToken}`,
           'Accept': 'application/json'
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       if (!saveResponse.ok) {
-        const errData = await saveResponse.json().catch(() => ({ error: 'Save failed with unknown server error' }));
-        throw new Error(errData.error || `Save failed: ${saveResponse.status}`);
+        const d = await saveResponse.json().catch(() => ({}));
+        throw new Error(d.error || 'Save failed');
       }
-
-      // Success
-      navigation.goBack(); // Go back to the previous screen
-      // Optionally: Add a success message or trigger a refresh on the previous screen
+      
+      console.log("System Prompt save successful");
+      navigation.goBack();
 
     } catch (err: any) {
       setError(`Failed to save prompt: ${err.message}`);
@@ -201,19 +166,17 @@ function EditSystemPromptScreen(): React.ReactElement {
     }
   }, [userToken, currentPrompt, initialPrompt, navigation]);
 
-  // Configure Header Buttons
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
         <Button onPress={() => navigation.goBack()} title="Cancel" disabled={isSaving} color={Platform.OS === 'ios' ? colors.primary : undefined}/>
       ),
       headerRight: () => (
-        <Button onPress={handleSave} title={isSaving ? "Saving..." : "Save"} disabled={isLoading || isSaving} color={Platform.OS === 'ios' ? colors.primary : undefined} />
+        <Button onPress={handleSave} title={isSaving ? "Saving..." : "Save"} disabled={isLoading || isSaving || currentPrompt.trim() === initialPrompt.trim()} color={Platform.OS === 'ios' ? colors.primary : undefined} />
       ),
     });
-  }, [navigation, handleSave, isLoading, isSaving]);
+  }, [navigation, handleSave, isLoading, isSaving, currentPrompt, initialPrompt]);
 
-  // --- Render Logic ---
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>

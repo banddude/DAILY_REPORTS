@@ -24,14 +24,6 @@ import { EditReportSchemaScreenProps } from '../navigation/AppNavigator';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 
-// Define the expected structure of the profile data (only what's needed)
-interface ProfileConfig {
-  reportJsonSchema?: object;
-}
-interface ProfileData {
-  config?: ProfileConfig;
-}
-
 // --- Styles ---
 const styles = StyleSheet.create({
   safeArea: {
@@ -130,16 +122,7 @@ function EditReportSchemaScreen(): React.ReactElement {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // State for image picker (replace with actual image logic if needed)
-  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
-  // State for confirmation modal (replace with actual delete/reset logic if needed)
-  const [isConfirmVisible, setIsConfirmVisible] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
-  const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, confirmText: string, isDestructive: boolean } | null>(null);
-
-  // Fetch the current schema
   const fetchCurrentSchema = useCallback(async () => {
     if (!userToken) {
       setError('Authentication required.');
@@ -148,18 +131,23 @@ function EditReportSchemaScreen(): React.ReactElement {
     }
     setIsLoading(true);
     setError(null);
-    setJsonError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${userToken}`,
           'Accept': 'application/json'
         }
       });
-      if (!response.ok) throw new Error('Failed to fetch profile');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 404) {
+          throw new Error('Profile not found. Cannot edit schema.');
+        }
+        throw new Error(errData.error || 'Fetch failed');
+      }
       const data = await response.json();
-      const schemaObject = data?.config?.reportJsonSchema;
-      const schemaStr = schemaObject ? JSON.stringify(schemaObject, null, 2) : ''; // Pretty print
+      const schemaStr = data?.config_report_json_schema || '';
       setInitialSchemaString(schemaStr);
       setCurrentSchemaString(schemaStr);
     } catch (err: any) {
@@ -174,75 +162,28 @@ function EditReportSchemaScreen(): React.ReactElement {
     fetchCurrentSchema();
   }, [fetchCurrentSchema]);
 
-  // Validate JSON input dynamically
-  useEffect(() => {
-    if (!currentSchemaString.trim()) {
-        setJsonError(null); // Clear error if input is empty
-        return;
-    }
-    try {
-      JSON.parse(currentSchemaString);
-      setJsonError(null); // Valid JSON
-    } catch (e) {
-      setJsonError('Invalid JSON format.'); // Invalid JSON
-    }
-  }, [currentSchemaString]);
-
-  // Save the updated schema
   const handleSave = useCallback(async () => {
     if (!userToken) {
       Alert.alert('Error', 'Authentication required.');
       return;
     }
+    const currentTrimmed = typeof currentSchemaString === 'string' ? currentSchemaString.trim() : '';
+    const initialTrimmed = typeof initialSchemaString === 'string' ? initialSchemaString.trim() : '';
 
-    // Prevent saving if invalid JSON
-    if (jsonError) {
-        Alert.alert('Invalid JSON', 'Please correct the JSON format before saving.');
-        return;
+    if (currentTrimmed === initialTrimmed) {
+      navigation.goBack();
+      return;
     }
-
-    // Prevent saving if no changes
-    if (currentSchemaString === initialSchemaString) {
-        navigation.goBack();
-        return;
-    }
-
     setIsSaving(true);
     setError(null);
 
-    let parsedSchema = {};
     try {
-        // Parse the current string back into an object for saving
-        if (currentSchemaString.trim()) {
-            parsedSchema = JSON.parse(currentSchemaString);
-        }
-    } catch (e) {
-        setError('Failed to parse JSON before saving. Please check the format.');
-        setIsSaving(false);
-        return;
-    }
-
-    try {
-      // 1. Fetch the *entire* current profile first
-      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Accept': 'application/json'
-        }
-      });
-      if (!profileResponse.ok) throw new Error('Failed to fetch current profile before saving');
-      const fullProfile = await profileResponse.json();
-
-      // 2. Create the payload by updating only the reportJsonSchema
       const payload = {
-          ...fullProfile,
-          config: {
-              ...(fullProfile.config || {}),
-              reportJsonSchema: parsedSchema, // Save the parsed object
-          },
+        config_report_json_schema: currentTrimmed || null
       };
 
-      // 3. Send the updated profile
+      console.log("Saving Report Schema (as string):", payload);
+
       const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
         method: 'POST',
         headers: {
@@ -250,155 +191,40 @@ function EditReportSchemaScreen(): React.ReactElement {
           'Authorization': `Bearer ${userToken}`,
           'Accept': 'application/json'
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       if (!saveResponse.ok) {
-        const errData = await saveResponse.json().catch(() => ({ error: 'Save failed with unknown server error' }));
-        throw new Error(errData.error || `Save failed: ${saveResponse.status}`);
+        const d = await saveResponse.json().catch(() => ({}));
+        throw new Error(d.error || 'Save failed');
       }
-
-      // Success
+      
+      console.log("Report Schema save successful");
       navigation.goBack();
 
     } catch (err: any) {
-      setError(`Failed to save schema: ${err.message}`);
-      console.error("Error saving schema:", err);
+      setError(`Save failed: ${err.message}`);
       Alert.alert('Save Failed', err.message || 'Could not save the report schema.');
     } finally {
       setIsSaving(false);
     }
-  }, [userToken, currentSchemaString, initialSchemaString, jsonError, navigation]);
+  }, [userToken, currentSchemaString, initialSchemaString, navigation]);
 
-  // --- Image Picker Logic ---
-  const showImageSourceOptions = () => {
-    const options: AlertButton[] = [
-      { text: 'Take Photo', onPress: () => pickImage('camera') },
-      { text: 'Choose from Library', onPress: () => pickImage('library') },
-      { text: 'Cancel', style: 'cancel' },
-    ];
-
-    Alert.alert(
-      'Select Image Source',
-      'How would you like to select the image?',
-      options,
-      { cancelable: true }
-    );
-  };
-
-  const pickImage = async (source: 'camera' | 'library') => {
-    let result: ImagePicker.ImagePickerResult;
-    try {
-      if (source === 'camera') {
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (permission.status !== 'granted') {
-          Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.5,
-        });
-      } else { // source === 'library'
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (permission.status !== 'granted') {
-          Alert.alert('Permission Required', 'Media Library permission is needed to choose photos.');
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.5,
-        });
-      }
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedImageUri(result.assets[0].uri);
-        console.log("Image selected:", result.assets[0].uri);
-        // TODO: Add logic here to actually upload/save the selectedImageUri if needed
-        // For now, it just updates the preview
-      }
-    } catch (error) {
-      console.error("Error picking image:", error);
-      Alert.alert('Image Error', 'Could not select or capture image.');
-    }
-  };
-
-  // --- Confirmation Logic (Example) ---
-  const showConfirmation = (config: { title: string, message: string, confirmText: string, isDestructive: boolean }, onConfirm: () => void) => {
-    setConfirmConfig(config);
-    setConfirmAction(() => onConfirm); // Store the action in state
-    setIsConfirmVisible(true);
-  };
-
-  const handleConfirm = () => {
-    if (confirmAction) {
-      confirmAction();
-    }
-    setIsConfirmVisible(false);
-    setConfirmAction(null);
-    setConfirmConfig(null);
-  };
-
-  const handleCancelConfirm = () => {
-    setIsConfirmVisible(false);
-    setConfirmAction(null);
-    setConfirmConfig(null);
-  };
-
-  // Example Usage of Confirmation:
-  const handleResetSchema = () => {
-    showConfirmation(
-      {
-        title: 'Reset Schema?',
-        message: 'Are you sure you want to reset the schema to its original state? All your changes will be lost.',
-        confirmText: 'Reset',
-        isDestructive: true,
-      },
-      () => {
-        setCurrentSchemaString(initialSchemaString);
-        setJsonError(null); // Reset JSON error too
-        console.log('Schema reset to initial state.');
-      }
-    );
-  };
-
-  // Configure Header Buttons (add reset button)
   useLayoutEffect(() => {
+    const currentTrimmed = typeof currentSchemaString === 'string' ? currentSchemaString.trim() : '';
+    const initialTrimmed = typeof initialSchemaString === 'string' ? initialSchemaString.trim() : '';
+    const isDisabled = isLoading || isSaving || currentTrimmed === initialTrimmed;
+
     navigation.setOptions({
       headerLeft: () => (
         <Button onPress={() => navigation.goBack()} title="Cancel" disabled={isSaving} color={Platform.OS === 'ios' ? colors.primary : undefined} />
       ),
-      // Add a reset button conditionally if changes were made
-      headerTitle: 'Edit Report Schema', // Explicitly set title
       headerRight: () => (
-        <View style={{ flexDirection: 'row' }}>
-          {currentSchemaString !== initialSchemaString && (
-            <Button
-                onPress={handleResetSchema}
-                title="Reset"
-                disabled={isLoading || isSaving}
-                color={Platform.OS === 'ios' ? colors.error : undefined} // Use error color for reset
-            />
-          )}
-          {/* Wrap Save Button in View for margin */}
-          <View style={{ marginLeft: currentSchemaString !== initialSchemaString ? spacing.md : 0 }}>
-            <Button
-              onPress={handleSave}
-              title={isSaving ? "Saving..." : "Save"}
-              disabled={isLoading || isSaving || !!jsonError || currentSchemaString === initialSchemaString} // Disable if no changes
-              color={Platform.OS === 'ios' ? colors.primary : undefined}
-             />
-          </View>
-        </View>
+        <Button onPress={handleSave} title={isSaving ? "Saving..." : "Save"} disabled={isDisabled} color={Platform.OS === 'ios' ? colors.primary : undefined} />
       ),
     });
-  }, [navigation, handleSave, handleResetSchema, isLoading, isSaving, jsonError, currentSchemaString, initialSchemaString]); // Add dependencies
+  }, [navigation, handleSave, isLoading, isSaving, currentSchemaString, initialSchemaString]);
 
-  // --- Render Logic ---
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -412,14 +238,13 @@ function EditReportSchemaScreen(): React.ReactElement {
         <KeyboardAvoidingView
              behavior={Platform.OS === "ios" ? "padding" : "height"}
              style={styles.keyboardAvoidingView}
-             keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0} // Adjust offset if needed
+             keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
         >
             <ScrollView contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
                 {error && <Text style={styles.errorText}>{error}</Text>}
 
-                {/* JSON Schema Editor */} 
                 <View style={styles.fieldContainer}> 
-                  <Text style={styles.label}>Report JSON Schema</Text> 
+                  <Text style={styles.label}>Report JSON Schema (Raw Text)</Text> 
                   <TextInput
                     style={styles.textInput}
                     value={currentSchemaString}
@@ -428,28 +253,14 @@ function EditReportSchemaScreen(): React.ReactElement {
                     autoCapitalize="none"
                     autoCorrect={false}
                     spellCheck={false}
-                    placeholder="Enter JSON schema here..."
+                    placeholder="Enter schema text here..."
                     placeholderTextColor={colors.textSecondary}
                     editable={!isLoading && !isSaving}
                   />
-                  {jsonError && <Text style={styles.jsonErrorText}>{jsonError}</Text>}
                 </View>
 
             </ScrollView>
         </KeyboardAvoidingView>
-
-        {/* Confirmation Modal */} 
-        {confirmConfig && (
-            <ConfirmationModal
-                isVisible={isConfirmVisible}
-                title={confirmConfig.title}
-                message={confirmConfig.message}
-                confirmText={confirmConfig.confirmText}
-                onConfirm={handleConfirm} // Use the wrapper handler
-                onCancel={handleCancelConfirm}
-                isDestructive={confirmConfig.isDestructive}
-            />
-        )}
     </SafeAreaView>
   );
 }

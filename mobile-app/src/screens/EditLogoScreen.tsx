@@ -20,6 +20,7 @@ import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { ProfileStackParamList } from '../navigation/AppNavigator'; // Correct ParamList for Profile stack
+// import { useAnalytics } from '../context/AnalyticsContext'; // Corrected path - Commented out
 
 // Helper to open links (might not be needed here but copied for SettingsRow consistency)
 const openLink = async (url: string) => {
@@ -171,27 +172,32 @@ const styles = StyleSheet.create({
 function EditLogoScreen(): React.ReactElement {
   const navigation = useNavigation();
   const route = useRoute<EditLogoScreenRouteProp>();
-  const { userToken } = useAuth();
+  const auth = useAuth();
+  const { user } = auth; // Get user object which contains the ID
+  // const { trackEvent } = useAnalytics(); // Commented out
 
-  // Initial logo URL passed from ProfileScreen (or fetch if needed)
-  const initialLogoUrl = route.params?.currentLogoUrl;
-  const [logoUrl, setLogoUrl] = useState<string | null>(initialLogoUrl);
-  const [isUploading, setIsUploading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Re-fetch logo URL if needed (e.g., if not passed via params or to confirm update)
-  // This ensures the displayed logo is current after potential updates
   useEffect(() => {
-      if (userToken) {
-          // Use cache buster to ensure freshness
-          setLogoUrl(`${API_BASE_URL}/api/logo/${userToken}?t=${Date.now()}`);
-      }
-  }, [userToken]); // Re-run if token changes (unlikely but safe)
+    // Construct the logo URL using user ID, not the full token
+    if (auth.user?.id) { // Ensure user ID exists
+      const timestamp = Date.now(); // Cache buster
+      const url = `${API_BASE_URL}/api/logo/${auth.user.id}?t=${timestamp}`;
+      console.log(`EditLogoScreen: Setting initial logo URL to: ${url}`);
+      setLogoUrl(url);
+    } else {
+      console.warn('EditLogoScreen: User ID not available for logo URL.');
+      setLogoUrl(null); // Reset if no user ID
+    }
+  }, [auth.user?.id]); // Depend on user ID
 
   // --- Logo Upload Logic (Moved from ProfileScreen) ---
   const handleLogoUpload = useCallback(async () => {
-    if (!userToken || isUploading) return;
+    if (!auth.user?.id || isLoading) return;
 
     setError(null);
     setSuccessMessage(null);
@@ -204,7 +210,7 @@ function EditLogoScreen(): React.ReactElement {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [2, 1],
         quality: 0.8,
@@ -215,7 +221,7 @@ function EditLogoScreen(): React.ReactElement {
       }
 
       const selectedImage = result.assets[0];
-      setIsUploading(true);
+      setIsLoading(true);
 
       const formData = new FormData();
       if (Platform.OS === 'web') {
@@ -236,7 +242,7 @@ function EditLogoScreen(): React.ReactElement {
       const response = await fetch(`${API_BASE_URL}/api/upload-logo`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${auth.userToken}`,
           'Accept': 'application/json',
         },
         body: formData,
@@ -247,11 +253,18 @@ function EditLogoScreen(): React.ReactElement {
         throw new Error(`Upload failed: ${response.status} ${errorText}`);
       }
 
-      // Update logo URL state with cache buster and show success
-      const newLogoUrl = `${API_BASE_URL}/api/logo/${userToken}?t=${Date.now()}`;
-      setLogoUrl(newLogoUrl);
+      // Show success message immediately
       setSuccessMessage('Logo uploaded successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000); // Clear message after 3s
+
+      // Wait for 1 second before trying to load the new logo
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Update logo URL state with cache buster AFTER the delay
+      const newLogoUrl = `${API_BASE_URL}/api/logo/${auth.user.id}?t=${Date.now()}`;
+      setLogoUrl(newLogoUrl);
+
+      // Clear success message after 3 seconds (from original time)
+      setTimeout(() => setSuccessMessage(null), 2000); // Adjusted timeout
 
       // Optionally, inform ProfileScreen to refresh if needed,
       // though focus-based refresh might handle it.
@@ -261,9 +274,9 @@ function EditLogoScreen(): React.ReactElement {
       console.error("Error uploading logo:", err);
       setError(`Logo upload failed: ${err.message}`);
     } finally {
-      setIsUploading(false);
+      setIsLoading(false);
     }
-  }, [userToken, isUploading]);
+  }, [auth.user?.id, auth.userToken]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
@@ -296,16 +309,16 @@ function EditLogoScreen(): React.ReactElement {
           <TouchableOpacity
             style={styles.buttonRow} // Use the new row style
             onPress={handleLogoUpload}
-            disabled={isUploading}
+            disabled={isLoading}
           >
             <View style={styles.buttonIconContainer}> 
-              {isUploading ? (
+              {isLoading ? (
                 <ActivityIndicator color={colors.textSecondary} size="small" /> // Use secondary color for consistency
               ) : (
                 <Ionicons name="cloud-upload-outline" size={22} color={colors.textSecondary} /> // Use secondary color like other icons
               )}
             </View>
-            <Text style={styles.buttonRowText}>{isUploading ? 'Uploading...' : 'Replace Logo'}</Text>
+            <Text style={styles.buttonRowText}>{isLoading ? 'Uploading...' : 'Replace Logo'}</Text>
           </TouchableOpacity>
         </View>
 

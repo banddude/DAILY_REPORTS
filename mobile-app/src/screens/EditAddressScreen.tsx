@@ -26,11 +26,6 @@ interface AddressData {
   state?: string;
   zip?: string;
 }
-interface ProfileData {
-  company?: {
-    address?: AddressData;
-  };
-}
 
 // --- Styles (Similar to other editors, maybe adjust padding/margins) ---
 const styles = StyleSheet.create({
@@ -58,10 +53,29 @@ function EditAddressScreen(): React.ReactElement {
     if (!userToken) { /* ... handle no token ... */ return; }
     setIsLoading(true); setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, { headers: { 'Authorization': `Bearer ${userToken}` } });
-      if (!response.ok) throw new Error('Fetch failed');
+      const response = await fetch(`${API_BASE_URL}/api/profile`, { 
+          method: 'GET',
+          headers: { 
+              'Authorization': `Bearer ${userToken}`,
+              'Accept': 'application/json' 
+          }
+      });
+      if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          if (response.status === 404) {
+              throw new Error('Profile not found. Cannot edit address.');
+          }
+          throw new Error(errData.error || 'Fetch failed');
+       }
       const data = await response.json();
-      const address = data?.company?.address || {};
+      // --- FIX: Map snake_case fields from server to local camelCase state --- 
+      const address: AddressData = {
+          street: data?.company_street,
+          unit: data?.company_unit,
+          city: data?.company_city,
+          state: data?.company_state,
+          zip: data?.company_zip,
+      };
       setInitialAddress(address);
       setCurrentAddress(address);
     } catch (err: any) { setError(`Load failed: ${err.message}`); }
@@ -77,23 +91,59 @@ function EditAddressScreen(): React.ReactElement {
 
   // Save updated address
   const handleSave = useCallback(async () => {
-    if (!userToken || JSON.stringify(currentAddress) === JSON.stringify(initialAddress)) {
+    const hasChanged = JSON.stringify(currentAddress) !== JSON.stringify(initialAddress);
+    if (!userToken || !hasChanged) {
         navigation.goBack();
         return;
     }
     setIsSaving(true); setError(null);
     try {
-      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, { headers: { 'Authorization': `Bearer ${userToken}` } });
-      if (!profileResponse.ok) throw new Error('Failed to fetch profile before save');
-      const fullProfile = await profileResponse.json();
-      // Ensure company object exists before merging address
-      const updatedCompany = { ...(fullProfile.company || {}), address: currentAddress };
-      const payload = { ...fullProfile, company: updatedCompany };
-      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` }, body: JSON.stringify(payload) });
-      if (!saveResponse.ok) { const d = await saveResponse.json().catch(() => ({})); throw new Error(d.error || 'Save failed'); }
-      navigation.goBack();
-    } catch (err: any) { setError(`Save failed: ${err.message}`); Alert.alert('Save Failed', err.message); }
-    finally { setIsSaving(false); }
+      // --- FIX: Construct payload mapping local camelCase back to snake_case --- 
+      // --- FIX: Allow null in payload type --- 
+      const payload: { [key: string]: string | null | undefined } = {
+          company_street: currentAddress.street?.trim(),
+          company_unit: currentAddress.unit?.trim(),
+          company_city: currentAddress.city?.trim(),
+          company_state: currentAddress.state?.trim().toUpperCase(), // Ensure state is uppercase
+          company_zip: currentAddress.zip?.trim(),
+      };
+      
+      // Optional: Remove fields that haven't actually changed from initial state?
+      // Or just send all fields - server update should handle it.
+      // Remove undefined/empty fields before sending -> Set to null
+      Object.keys(payload).forEach(key => {
+          if (payload[key] === undefined || payload[key] === '') {
+              payload[key] = null; // Send null to clear field in DB if needed
+          }
+      });
+
+      console.log("Saving Address:", payload);
+
+      // --- FIX: Send only the address fields to update --- 
+      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, { 
+          method: 'POST', 
+          headers: { 
+              'Content-Type': 'application/json', 
+              'Authorization': `Bearer ${userToken}`,
+              'Accept': 'application/json'
+          }, 
+          body: JSON.stringify(payload)
+      });
+
+      if (!saveResponse.ok) { 
+          const d = await saveResponse.json().catch(() => ({})); 
+          throw new Error(d.error || 'Save failed'); 
+      }
+      
+      console.log("Address save successful");
+      navigation.goBack(); // Go back after successful save
+
+    } catch (err: any) { 
+        setError(`Save failed: ${err.message}`); 
+        Alert.alert('Save Failed', err.message); 
+    } finally { 
+        setIsSaving(false); 
+    }
   }, [userToken, currentAddress, initialAddress, navigation]);
 
   // Header Buttons

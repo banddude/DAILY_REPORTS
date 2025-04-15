@@ -8,66 +8,73 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.protect = void 0;
-const promises_1 = require("fs/promises");
-const path_1 = __importDefault(require("path"));
-const DATA_DIR = path_1.default.join(__dirname, '..', 'data'); // Adjust path relative to dist/src
-const USERS_JSON_PATH = path_1.default.join(DATA_DIR, 'users.json');
-// Updated protect middleware - now a simple pass-through
+exports.ensureAuthenticated = exports.protect = void 0;
+// Remove unused file system imports (readFile, path)
+const config_1 = require("./config"); // Import initialized Supabase client
+// Remove unused file system constants (DATA_DIR, USERS_JSON_PATH)
+// Updated protect middleware using Supabase JWT validation
 const protect = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     let token;
     if (req.headers.authorization &&
         req.headers.authorization.startsWith('Bearer')) {
         token = req.headers.authorization.split(' ')[1];
     }
-    // else if (req.cookies.token) { // Optional: Check for token in cookies if needed
-    //   token = req.cookies.token;
-    // }
     if (!token) {
+        console.log('Auth Middleware: No token provided.');
         res.status(401).json({ success: false, message: 'Not authorized, no token provided.' });
         return;
     }
     try {
-        // Read users from file
-        const usersData = yield (0, promises_1.readFile)(USERS_JSON_PATH, 'utf-8');
-        const users = JSON.parse(usersData);
-        // Find user by token (UUID)
-        const currentUser = users.find(u => u.UUID === token);
-        if (!currentUser) {
-            console.warn(`Auth failed: Invalid token (UUID) received: ${token}`);
-            res.status(401).json({ success: false, message: 'Not authorized, invalid token.' });
+        // Validate the token using Supabase
+        const { data: { user }, error } = yield config_1.supabase.auth.getUser(token);
+        if (error) {
+            console.warn(`Auth Middleware: Supabase token validation failed: ${error.message}`);
+            // Handle specific errors like expired token if needed
+            if (error.message === 'invalid JWT') {
+                res.status(401).json({ success: false, message: 'Not authorized, invalid token.' });
+                return;
+            }
+            else if (error.message.includes('expired')) {
+                res.status(401).json({ success: false, message: 'Not authorized, token expired.' });
+                return;
+            }
+            // Generic error for other Supabase auth issues
+            res.status(401).json({ success: false, message: 'Not authorized.' });
             return;
         }
-        // Attach user to the request object (excluding password)
-        const { password } = currentUser, userWithoutPassword = __rest(currentUser, ["password"]);
-        req.user = userWithoutPassword; // Assign the user object without the password
-        console.log(`Authenticated user: ${req.user.email} (UUID: ${req.user.UUID}) for path: ${req.path}`);
+        if (!user) {
+            // This case should theoretically be covered by error handling, but added for safety
+            console.warn('Auth Middleware: Token validated but no user object returned.');
+            res.status(401).json({ success: false, message: 'Not authorized, unable to verify user.' });
+            return;
+        }
+        // Attach the validated Supabase user object to the request
+        req.user = user;
+        console.log(`Auth Middleware: Authenticated user: ${req.user.email} (ID: ${req.user.id}) for path: ${req.path}`);
         next(); // Proceed to the next middleware/route handler
     }
-    catch (error) { // Catch any error during file read or JSON parse
-        console.error("Error during token validation:", error);
-        if (error.code === 'ENOENT') {
-            console.error(`Authentication error: ${USERS_JSON_PATH} not found.`);
-            res.status(500).json({ success: false, message: 'Authentication configuration error.' });
-        }
-        else {
-            res.status(401).json({ success: false, message: 'Not authorized, token validation failed.' });
-        }
+    catch (error) {
+        // Catch unexpected errors during the validation process
+        console.error("Auth Middleware: Unexpected error during token validation:", error);
+        res.status(500).json({ success: false, message: 'Internal server error during authentication.' });
     }
 });
 exports.protect = protect;
+// Helper function to ensure user is authenticated and return the Supabase User ID
+const ensureAuthenticated = (req, res) => {
+    if (!req.user || !req.user.id) {
+        // Log the state for debugging
+        if (!req.user) {
+            console.error('Auth Middleware: ensureAuthenticated check failed - req.user is missing. Protect middleware might have failed or was bypassed.');
+        }
+        else {
+            console.error(`Auth Middleware: ensureAuthenticated check failed - req.user.id is missing for user ${req.user.email || '(email unknown)'}. Ensure user object is correctly attached.`);
+        }
+        res.status(401).json({ error: 'User not properly authenticated.' });
+        return null;
+    }
+    // Return the Supabase User ID if authentication is successful
+    return req.user.id;
+};
+exports.ensureAuthenticated = ensureAuthenticated;
