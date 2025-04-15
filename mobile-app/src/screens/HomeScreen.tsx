@@ -456,13 +456,13 @@ const HomeScreen: React.FC = () => {
 
       if (source === 'camera') {
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          mediaTypes: 'videos',
           allowsEditing: false, // Editing usually not needed for video reports
           quality: 0.8,
         });
       } else { // source === 'library'
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          mediaTypes: 'videos',
           allowsEditing: false,
           quality: 0.8,
         });
@@ -690,7 +690,14 @@ const HomeScreen: React.FC = () => {
       }
        const reportData = responseJson as ReportResult;
        console.log('Report generated:', reportData);
-       navigateToWebViewer(reportData.viewerUrl); 
+       
+       // Add a delay before navigating to allow S3 consistency
+       const navigationDelay = 2000; // 2 seconds
+       console.log(`Waiting ${navigationDelay}ms before navigating to viewer...`);
+       setTimeout(() => {
+           console.log('Navigating to viewer now...');
+           navigateToWebViewer(reportData.viewerUrl);
+       }, navigationDelay); 
 
     } catch (error) {
       console.error('Report generation error:', error);
