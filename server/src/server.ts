@@ -75,7 +75,7 @@ try {
 // --- End More Debug Logging ---
 
 // Serve static files from the React Native web build directory
-app.use(express.static(frontendBuildPath)); // Uncomment static serving
+app.use(express.static(frontendBuildPath, { index: 'index.html' })); // Explicitly set index
 
 // --- Initialize Routes with Dependencies ---
 // initializeAuthRoutes();
