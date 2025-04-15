@@ -386,40 +386,84 @@ const HomeScreen: React.FC = () => {
     setResult({ message: '', type: null, data: null }); // Clear previous result
   };
 
+  // --- Helper for Web Desktop File Picking ---
+  const pickWebDesktopFile = () => {
+    console.log("Attempting to use hidden input for desktop web file picking.");
+    setIsFileProcessing(true); // Indicate processing start
+    try {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'video/*'; // Only accept video files
+      input.style.display = 'none'; // Keep it hidden
+
+      input.onchange = (event) => {
+        const target = event.target as HTMLInputElement;
+        if (target.files && target.files.length > 0) {
+          const file = target.files[0];
+          console.log(`Web desktop file selected: ${file.name}, Size: ${file.size}, Type: ${file.type}`);
+
+          // Create an object URL for the preview URI
+          const objectUrl = URL.createObjectURL(file);
+          // Remember to revoke this URL later if needed, e.g., in a useEffect cleanup or when file changes
+
+          processSelectedAsset({
+            uri: objectUrl, // Use object URL for local preview
+            name: file.name,
+            size: file.size,
+            mimeType: file.type,
+          });
+        } else {
+          console.log("Web desktop file selection cancelled or failed.");
+        }
+        // Clean up the input element
+        document.body.removeChild(input);
+        setIsFileProcessing(false); // Indicate processing end
+      };
+
+      // Append to body temporarily (needed for some browsers) and click
+      document.body.appendChild(input);
+      input.click();
+    } catch (err) {
+      console.error("Error setting up web desktop file picker:", err);
+      Alert.alert('Error', 'Could not open file picker.');
+      setIsFileProcessing(false); // Indicate processing end on error
+    }
+  };
+  // --- End Helper ---
+
   // --- Media Source Selection ---
   const showMediaSourceOptions = () => {
-    // Options specifically requested by user
+    // Native options remain the same
     const options: AlertButton[] = [
-      {
-        text: 'Photo Library', // Was 'Choose Video from Library'
-        onPress: () => pickMedia('library', 'video'),
-      },
-      {
-        text: 'Take Video', // Same as before
-        onPress: () => pickMedia('camera', 'video'),
-      },
-      {
-        text: 'Choose File', // Uses DocumentPicker
-        onPress: () => pickDocumentFile(), // Call separate function for DocumentPicker
-      },
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
+      { text: 'Photo Library', onPress: () => pickMedia('library', 'video') },
+      { text: 'Take Video', onPress: () => pickMedia('camera', 'video') },
+      { text: 'Choose File', onPress: () => pickDocumentFile() },
+      { text: 'Cancel', style: 'cancel' },
     ];
 
-    // Keep it simple for web: choose video file (uses ImagePicker fallback)
-    const webOptions: AlertButton[] = [
-       { text: 'Choose Video', onPress: () => pickMedia('library', 'video') },
-       { text: 'Cancel', style: 'cancel' },
-    ];
+    // --- Platform Specific Logic ---
+    if (Platform.OS === 'web') {
+        // Basic check for desktop user agents
+        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
 
-    Alert.alert(
-      'Select Video Source', // Updated title
-      'How would you like to select the video?', // Updated message
-      Platform.OS === 'web' ? webOptions : options, // Use correct options array
-      { cancelable: true }
-    );
+        if (!isMobile) {
+            console.log("Desktop web detected, using hidden input.");
+            pickWebDesktopFile(); // Directly trigger desktop web picker
+        } else {
+            console.log("Mobile web detected, using ImagePicker.");
+            pickMedia('library', 'video'); // Trigger mobile web picker
+        }
+    } else {
+        // Native: Show the alert with options
+        Alert.alert(
+          'Select Video Source',
+          'How would you like to select the video?',
+          options,
+          { cancelable: true }
+        );
+    }
+    // --- End Platform Specific Logic ---
   };
 
   // --- Unified Media Picker Logic (Handles Camera/Library via ImagePicker) ---
@@ -919,7 +963,7 @@ const HomeScreen: React.FC = () => {
                     isGeneratingReport && styles.buttonDisabled,
                     { borderTopWidth: borders.widthHairline, borderTopColor: colors.borderLight }
                   ]}
-                  onPress={Platform.OS === 'web' ? () => pickMedia('library', 'video') : showMediaSourceOptions}
+                  onPress={showMediaSourceOptions}
                   disabled={isGeneratingReport || isFileProcessing}
                 >
                   <View style={styles.buttonIconContainer}>

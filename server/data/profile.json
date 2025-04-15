@@ -1,18 +1,18 @@
 {
-  "name": "",
-  "email": "",
-  "phone": "",
+  "name": " ",
+  "email": " ",
+  "phone": " ",
   "company": {
-    "name": "",
+    "name": " ",
     "address": {
-      "street": "",
-      "unit": "",
-      "city": "",
-      "state": "",
-      "zip": ""
+      "street": " ",
+      "unit": " ",
+      "city": " ",
+      "state": " ",
+      "zip": " "
     },
-    "phone": "",
-    "website": ""
+    "phone": " ",
+    "website": " "
   },
   "config": {
     "chatModel": "gpt-4.1-mini",
