@@ -22,6 +22,12 @@ const app = express();
 // So, the assets are served relative to __dirname (which is server/dist)
 const frontendBuildPath = path.resolve(__dirname);
 
+// --- Add Logging for Debugging Paths (Again) ---
+console.log(`[Server Startup] Calculated frontend build path: ${frontendBuildPath}`);
+console.log(`[Server Startup] Current working directory (cwd): ${process.cwd()}`);
+console.log(`[Server Startup] Script directory (__dirname): ${__dirname}`);
+// --- End Logging ---
+
 // --- Middleware Setup ---
 
 // CORS (must be first)
