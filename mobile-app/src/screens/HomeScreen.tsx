@@ -408,7 +408,6 @@ const HomeScreen: React.FC = () => {
       },
     ];
 
-    // Web doesn't have the same camera/library/file distinction easily
     // Keep it simple for web: choose video file (uses ImagePicker fallback)
     const webOptions: AlertButton[] = [
        { text: 'Choose Video', onPress: () => pickMedia('library', 'video') },
@@ -496,6 +495,7 @@ const HomeScreen: React.FC = () => {
 
   // --- Document Picker Logic (Handles 'Choose File') ---
   const pickDocumentFile = async () => {
+    console.log('[pickDocumentFile] Started.');
     setResult({ message: '', type: null, data: null });
     setThumbnailUri(null);
     setSelectedFile(null);
@@ -511,42 +511,47 @@ const HomeScreen: React.FC = () => {
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
 
+      console.log('[pickDocumentFile] Calling DocumentPicker.getDocumentAsync...');
       const result = await DocumentPicker.getDocumentAsync({
         type: 'video/*', // Only allow video selection
         copyToCacheDirectory: true,
       });
 
-      console.log('DocumentPicker Result:', JSON.stringify(result, null, 2));
+      console.log('[pickDocumentFile] DocumentPicker Result: ', JSON.stringify(result, null, 2));
 
       if (result.canceled) {
-        console.log('Document selection cancelled.');
+        console.log('[pickDocumentFile] Document selection cancelled.');
         setIsFileProcessing(false);
         return;
       }
 
       if (result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        console.log('[pickDocumentFile] Asset found: ', JSON.stringify(asset, null, 2));
         // Basic check if it seems like a video
         if (asset.mimeType?.startsWith('video/') || asset.name?.match(/\.(mov|mp4|avi|mkv|wmv)$/i)) {
+            console.log('[pickDocumentFile] Calling processSelectedAsset...');
             processSelectedAsset(asset);
+            console.log('[pickDocumentFile] Returned from processSelectedAsset.');
         } else {
-            console.warn('Selected file via DocumentPicker might not be a video:', asset.mimeType, asset.name);
+            console.warn('[pickDocumentFile] Selected file via DocumentPicker might not be a video:', asset.mimeType, asset.name);
             Alert.alert('Invalid File Type', 'Please select a valid video file.');
             setSelectedFile(null);
             setThumbnailUri(null);
         }
       } else {
-        console.log('No assets found in DocumentPicker result.');
+        console.log('[pickDocumentFile] No assets found in DocumentPicker result.');
         Alert.alert('Error', 'Failed to select file.');
         setSelectedFile(null);
         setThumbnailUri(null);
       }
     } catch (err) {
-      console.error('Error picking document:', err);
+      console.error('[pickDocumentFile] Error picking document:', err);
       Alert.alert('Error', `Could not pick the document. ${err instanceof Error ? err.message : 'Unknown error'}`);
       setSelectedFile(null);
       setThumbnailUri(null);
     } finally {
+      console.log('[pickDocumentFile] Finished.');
       setIsFileProcessing(false);
     }
   };

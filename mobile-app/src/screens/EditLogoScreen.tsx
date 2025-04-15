@@ -199,6 +199,8 @@ function EditLogoScreen(): React.ReactElement {
   const handleLogoUpload = useCallback(async () => {
     if (!auth.user?.id || isLoading) return;
 
+    let formDataLogString = "FormData Content:\n"; // Initialize log string
+
     setError(null);
     setSuccessMessage(null);
 
@@ -212,7 +214,7 @@ function EditLogoScreen(): React.ReactElement {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: [2, 1],
+        aspect: [1, 1],
         quality: 0.8,
       });
 
@@ -225,11 +227,16 @@ function EditLogoScreen(): React.ReactElement {
 
       const formData = new FormData();
       if (Platform.OS === 'web') {
+          console.log('[handleLogoUpload - Web] Fetching blob for URI:', selectedImage.uri);
           const response = await fetch(selectedImage.uri);
-          const blob = await response.blob();
+          const fetchedBlob = await response.blob(); // Get the initial blob
           const fileExtension = selectedImage.uri.split('.').pop()?.toLowerCase() || 'jpg';
           const mimeType = `image/${fileExtension === 'png' ? 'png' : 'jpeg'}`;
-          formData.append('logo', blob, `logo.${fileExtension}`);
+          const fileName = "logo.jpg";
+          // Create a new Blob with the explicit type
+          const blobWithCorrectType = new Blob([fetchedBlob], { type: mimeType });
+          console.log(`[handleLogoUpload - Web] Appending blob: name=${fileName}, type=${blobWithCorrectType.type}, size=${blobWithCorrectType.size}`);
+          formData.append('logo', blobWithCorrectType, fileName);
       } else {
           // @ts-ignore
           formData.append('logo', {
@@ -238,6 +245,27 @@ function EditLogoScreen(): React.ReactElement {
               name: `logo.${selectedImage.uri.split('.').pop()}`,
           });
       }
+
+      // --- Log FormData entries before sending ---
+      console.log("[handleLogoUpload] Logging FormData entries before fetch:");
+      formDataLogString = "FormData Content:\n"; // Reset before building
+      try {
+          // @ts-ignore
+          for (const pair of formData.entries()) {
+              const key = pair[0];
+              const value = pair[1];
+              let valueStr = value;
+              if (value instanceof Blob) {
+                  valueStr = `Blob(size=${value.size}, type=${value.type})`;
+              }
+              console.log(`  ${key}:`, value);
+              formDataLogString += `  ${key}: ${valueStr}\n`; // Append to log string
+          }
+      } catch (e) {
+          formDataLogString += "  Error logging FormData entries.\n";
+          console.error("Error iterating FormData:", e);
+      }
+      // --- End Logging ---
 
       const response = await fetch(`${API_BASE_URL}/api/upload-logo`, {
         method: 'POST',
@@ -249,8 +277,28 @@ function EditLogoScreen(): React.ReactElement {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Upload failed: ${response.status} ${errorText}`);
+        let errorDetails = `Upload failed: ${response.status}`;
+        try {
+          // Attempt to parse the error response as JSON
+          const errorData = await response.json();
+          // Use message or error field from JSON if available
+          errorDetails = errorData.message || errorData.error || JSON.stringify(errorData);
+          console.error("Parsed server error response (JSON):", errorData);
+        } catch (jsonError) {
+          // If JSON parsing fails, try to get text
+          try {
+            const errorText = await response.text();
+            // Display the raw text, limiting length if necessary
+            errorDetails = errorText.substring(0, 500) + (errorText.length > 500 ? '...' : '');
+            console.error("Server error response (non-JSON text):");
+            console.error(errorText);
+          } catch (textError) {
+            // If reading text also fails, just use status code
+            console.error("Could not parse error response as JSON or text.");
+          }
+        }
+        // Throw an error with the gathered details
+        throw new Error(errorDetails);
       }
 
       // Show success message immediately
@@ -272,7 +320,9 @@ function EditLogoScreen(): React.ReactElement {
 
     } catch (err: any) {
       console.error("Error uploading logo:", err);
-      setError(`Logo upload failed: ${err.message}`);
+      // Prepend the FormData log to the error message
+      const finalErrorMessage = `${formDataLogString}\nServer Error: ${err.message}`;
+      setError(finalErrorMessage);
     } finally {
       setIsLoading(false);
     }
