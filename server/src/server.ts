@@ -78,7 +78,7 @@ try {
 app.use(express.static(frontendBuildPath, { index: 'index.html' })); // Explicitly set index
 
 // --- Initialize Routes with Dependencies ---
-// initializeAuthRoutes();
+initializeAuthRoutes();
 initializeReportRoutes(
     s3Client,
     s3Bucket,
@@ -114,50 +114,7 @@ app.use('/assets', s3AssetsRouter);
 // --- Inline Auth Routes (Temporary Debugging) ---
 
 // Login Endpoint (moved from auth.ts)
-/* // Comment out the inline /api/login logic
-app.post('/api/login', (async (req: Request, res: Response, next: NextFunction) => {
-    const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({ success: false, message: 'Email and password are required.' });
-    }
-
-    console.log(`Login attempt for email: ${email}`);
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-    });
-
-    if (error) {
-        console.error(`Supabase login error for ${email}:`, error.message);
-        // Check for specific Supabase error types if needed
-        if (error.message.includes('Invalid login credentials')) {
-            return res.status(401).json({ success: false, message: 'Invalid credentials.' });
-        }
-        return res.status(400).json({ success: false, message: error.message });
-    }
-
-    if (!data.session || !data.user) {
-         console.error(`Supabase login failed for ${email}: No session or user data returned.`);
-         return res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
-    }
-
-    console.log(`Login successful: ${data.user.email} (User ID: ${data.user.id})`);
-    // Return the JWT access token and relevant user info
-    res.json({
-        success: true,
-        token: data.session.access_token, // Send the JWT access token
-        refreshToken: data.session.refresh_token, // Optionally send refresh token if client needs it
-        user: {
-            id: data.user.id,
-            email: data.user.email,
-            // Add other relevant user fields if needed
-        }
-    });
-
-}) as RequestHandler);
-*/
 // --- End Inline Auth Routes ---
 
 // --- Add Logging Before Catch-All ---
