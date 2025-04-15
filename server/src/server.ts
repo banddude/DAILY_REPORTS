@@ -3,6 +3,9 @@ import cors from 'cors';
 import path from 'path'; // Import path module
 import { generateReport } from './daily-report';
 import { protect, ensureAuthenticated } from './authMiddleware';
+import fs from 'fs'; // Add fs import at the top if not already present
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { supabase } from './config';
 
 // Routers & Initializers
 import authRouter, { initializeAuthRoutes } from './routes/auth';
@@ -30,7 +33,7 @@ console.log(`[Server Startup] Script directory (__dirname): ${__dirname}`);
 
 // --- Health Check Endpoint ---
 // Add this BEFORE other middleware/routes that might interfere
-app.get('/healthz', (req, res) => {
+app.get('/healthz', (req: Request, res: Response) => {
   res.status(200).send('OK');
 });
 
@@ -45,7 +48,7 @@ app.use(
       optionsSuccessStatus: 204
     })
 );
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Vary', 'Origin');
     next();
 });
@@ -53,11 +56,29 @@ app.use((req, res, next) => {
 // JSON Body Parser
 app.use(express.json({ limit: '10mb' }));
 
+// --- Add More Debug Logging ---
+const resolvedIndexPath = path.resolve(frontendBuildPath, 'index.html');
+console.log(`[Server Startup] Checking for index.html at: ${resolvedIndexPath}`);
+try {
+  fs.accessSync(resolvedIndexPath, fs.constants.R_OK);
+  console.log(`[Server Startup] index.html FOUND and is readable at: ${resolvedIndexPath}`);
+} catch (err) {
+  console.error(`[Server Startup] index.html NOT FOUND or not readable at: ${resolvedIndexPath}`, err);
+}
+console.log(`[Server Startup] Listing contents of frontendBuildPath (${frontendBuildPath}):`);
+try {
+  const files = fs.readdirSync(frontendBuildPath);
+  console.log(files.join('\n'));
+} catch (err) {
+  console.error(`[Server Startup] Error listing directory ${frontendBuildPath}:`, err);
+}
+// --- End More Debug Logging ---
+
 // Serve static files from the React Native web build directory
-app.use(express.static(frontendBuildPath));
+app.use(express.static(frontendBuildPath)); // Uncomment static serving
 
 // --- Initialize Routes with Dependencies ---
-initializeAuthRoutes();
+// initializeAuthRoutes();
 initializeReportRoutes(
     s3Client,
     s3Bucket,
@@ -90,10 +111,66 @@ app.use('/api', browseRouter);
 // Mount S3 assets under /assets to avoid conflict with root
 app.use('/assets', s3AssetsRouter);
 
+// --- Inline Auth Routes (Temporary Debugging) ---
+
+// Login Endpoint (moved from auth.ts)
+/* // Comment out the inline /api/login logic
+app.post('/api/login', (async (req: Request, res: Response, next: NextFunction) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    }
+
+    console.log(`Login attempt for email: ${email}`);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+    });
+
+    if (error) {
+        console.error(`Supabase login error for ${email}:`, error.message);
+        // Check for specific Supabase error types if needed
+        if (error.message.includes('Invalid login credentials')) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+        }
+        return res.status(400).json({ success: false, message: error.message });
+    }
+
+    if (!data.session || !data.user) {
+         console.error(`Supabase login failed for ${email}: No session or user data returned.`);
+         return res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
+    }
+
+    console.log(`Login successful: ${data.user.email} (User ID: ${data.user.id})`);
+    // Return the JWT access token and relevant user info
+    res.json({
+        success: true,
+        token: data.session.access_token, // Send the JWT access token
+        refreshToken: data.session.refresh_token, // Optionally send refresh token if client needs it
+        user: {
+            id: data.user.id,
+            email: data.user.email,
+            // Add other relevant user fields if needed
+        }
+    });
+
+}) as RequestHandler);
+*/
+// --- End Inline Auth Routes ---
+
+// --- Add Logging Before Catch-All ---
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log(`[Request Log] Reached catch-all for path: ${req.path}`);
+  next();
+});
+// --- End Logging Before Catch-All ---
+
 // Serve frontend index.html for all other routes (SPA handling)
 // This must be AFTER all API routes and static serving
-app.get('*', (req, res) => {
-  res.sendFile(path.resolve(frontendBuildPath, 'index.html'), (err) => {
+app.get('*', (req: Request, res: Response) => {
+  res.sendFile(path.resolve(frontendBuildPath, 'index.html'), (err: any) => {
     if (err) {
       // Log the error but still attempt to send a fallback or generic error
       console.error("Error sending index.html:", err);
@@ -106,4 +183,4 @@ app.get('*', (req, res) => {
 // --- Start Server ---
 app.listen(port, '0.0.0.0', () => {
     console.log(`Server listening on port ${port} and host 0.0.0.0`);
-}); 
+});
