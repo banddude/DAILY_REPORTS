@@ -690,9 +690,7 @@ const HomeScreen: React.FC = () => {
       }
        const reportData = responseJson as ReportResult;
        console.log('Report generated:', reportData);
-       
-       // Remove the delay - navigate immediately
-       navigateToWebViewer(reportData.viewerUrl);
+       navigateToWebViewer(reportData.viewerUrl); 
 
     } catch (error) {
       console.error('Report generation error:', error);
@@ -767,7 +765,19 @@ const HomeScreen: React.FC = () => {
         Alert.alert("Navigation Error", "Could not get report URL to view.");
         return;
     }
-    // Reset state *before* navigating away
+
+    // --- Initiate Navigation FIRST ---
+    console.log(`Navigating to BrowseTab -> WebViewer with URL: ${url}`);
+    navigation.navigate('MainAppTabs', {
+      screen: 'BrowseTab',
+      params: { // Navigate to WebViewer within BrowseTab
+        screen: 'WebViewer',
+        params: { url: url }
+      }
+    });
+
+    // --- Reset State AFTER Navigation Call ---
+    // Reset state *after* navigating away
     setSelectedFile(null);
     setThumbnailUri(null);
     setIsFileProcessing(false);
@@ -788,17 +798,6 @@ const HomeScreen: React.FC = () => {
     } catch (e) {
       console.warn("Could not extract customer/project from URL", e);
     }
-
-    // Navigate directly to the WebViewer within the BrowseTab
-    // The BrowseNavStack will handle placing WebViewer correctly.
-    console.log(`Navigating to BrowseTab -> WebViewer with URL: ${url}`);
-    navigation.navigate('MainAppTabs', {
-      screen: 'BrowseTab',
-      params: { // Navigate to WebViewer within BrowseTab
-        screen: 'WebViewer',
-        params: { url: url }
-      }
-    });
   }
 
   // Debug log for button state

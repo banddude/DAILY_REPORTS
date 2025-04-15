@@ -26,18 +26,8 @@ export const initializeS3AssetRoutes = (
 
 // Common function to handle fetching and streaming S3 object
 const streamS3Object = async (req: Request, res: Response, purpose: 'view' | 'edit') => {
-    let userId: string | null = null; 
-    
-    // Only perform user authentication checks if the purpose is NOT 'view'
-    if (purpose !== 'view') {
-        userId = ensureAuthenticatedHelper(req, res);
-        if (!userId) {
-            // Return appropriate response if auth fails for non-view purposes
-            console.warn(`Auth check failed for purpose '${purpose}'`);
-            // Do not return here, let the key check handle it, or decide on specific 401/403
-            // return; // Removed immediate return
-        }
-    }
+    const userId = ensureAuthenticatedHelper(req, res);
+    if (!userId) return;
 
     const s3Key = req.query.key as string;
 
@@ -45,27 +35,13 @@ const streamS3Object = async (req: Request, res: Response, purpose: 'view' | 'ed
         res.status(400).json({ error: "Missing 'key' query parameter for the S3 asset." });
         return;
     }
-    
-    // If we performed an auth check (purpose !== 'view'), validate the key prefix
-    // For 'view', we skip the user prefix check to allow public access based on the key itself.
-    if (userId && !s3Key.startsWith(`users/${userId}/`)) {
+    if (!s3Key.startsWith(`users/${userId}/`)) {
         console.warn(`Auth violation: User ${userId} attempted to ${purpose} key ${s3Key}`);
         res.status(403).json({ error: "Forbidden access." });
         return;
     }
 
-    // Log differently for public view vs authenticated access
-    if (purpose === 'view') {
-        console.log(`Attempting to fetch public view asset from S3: ${s3Key}`);
-    } else if (userId) {
-        console.log(`User ${userId} attempting to fetch authenticated ${purpose} asset from S3: ${s3Key}`);
-    } else {
-        // This case should theoretically not be reached if purpose !== 'view' due to prior checks,
-        // but log just in case.
-        console.warn(`Attempting to fetch non-view asset without userId? Key: ${s3Key}`);
-        res.status(500).send('Internal server error during access control.');
-        return;
-    }
+    console.log(`User ${userId} attempting to fetch static file for ${purpose} from S3: ${s3Key}`);
 
     const getObjectParams = {
         Bucket: s3Bucket,
@@ -114,7 +90,7 @@ const streamS3Object = async (req: Request, res: Response, purpose: 'view' | 'ed
 };
 
 // GET endpoint to serve static files from S3 (Viewer)
-router.get('/view-s3-asset', async (req: Request, res: Response) => {
+router.get('/view-s3-asset', (req, res, next) => protectMiddleware(req, res, next), async (req: Request, res: Response) => {
     await streamS3Object(req, res, 'view');
 });
 

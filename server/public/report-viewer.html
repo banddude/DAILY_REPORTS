@@ -237,137 +237,7 @@
     </div>
 
     <script>
-        // --- Function to render the report using provided data ---
-        window.renderReport = function(data) {
-            console.log("renderReport called with data:", data); // Debugging
-            try {
-                // --- Populate Metadata & Logo ---
-                const meta = data.reportMetadata || {};
-                const company = meta.companyInfo || {};
-                const prepared = meta.preparedBy || {};
-                const address = company.address || {};
-                const assets = data.reportAssetsS3Urls || {};
-
-                // Logo
-                const logoContainer = document.getElementById('logoContainer');
-                if (!logoContainer) {
-                    console.error('logoContainer element not found');
-                    return; // Exit if essential elements are missing
-                }
-                logoContainer.innerHTML = ''; // Clear any loading indicator
-                
-                // Get the base URL and extract the user ID path
-                const baseUrl = assets.baseUrl || '';
-                
-                // Extract user ID from baseUrl if possible
-                // Format: users/{userId}/{customer}/{project}/report_{timestamp}
-                let userId = null;
-                const userIdMatch = baseUrl.match(/users\/([^\/]+)/);
-                if (userIdMatch && userIdMatch[1]) {
-                    userId = userIdMatch[1];
-                }
-                
-                // Construct possible logo URLs
-                let logoUrl = null;
-                
-                // First try user-specific logo path
-                if (userId) {
-                    // Get S3 domain from the baseUrl
-                    const s3DomainMatch = baseUrl.match(/(https:\/\/[^\/]+)/);
-                    if (s3DomainMatch && s3DomainMatch[1]) {
-                        const s3Domain = s3DomainMatch[1];
-                        // User-specific logo in the user's directory
-                        logoUrl = `${s3Domain}/users/${userId}/logo.png`;
-                    }
-                }
-                
-                // If logo URL was provided in the data, use that instead
-                if (assets.logoUrl) {
-                    logoUrl = assets.logoUrl;
-                }
-                
-                // If we have a logo URL, try to load it
-                if (logoUrl) {
-                    const logoImg = document.createElement('img');
-                    logoImg.src = logoUrl;
-                    logoImg.alt = `${company.name || 'Company'} Logo`;
-                    logoImg.onerror = () => {
-                        console.warn("Logo failed to load:", logoUrl);
-                        logoImg.remove(); // Remove broken image
-                    };
-                    logoContainer.appendChild(logoImg);
-                } else {
-                    logoContainer.innerHTML = ''; // No logo placeholder
-                }
-
-                // Date
-                // Use metadata date first, fallback to parsing baseUrl
-                const reportDate = meta.date || baseUrl.match(/report_(\d{4}-\d{2}-\d{2})/)?.[1] || 'N/A';
-                setText('reportDate', `Date: ${reportDate}`);
-
-                // Customer & Project (Use data from metadata if available)
-                const customerProjectEl = document.getElementById('customerProjectInfo') || document.createElement('div');
-                customerProjectEl.id = 'customerProjectInfo'; // Ensure it has an ID
-                customerProjectEl.className = 'meta-info';
-                if (meta.customer && meta.project) {
-                    customerProjectEl.innerHTML = `<strong>Customer:</strong> ${meta.customer} | <strong>Project:</strong> ${meta.project}`;
-                } else {
-                    customerProjectEl.innerHTML = ''; // Clear if not present
-                }
-                const reportDateEl = document.getElementById('reportDate');
-                if (reportDateEl && reportDateEl.parentNode && !document.getElementById('customerProjectInfo')) {
-                    reportDateEl.parentNode.insertBefore(customerProjectEl, reportDateEl.nextSibling);
-                }
-
-                // Prepared By
-                setText('preparedBy', `Prepared By: ${prepared.name || 'N/A'} ${prepared.email ? '(' + prepared.email + ')' : ''}`);
-
-                // Company Info
-                let companyHtml = `<strong>${company.name || 'N/A'}</strong>`;
-                if (address.street) companyHtml += `<br>${address.street}${address.unit ? ' #' + address.unit : ''}`;
-                let cityStateZipLine = '';
-                if (address.city) cityStateZipLine += address.city;
-                if (address.city && address.state) cityStateZipLine += ', ';
-                if (address.state) cityStateZipLine += address.state;
-                if (address.zip) cityStateZipLine += ` ${address.zip}`;
-                if (cityStateZipLine) companyHtml += `<br>${cityStateZipLine}`;
-                let contactLine = '';
-                if (company.phone) contactLine += `Phone: ${company.phone}`;
-                if (company.phone && company.website) contactLine += ` | `;
-                if (company.website) contactLine += `Website: <a href="${company.website}" target="_blank">${company.website}</a>`;
-                if (contactLine) companyHtml += `<br>${contactLine}`;
-                setHtml('companyInfo', companyHtml);
-
-                // --- Populate Report Sections ---
-                setText('narrative', data.narrative || 'N/A');
-                setText('safetyObservations', data.safetyObservations || 'N/A');
-
-                populateList('workCompleted', data.workCompleted);
-                populateList('nextSteps', data.nextSteps);
-                populateMaterialsList('materials', data.materials);
-                populateIssuesList('issues', data.issues);
-                populateImages('imagesContainer', data.images, assets.baseUrl);
-
-            } catch (renderError) {
-                console.error('Error rendering report data:', renderError);
-                document.body.innerHTML = `<div class="container error-message"><h1>Error Rendering Report</h1><p>Could not display the report data. ${renderError.message}</p></div>`;
-            }
-        };
-
-        // --- Listener to render data once injected or if already present ---
         document.addEventListener('DOMContentLoaded', () => {
-            // Check if data was injected before DOMContentLoaded
-            if (window.reportData) {
-                console.log('window.reportData found on DOMContentLoaded, rendering immediately.');
-                window.renderReport(window.reportData);
-            } else {
-                console.log('window.reportData not found yet, waiting for injection...');
-                // Optional: You could add a timeout or check periodically here
-                // if the injection mechanism isn't guaranteed to fire after DOMContentLoaded.
-            }
-            
-            // --- Remove the old fetch logic --- 
-            /*
             fetch('daily_report.json')
                 .then(response => {
                     if (!response.ok) {
@@ -376,13 +246,105 @@
                     return response.json();
                 })
                 .then(data => {
-                   // Logic moved to renderReport
+                    console.log("Report data loaded:", data); // Debugging
+
+                    // --- Populate Metadata & Logo ---
+                    const meta = data.reportMetadata || {};
+                    const company = meta.companyInfo || {};
+                    const prepared = meta.preparedBy || {};
+                    const address = company.address || {};
+                    const assets = data.reportAssetsS3Urls || {};
+
+                    // Logo
+                    const logoContainer = document.getElementById('logoContainer');
+                    
+                    // Get the base URL and extract the user ID path
+                    const baseUrl = assets.baseUrl || '';
+                    
+                    // Extract user ID from baseUrl if possible
+                    // Format: users/{userId}/{customer}/{project}/report_{timestamp}
+                    let userId = null;
+                    const userIdMatch = baseUrl.match(/users\/([^\/]+)/);
+                    if (userIdMatch && userIdMatch[1]) {
+                        userId = userIdMatch[1];
+                    }
+                    
+                    // Construct possible logo URLs
+                    let logoUrl = null;
+                    
+                    // First try user-specific logo path
+                    if (userId) {
+                        // Get S3 domain from the baseUrl
+                        const s3DomainMatch = baseUrl.match(/(https:\/\/[^\/]+)/);
+                        if (s3DomainMatch && s3DomainMatch[1]) {
+                            const s3Domain = s3DomainMatch[1];
+                            // User-specific logo in the user's directory
+                            logoUrl = `${s3Domain}/users/${userId}/logo.png`;
+                        }
+                    }
+                    
+                    // If logo URL was provided in the data, use that instead
+                    if (assets.logoUrl) {
+                        logoUrl = assets.logoUrl;
+                    }
+                    
+                    // If we have a logo URL, try to load it
+                    if (logoUrl) {
+                        const logoImg = document.createElement('img');
+                        logoImg.src = logoUrl;
+                        logoImg.alt = `${company.name || 'Company'} Logo`;
+                        logoImg.onerror = () => {
+                            console.warn("Logo failed to load:", logoUrl);
+                            logoImg.remove(); // Remove broken image
+                        };
+                        logoContainer.appendChild(logoImg);
+                    } else {
+                        logoContainer.innerHTML = ''; // No logo placeholder
+                    }
+
+
+                    // Date
+                    const dateMatch = baseUrl.match(/report_(\d{4}-\d{2}-\d{2})/);
+                    setText('reportDate', `Date: ${dateMatch ? dateMatch[1] : 'N/A'}`);
+
+                    // Customer & Project
+                    if (meta.customer && meta.project) {
+                        const customerProjectEl = document.createElement('div');
+                        customerProjectEl.className = 'meta-info';
+                        customerProjectEl.innerHTML = `<strong>Customer:</strong> ${meta.customer} | <strong>Project:</strong> ${meta.project}`;
+                        const reportDateEl = document.getElementById('reportDate');
+                        if (reportDateEl && reportDateEl.parentNode) {
+                            reportDateEl.parentNode.insertBefore(customerProjectEl, reportDateEl.nextSibling);
+                        }
+                    }
+
+                    // Prepared By (No mailto link)
+                    setText('preparedBy', `Prepared By: ${prepared.name || 'N/A'} ${prepared.email ? '(' + prepared.email + ')' : ''}`); // Removed mailto link
+
+
+                    // Company Info
+                    let companyHtml = `<strong>${company.name || 'N/A'}</strong>`;
+                    if (address.street) companyHtml += `${address.street}${address.unit ? ' #' + address.unit : ''}<br>`;
+                    if (address.city || address.state || address.zip) companyHtml += `${address.city || ''}${address.city && address.state ? ', ' : ''}${address.state || ''} ${address.zip || ''}<br>`;
+                    if (company.phone) companyHtml += `Phone: ${company.phone} | `;
+                    if (company.website) companyHtml += `Website: <a href="${company.website}" target="_blank">${company.website}</a>`;
+                    setHtml('companyInfo', companyHtml.replace(/ \| $/, '')); // Remove trailing separator
+
+
+                    // --- Populate Report Sections ---
+                    setText('narrative', data.narrative || 'N/A');
+                    setText('safetyObservations', data.safetyObservations || 'N/A');
+
+                    populateList('workCompleted', data.workCompleted);
+                    populateList('nextSteps', data.nextSteps);
+                    populateMaterialsList('materials', data.materials);
+                    populateIssuesList('issues', data.issues);
+                    populateImages('imagesContainer', data.images);
                 })
                 .catch(error => {
                     console.error('Error fetching or processing report data:', error);
                     document.body.innerHTML = `<div class="container error-message"><h1>Error loading report</h1><p>${error.message}.<br>Please ensure daily_report.json is in the same location and publicly accessible.</p></div>`;
                 });
-            */
         });
 
         // Helper functions to safely set content
@@ -451,41 +413,43 @@
             }
         }
 
-        function populateImages(elementId, images, imageBaseUrl) {
+        function populateImages(elementId, images) {
             const container = document.getElementById(elementId);
-            if (!container) return;
-            container.innerHTML = ''; // Clear loading/previous
+             if (!container) return;
+            container.innerHTML = ''; // Clear loading
             if (images && images.length > 0) {
-                images.forEach(img => {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'image-item';
-
-                    // Construct URL: Use img.s3Url if present, otherwise construct from base
-                    let imageUrl = img.s3Url;
-                    if (!imageUrl && imageBaseUrl && img.fileName) {
-                        const base = imageBaseUrl.endsWith('/') ? imageBaseUrl : imageBaseUrl + '/';
-                        imageUrl = `${base}extracted_frames/${img.fileName}`;
-                    }
-
-                    if (imageUrl) {
-                        const imgElement = document.createElement('img');
-                        imgElement.src = imageUrl;
-                        imgElement.alt = img.caption || 'Report Image';
-                        imgElement.onerror = () => { imgElement.alt = 'Image failed to load'; imgElement.src = ''; }; // Handle broken images
-                        itemDiv.appendChild(imgElement);
-                    } else {
-                        itemDiv.innerHTML += '<p class="placeholder-text">Image Unavailable</p>';
-                    }
+                images.forEach(imgInfo => {
+                    const div = document.createElement('div');
+                    div.className = 'image-item';
 
                     const captionDiv = document.createElement('div');
                     captionDiv.className = 'caption';
-                    captionDiv.textContent = img.caption || '';
-                    itemDiv.appendChild(captionDiv);
+                    captionDiv.textContent = imgInfo.caption || 'No caption provided';
 
-                    container.appendChild(itemDiv);
+                    if (imgInfo.s3Url) {
+                        const img = document.createElement('img');
+                        img.src = imgInfo.s3Url;
+                        img.alt = imgInfo.caption || 'Report Image';
+                        img.onerror = () => {
+                            img.remove(); // Remove the broken image element
+                            const missingText = document.createElement('p');
+                            missingText.className = 'placeholder-text';
+                            missingText.textContent = '[Image Missing or Inaccessible]';
+                            div.insertBefore(missingText, captionDiv); // Add placeholder before caption
+                        };
+                         div.appendChild(img);
+
+                    } else {
+                         const missingUrlText = document.createElement('p');
+                         missingUrlText.className = 'placeholder-text';
+                         missingUrlText.textContent = '[Image S3 URL missing in report data]';
+                         div.appendChild(missingUrlText);
+                    }
+                     div.appendChild(captionDiv);
+                     container.appendChild(div);
                 });
             } else {
-                container.innerHTML = '<p class="placeholder-text">No images included in this report.</p>';
+                container.textContent = 'No images included.';
             }
         }
     </script>

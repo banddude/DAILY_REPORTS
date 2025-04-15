@@ -65,27 +65,46 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   // Function to extract the JSON report key from the viewer URL
   const getJsonKeyFromUrl = (viewerUrl: string): string | null => {
     try {
-      // No need to construct absolute URL anymore, it should be absolute S3 URL
-      if (!viewerUrl || (!viewerUrl.startsWith('http://') && !viewerUrl.startsWith('https://'))) {
-          console.error("Invalid S3 URL received in getJsonKeyFromUrl:", viewerUrl);
-          return null;
+      // Construct the absolute URL if the input is relative
+      let absoluteUrl = viewerUrl;
+      if (!viewerUrl.startsWith('http://') && !viewerUrl.startsWith('https://')) {
+        // Ensure API_BASE_URL doesn't have a trailing slash and viewerUrl doesn't have a leading one
+        const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+        const path = viewerUrl.startsWith('/') ? viewerUrl : '/' + viewerUrl;
+        absoluteUrl = baseUrl + path;
+        console.log(`Constructed absolute URL: ${absoluteUrl}`);
       }
 
-      const urlObject = new URL(viewerUrl); 
-      // Pathname will be like /users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
-      const pathSegments = urlObject.pathname.slice(1).split('/').filter(Boolean); // Remove leading slash and empty segments
+      const urlObject = new URL(absoluteUrl); // Use the absolute URL
+      const pathSegments = urlObject.pathname.split('/').filter(Boolean); // Remove empty segments
 
+      // Expected path: users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
+      // OR /assets/view-s3-asset (if it comes via that route)
+      // Need to handle both cases where the key might be derived differently
+
+      // Case 1: Derive from path structure (Original logic)
       if (pathSegments.length >= 5 && pathSegments[pathSegments.length - 1] === 'report-viewer.html') {
+        // Reconstruct the base path up to the report folder
         const basePath = pathSegments.slice(0, pathSegments.length - 1).join('/');
         const jsonKey = `${basePath}/daily_report.json`;
-        console.log("Derived JSON key from S3 URL Path:", jsonKey);
+        console.log("Derived JSON key from path:", jsonKey);
         return jsonKey;
       }
 
+      // Case 2: Derive from 'key' query parameter (For /assets/view-s3-asset)
+      const s3KeyParam = urlObject.searchParams.get('key');
+      if (s3KeyParam && s3KeyParam.endsWith('/report-viewer.html')) {
+          const basePath = s3KeyParam.substring(0, s3KeyParam.lastIndexOf('/'));
+          const jsonKey = `${basePath}/daily_report.json`;
+          console.log("Derived JSON key from query param:", jsonKey);
+          return jsonKey;
+      }
+
     } catch (e) {
-      console.error("Error parsing S3 viewer URL for JSON key:", e);
+      console.error("Error parsing viewer URL:", e);
     }
-    console.error("Could not derive JSON key from S3 URL:", viewerUrl);
+    // Log the original URL in case of failure
+    console.error("Could not derive JSON key from original URL:", viewerUrl); 
     return null;
   };
 
@@ -151,16 +170,19 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   // Helper to extract customer and project from the report URL
   function getCustomerAndProjectFromUrl(viewerUrl: string): { customer: string | null, project: string | null } {
     try {
-      // No need to construct absolute URL anymore, it should be absolute S3 URL
-      if (!viewerUrl || (!viewerUrl.startsWith('http://') && !viewerUrl.startsWith('https://'))) {
-          console.warn("Invalid S3 URL received in getCustomerAndProjectFromUrl:", viewerUrl);
-          return { customer: null, project: null };
+      // Construct absolute URL if needed
+      let absoluteUrl = viewerUrl;
+      if (viewerUrl && typeof viewerUrl === 'string' && !viewerUrl.startsWith('http://') && !viewerUrl.startsWith('https://')) {
+        const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+        const path = viewerUrl.startsWith('/') ? viewerUrl : '/' + viewerUrl;
+        absoluteUrl = baseUrl + path;
       }
 
-      const urlObject = new URL(viewerUrl);
-      // Pathname will be like /users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
-      const pathSegments = urlObject.pathname.slice(1).split('/').filter(Boolean); // Remove leading slash and empty segments
+      // Now parse the potentially corrected absolute URL
+      const urlObject = new URL(absoluteUrl);
+      const pathSegments = urlObject.pathname.split('/').filter(Boolean);
       
+      // Handle path structure: users/{userId}/{customer}/{project}/...
       if (pathSegments.length >= 4 && pathSegments[0] === 'users') {
         return {
           customer: decodeURIComponent(pathSegments[2]) || null,
@@ -168,8 +190,22 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
         };
       }
 
+      // Handle /assets/view-s3-asset?key=users/... structure
+      const s3KeyParam = urlObject.searchParams.get('key');
+      if (s3KeyParam) {
+          const keySegments = s3KeyParam.split('/').filter(Boolean);
+          // Expecting key=users/{userId}/{customer}/{project}/...
+          if (keySegments.length >= 4 && keySegments[0] === 'users') {
+              return {
+                  customer: decodeURIComponent(keySegments[2]) || null,
+                  project: decodeURIComponent(keySegments[3]) || null,
+              };
+          }
+      }
+
     } catch (e) {
-      console.warn(`Could not extract customer/project from S3 URL`, e, `URL: ${viewerUrl}`);
+      // Log the error and the URL that caused it
+      console.warn(`Could not extract customer/project from URL`, e, `URL: ${viewerUrl}`); 
     }
     return { customer: null, project: null };
   }

@@ -718,23 +718,16 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         if (!s3Bucket) {
             throw new Error("Internal Server Error: S3 bucket configuration is missing.");
         }
-        try {
-            await generateAndUploadViewerHtml(
-                s3Client,
-                s3Bucket,
-                reportJson,
-                userId,
-                customerName,
-                projectName,
-                `report_${timestamp}`
-            );
-            logStep('Successfully generated and uploaded report viewer HTML.');
-        } catch (htmlError: any) {
-            logStep(`!!! FAILED to generate/upload report viewer HTML: ${htmlError.message}`);
-            // Decide if this should be a fatal error for the overall generation process
-            // For now, we log it but still return the JSON key as generation was mostly successful.
-            // throw new Error(`Failed to generate viewer HTML: ${htmlError.message}`);
-        }
+        await generateAndUploadViewerHtml(
+            s3Client,
+            s3Bucket,
+            reportJson, 
+            userId,
+            customerName,
+            projectName,
+            processingDir
+        );
+        logStep('Report viewer HTML generated and uploaded', startTime);
 
         // 13. Return the S3 key of the report JSON
         logStep('Report generation complete', startTime);

@@ -255,8 +255,8 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
     if (!hasPermission) return;
 
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false, // Optional: set to true to allow cropping/editing
+      mediaTypes: 'images',
+      allowsEditing: true,
       aspect: [4, 3], // Optional: aspect ratio for editing
       quality: 0.8, // Lower quality for faster uploads (0 to 1)
     });
