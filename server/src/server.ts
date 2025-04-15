@@ -74,8 +74,8 @@ app.use('/api', reportRouter);
 app.use('/api', profileRouter);
 app.use('/api', browseRouter);
 
-// Root Routes (/*)
-app.use('/', s3AssetsRouter);
+// Mount S3 assets under /assets to avoid conflict with root
+app.use('/assets', s3AssetsRouter);
 
 // Serve frontend index.html for all other routes (SPA handling)
 // This must be AFTER all API routes and static serving
