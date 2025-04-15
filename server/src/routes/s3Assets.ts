@@ -90,7 +90,7 @@ const streamS3Object = async (req: Request, res: Response, purpose: 'view' | 'ed
 };
 
 // GET endpoint to serve static files from S3 (Viewer)
-router.get('/view-s3-asset', (req, res, next) => protectMiddleware(req, res, next), async (req: Request, res: Response) => {
+router.get('/view-s3-asset', async (req: Request, res: Response) => {
     await streamS3Object(req, res, 'view');
 });
 
