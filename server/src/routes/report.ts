@@ -203,20 +203,22 @@ const handleVideoUploadAndGenerate = async (req: Request, res: Response) => {
         const reportJsonKey = await generateReportFunction(uploadedVideoPath, userId, customer, project);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
-        // Construct Absolute URLs for viewer and editor
-        const serverBaseUrl = `${req.protocol}://${req.get('host')}`;
-        
-        // TODO: Verify /edit-report route exists and works as intended
-        const editorUrl = `${serverBaseUrl}/edit-report?key=${encodeURIComponent(reportJsonKey)}`;
-        console.log(`User ${userId}: Editor URL: ${editorUrl}`);
-
         // Construct the key for the viewer HTML file
         const reportBaseKey = reportJsonKey.substring(0, reportJsonKey.lastIndexOf('/'));
         const viewerKey = `${reportBaseKey}/report-viewer.html`;
-        
-        // Construct the ABSOLUTE URL pointing to the server endpoint for viewing S3 assets
-        const viewerUrl = `${serverBaseUrl}/assets/view-s3-asset?key=${encodeURIComponent(viewerKey)}`;
-        console.log(`User ${userId}: Viewer URL (absolute, using server endpoint): ${viewerUrl}`);
+
+        // Get S3 region (needed for URL construction)
+        const region = await s3Client.config.region() || process.env.AWS_REGION || 'us-west-2'; // Fallback region
+
+        // Construct the direct, public S3 URL for the viewer HTML
+        const viewerUrl = `https://${s3Bucket}.s3.${region}.amazonaws.com/${viewerKey}`;
+        console.log(`User ${userId}: Viewer URL (direct S3): ${viewerUrl}`);
+
+        // Construct the ABSOLUTE URL pointing to the server endpoint for editing
+        // TODO: Verify /edit-report route exists and works as intended
+        const serverBaseUrl = `${req.protocol}://${req.get('host')}`; 
+        const editorUrl = `${serverBaseUrl}/edit-report?key=${encodeURIComponent(reportJsonKey)}`;
+        console.log(`User ${userId}: Editor URL: ${editorUrl}`);
 
         res.status(200).json({ editorUrl, viewerUrl });
 

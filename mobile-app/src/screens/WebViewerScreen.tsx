@@ -48,32 +48,44 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
 
   // Basic error handling for invalid URL format (optional)
   useEffect(() => {
-    if (!url || typeof url !== 'string' || (!url.startsWith('http://') && !url.startsWith('https://'))) {
-      console.error("WebViewerScreen: Invalid URL provided:", url);
+    const isValidHttpUrl = url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
+    const isValidRelativeUrl = url && typeof url === 'string' && url.startsWith('/');
+
+    if (!url || typeof url !== 'string' || (!isValidHttpUrl && !isValidRelativeUrl)) {
+      // Only error if it's truly unusable (null, empty, or not starting with http/https/ or /)
+      console.error("WebViewerScreen: Invalid OR Missing URL provided:", url);
       setError("Invalid or missing URL for viewer.");
       setIsLoading(false);
+    } else {
+      // Clear error if a potentially valid URL (http, https, or relative) is provided
+      setError(null);
     }
   }, [url]);
 
   // Function to extract the JSON report key from the viewer URL
   const getJsonKeyFromUrl = (viewerUrl: string): string | null => {
     try {
-      const urlObject = new URL(viewerUrl);
-      const pathSegments = urlObject.pathname.split('/').filter(Boolean); // Remove empty segments
+      // No need to construct absolute URL anymore, it should be absolute S3 URL
+      if (!viewerUrl || (!viewerUrl.startsWith('http://') && !viewerUrl.startsWith('https://'))) {
+          console.error("Invalid S3 URL received in getJsonKeyFromUrl:", viewerUrl);
+          return null;
+      }
 
-      // Expected path: users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
-      // Need at least 5 segments for this structure
+      const urlObject = new URL(viewerUrl); 
+      // Pathname will be like /users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
+      const pathSegments = urlObject.pathname.slice(1).split('/').filter(Boolean); // Remove leading slash and empty segments
+
       if (pathSegments.length >= 5 && pathSegments[pathSegments.length - 1] === 'report-viewer.html') {
-        // Reconstruct the base path up to the report folder
         const basePath = pathSegments.slice(0, pathSegments.length - 1).join('/');
         const jsonKey = `${basePath}/daily_report.json`;
-        console.log("Derived JSON key:", jsonKey);
+        console.log("Derived JSON key from S3 URL Path:", jsonKey);
         return jsonKey;
       }
+
     } catch (e) {
-      console.error("Error parsing viewer URL:", e);
+      console.error("Error parsing S3 viewer URL for JSON key:", e);
     }
-    console.error("Could not derive JSON key from URL:", viewerUrl);
+    console.error("Could not derive JSON key from S3 URL:", viewerUrl);
     return null;
   };
 
@@ -139,17 +151,25 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   // Helper to extract customer and project from the report URL
   function getCustomerAndProjectFromUrl(viewerUrl: string): { customer: string | null, project: string | null } {
     try {
+      // No need to construct absolute URL anymore, it should be absolute S3 URL
+      if (!viewerUrl || (!viewerUrl.startsWith('http://') && !viewerUrl.startsWith('https://'))) {
+          console.warn("Invalid S3 URL received in getCustomerAndProjectFromUrl:", viewerUrl);
+          return { customer: null, project: null };
+      }
+
       const urlObject = new URL(viewerUrl);
-      const pathSegments = urlObject.pathname.split('/').filter(Boolean);
-      // Expected: users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
-      if (pathSegments.length >= 5) {
+      // Pathname will be like /users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
+      const pathSegments = urlObject.pathname.slice(1).split('/').filter(Boolean); // Remove leading slash and empty segments
+      
+      if (pathSegments.length >= 4 && pathSegments[0] === 'users') {
         return {
-          customer: pathSegments[2] || null,
-          project: pathSegments[3] || null,
+          customer: decodeURIComponent(pathSegments[2]) || null,
+          project: decodeURIComponent(pathSegments[3]) || null,
         };
       }
+
     } catch (e) {
-      // ignore
+      console.warn(`Could not extract customer/project from S3 URL`, e, `URL: ${viewerUrl}`);
     }
     return { customer: null, project: null };
   }
@@ -226,8 +246,10 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
 
   // --- Platform Specific Rendering --- 
   const renderContent = () => {
-    if (error) {
-      return <Text style={styles.errorText}>{error}</Text>;
+    // If there's an error OR the URL to load is still empty, show the error.
+    // This prevents passing an empty uri to WebView.
+    if (error || !refreshableUrl) {
+      return <Text style={styles.errorText}>{error || 'Invalid or missing URL for viewer.'}</Text>;
     }
 
     if (Platform.OS === 'web') {
@@ -248,7 +270,7 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
       // Use react-native-webview for native platforms
       return (
         <WebView
-          source={{ uri: refreshableUrl }} // Use the state variable with timestamp
+          source={{ uri: refreshableUrl }}
           style={{ flex: 1, paddingTop: 0, marginTop: 0 }}
           cacheEnabled={false}
           incognito={true}
@@ -344,4 +366,4 @@ const styles = StyleSheet.create({
     color: colors.textPrimary, // Match header text color
     marginLeft: spacing.xs, // Space between icon and text
   }
-}); 
+});
