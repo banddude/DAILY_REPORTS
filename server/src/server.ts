@@ -28,6 +28,12 @@ console.log(`[Server Startup] Current working directory (cwd): ${process.cwd()}`
 console.log(`[Server Startup] Script directory (__dirname): ${__dirname}`);
 // --- End Logging ---
 
+// --- Health Check Endpoint ---
+// Add this BEFORE other middleware/routes that might interfere
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // --- Middleware Setup ---
 
 // CORS (must be first)
