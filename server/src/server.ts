@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path'; // Import path module
 import { generateReport } from './daily-report';
 import { protect, ensureAuthenticated } from './authMiddleware';
 
@@ -15,6 +16,10 @@ import { videoUpload, imageUpload } from './fileUploadConfig';
 import { s3Client, s3Bucket, UPLOADS_DIR, DATA_DIR, port } from './config';
 
 const app = express();
+
+// Define path to the frontend build directory
+// Assumes the compiled server.js is in server/dist, so ../ goes to server/, ../ goes to root
+const frontendBuildPath = path.resolve(__dirname, '../../mobile-app/dist'); 
 
 // --- Middleware Setup ---
 
@@ -34,6 +39,9 @@ app.use((req, res, next) => {
 
 // JSON Body Parser
 app.use(express.json({ limit: '10mb' }));
+
+// Serve static files from the React Native web build directory
+app.use(express.static(frontendBuildPath));
 
 // --- Initialize Routes with Dependencies ---
 initializeAuthRoutes();
@@ -69,7 +77,18 @@ app.use('/api', browseRouter);
 // Root Routes (/*)
 app.use('/', s3AssetsRouter);
 
-// Static file serving removed - Server is API only
+// Serve frontend index.html for all other routes (SPA handling)
+// This must be AFTER all API routes and static serving
+app.get('*', (req, res) => {
+  res.sendFile(path.resolve(frontendBuildPath, 'index.html'), (err) => {
+    if (err) {
+      // Log the error but still attempt to send a fallback or generic error
+      console.error("Error sending index.html:", err);
+      // Avoid sending the error stack trace to the client in production
+      res.status(500).send('An error occurred serving the application.'); 
+    }
+  });
+});
 
 // --- Start Server ---
 app.listen(port, '0.0.0.0', () => {
