@@ -23,4 +23,7 @@ server/processing_reports/
 **/.DS_Store
 
 # Expo specific
-mobile-app/.expo/ 
+mobile-app/.expo/
+
+# Build output
+server/dist/ 
