@@ -24,7 +24,7 @@ import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid 
 import { useNavigation, useIsFocused, CommonActions } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { colors, spacing, typography, borders } from '../theme/theme';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { fetchApi } from './fetchApiHelper';
 import SelectionModal from '../components/SelectionModal';
@@ -37,8 +37,7 @@ const ADD_NEW_PROJECT_OPTION = "Add New Project...";
 
 // Basic type for the result object expected from the server
 interface ReportResult {
-  editorUrl: string;
-  viewerUrl: string;
+  reportJsonKey: string;
 }
 
 // Type for the result state, including message and type (success, error, loading, null)
@@ -689,8 +688,8 @@ const HomeScreen: React.FC = () => {
          throw new Error(errorMessage);
       }
        const reportData = responseJson as ReportResult;
-       console.log('Report generated:', reportData);
-       navigateToWebViewer(reportData.viewerUrl); 
+       console.log('Report generated, JSON key:', reportData.reportJsonKey);
+       navigateToWebViewer(reportData.reportJsonKey); 
 
     } catch (error) {
       console.error('Report generation error:', error);
@@ -760,19 +759,31 @@ const HomeScreen: React.FC = () => {
     }
   }
 
-  function navigateToWebViewer(url: string | undefined) {
-    if (!url) {
-        Alert.alert("Navigation Error", "Could not get report URL to view.");
+  function navigateToWebViewer(reportJsonKey: string | undefined) {
+    if (!reportJsonKey) {
+        Alert.alert("Navigation Error", "Could not get report JSON key to construct viewer URL.");
         return;
     }
 
+    // Construct the direct public S3 URL for the viewer HTML
+    if (!S3_BUCKET_NAME || !AWS_REGION) {
+        console.error("S3 bucket name or region is missing in config!");
+        Alert.alert("Configuration Error", "Cannot construct report viewer URL.");
+        return;
+    }
+    const reportBaseKey = reportJsonKey.substring(0, reportJsonKey.lastIndexOf('/'));
+    const viewerS3Key = `${reportBaseKey}/report-viewer.html`;
+    const viewerS3Url = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${viewerS3Key}`;
+
+    console.log(`Constructed direct S3 viewer URL: ${viewerS3Url}`);
+
     // --- Initiate Navigation FIRST ---
-    console.log(`Navigating to BrowseTab -> WebViewer with URL: ${url}`);
+    console.log(`Navigating to BrowseTab -> WebViewer with URL: ${viewerS3Url}`);
     navigation.navigate('MainAppTabs', {
       screen: 'BrowseTab',
       params: { // Navigate to WebViewer within BrowseTab
         screen: 'WebViewer',
-        params: { url: url }
+        params: { url: viewerS3Url } // Pass the direct S3 URL
       }
     });
 
@@ -788,7 +799,7 @@ const HomeScreen: React.FC = () => {
     let customer: string | null = null;
     let project: string | null = null;
     try {
-      const urlObj = new URL(url);
+      const urlObj = new URL(viewerS3Url);
       const segments = urlObj.pathname.split('/').filter(Boolean);
       // users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
       if (segments.length >= 5) {
@@ -1469,7 +1480,7 @@ const styles = StyleSheet.create({
   },
   previewModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },

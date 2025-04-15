@@ -90,11 +90,17 @@ const streamS3Object = async (req: Request, res: Response, purpose: 'view' | 'ed
 };
 
 // GET endpoint to serve static files from S3 (Viewer)
+// REVERTED: Needs authentication again
 router.get('/view-s3-asset', (req, res, next) => protectMiddleware(req, res, next), async (req: Request, res: Response) => {
+    // const userId = ensureAuthenticatedHelper(req, res);
+    // if (!userId) {
+    //     return;
+    // }
     await streamS3Object(req, res, 'view');
 });
 
 // GET endpoint to serve static files from S3 (Editor - If Applicable)
+// Keep authentication for potentially sensitive editor assets
 router.get('/edit-s3-asset', (req, res, next) => protectMiddleware(req, res, next), async (req: Request, res: Response) => {
     await streamS3Object(req, res, 'edit');
 });

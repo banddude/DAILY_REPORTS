@@ -87,6 +87,7 @@ export async function generateAndUploadViewerHtml(
         Key: viewerHtmlS3Key,
         Body: htmlContent,
         ContentType: 'text/html',
+        ACL: 'public-read', // Make the viewer HTML publicly readable again
         // Add cache-busting headers
         CacheControl: 'no-cache, no-store, must-revalidate',
         Expires: new Date(0) // Set expires header to epoch time (already expired)

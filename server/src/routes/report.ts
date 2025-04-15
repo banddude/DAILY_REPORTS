@@ -203,22 +203,8 @@ const handleVideoUploadAndGenerate = async (req: Request, res: Response) => {
         const reportJsonKey = await generateReportFunction(uploadedVideoPath, userId, customer, project);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
-        // Construct Absolute URLs for viewer and editor
-        const serverBaseUrl = `${req.protocol}://${req.get('host')}`;
-        
-        // TODO: Verify /edit-report route exists and works as intended
-        const editorUrl = `${serverBaseUrl}/edit-report?key=${encodeURIComponent(reportJsonKey)}`;
-        console.log(`User ${userId}: Editor URL: ${editorUrl}`);
-
-        // Construct the key for the viewer HTML file
-        const reportBaseKey = reportJsonKey.substring(0, reportJsonKey.lastIndexOf('/'));
-        const viewerKey = `${reportBaseKey}/report-viewer.html`;
-        
-        // Construct the ABSOLUTE URL pointing to the server endpoint for viewing S3 assets
-        const viewerUrl = `${serverBaseUrl}/assets/view-s3-asset?key=${encodeURIComponent(viewerKey)}`;
-        console.log(`User ${userId}: Viewer URL (absolute, using server endpoint): ${viewerUrl}`);
-
-        res.status(200).json({ editorUrl, viewerUrl });
+        // Return only the key of the generated report JSON
+        res.status(200).json({ reportJsonKey: reportJsonKey }); 
 
     } catch (error: any) {
         console.error(`User ${userId}: Error during report generation:`, error);
