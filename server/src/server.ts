@@ -19,7 +19,13 @@ const app = express();
 
 // Define path to the frontend build directory
 // Assumes the compiled server.js is in server/dist, so ../ goes to server/, ../ goes to root
-const frontendBuildPath = path.resolve(__dirname, '../../mobile-app/dist'); 
+const frontendBuildPath = path.resolve(__dirname, '../../mobile-app/dist');
+
+// --- Add Logging for Debugging Paths ---
+console.log(`[Server Startup] Calculated frontend build path: ${frontendBuildPath}`);
+console.log(`[Server Startup] Current working directory (cwd): ${process.cwd()}`);
+console.log(`[Server Startup] Script directory (__dirname): ${__dirname}`);
+// --- End Logging ---
 
 // --- Middleware Setup ---
 
@@ -76,6 +82,16 @@ app.use('/api', browseRouter);
 
 // Mount S3 assets under /assets to avoid conflict with root
 app.use('/assets', s3AssetsRouter);
+
+// Explicitly serve index.html for the root path
+app.get('/', (req, res) => {
+  res.sendFile(path.resolve(frontendBuildPath, 'index.html'), (err) => {
+    if (err) {
+      console.error("Error sending index.html for root path:", err);
+      res.status(500).send('An error occurred serving the application.');
+    }
+  });
+});
 
 // Serve frontend index.html for all other routes (SPA handling)
 // This must be AFTER all API routes and static serving
