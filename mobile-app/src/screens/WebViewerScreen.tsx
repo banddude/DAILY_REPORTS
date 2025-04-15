@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity, Alert, Share, Button } from 'react-native';
-import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
+import { RouteProp, useRoute, useNavigation, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -122,11 +122,56 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
     }
   };
 
+  // Helper to extract customer and project from the report URL
+  function getCustomerAndProjectFromUrl(viewerUrl: string): { customer: string | null, project: string | null } {
+    try {
+      const urlObject = new URL(viewerUrl);
+      const pathSegments = urlObject.pathname.split('/').filter(Boolean);
+      // Expected: users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
+      if (pathSegments.length >= 5) {
+        return {
+          customer: pathSegments[2] || null,
+          project: pathSegments[3] || null,
+        };
+      }
+    } catch (e) {
+      // ignore
+    }
+    return { customer: null, project: null };
+  }
+
   // Add Edit and Share icons to header
   useLayoutEffect(() => {
+    // Extract customer and project for the back button
+    const { customer, project } = getCustomerAndProjectFromUrl(url);
+    
     navigation.setOptions({
       title: 'Report View',
-      headerBackVisible: true,
+      headerLeft: () => {
+        // Only show back button if we have customer/project info
+        if (customer && project) {
+          return (
+            <TouchableOpacity
+              onPress={() => {
+                console.log(`Custom back navigation to ProjectReports for ${customer}/${project}`);
+                navigation.navigate('ProjectReports', { customer, project });
+              }}
+              // Adjust style for row layout
+              style={styles.headerBackButtonContainer} 
+            >
+              <Ionicons
+                // name="arrow-back"
+                name="chevron-back-outline" // Use chevron
+                size={24} 
+                color={colors.textPrimary} // Use standard header text color
+              />
+              {/* Add Previous Screen Title */}
+              <Text style={styles.headerBackTitle}>{project}</Text> 
+            </TouchableOpacity>
+          );
+        }
+        return null; 
+      },
       headerRight: () => (
          <View style={styles.headerButtonContainer}>
            {/* Edit Icon Button */}
@@ -163,7 +208,7 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
          </View>
       ),
     });
-  }, [navigation, reportJsonKey, handleShare, isLoading]);
+  }, [navigation, reportJsonKey, handleShare, isLoading, url]); // Added url to dependencies for customer/project extraction
 
   // --- Platform Specific Rendering --- 
   const renderContent = () => {
@@ -272,4 +317,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  // Style for the custom back button (icon + text)
+  headerBackButtonContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, // Standard iOS left padding
+  },
+  headerBackTitle: {
+    fontSize: typography.fontSizeM, // Make text smaller
+    color: colors.textPrimary, // Match header text color
+    marginLeft: spacing.xs, // Space between icon and text
+  }
 }); 

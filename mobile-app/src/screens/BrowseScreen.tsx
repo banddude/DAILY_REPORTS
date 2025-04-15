@@ -230,7 +230,7 @@ function BrowseScreen(): React.ReactElement {
             filteredList.push({ ...customer, type: 'customer' });
 
             // Add expanded, matching project rows
-            if (expandedCustomers.has(customer.name) && customer.projects) {
+            if (expandedCustomers.has(customer.id) && customer.projects) {
                 customer.projects.forEach(project => {
                     // Only include project if it matches the search query when a query exists
                     if (!searchQuery || project.name.toLowerCase().includes(lowerCaseQuery)) {
@@ -255,18 +255,21 @@ function BrowseScreen(): React.ReactElement {
     setIsRefreshing(false);
   }, [fetchCustomers]);
 
-  const handleCustomerPress = useCallback(async (customerId: string, customerName: string) => {
-    const isCurrentlyExpanded = expandedCustomers.has(customerName);
+  const handleToggleCustomer = useCallback(async (customerId: string, customerName: string, shouldFetchProjects = true) => {
+    // Check expansion based on customerId
+    const isCurrentlyExpanded = expandedCustomers.has(customerId); 
     const customerEntry = customersMap.get(customerId);
 
     if (!customerEntry) return;
 
-    // Toggle expansion state
+    // Toggle expansion state using customerId
     const nextExpanded = new Set(expandedCustomers);
     if (isCurrentlyExpanded) {
-      nextExpanded.delete(customerName);
+      nextExpanded.delete(customerId); // Use ID
+      console.log(`Collapsed customer: ${customerName} (ID: ${customerId})`);
     } else {
-      nextExpanded.add(customerName);
+      nextExpanded.add(customerId); // Use ID
+      console.log(`Expanded customer: ${customerName} (ID: ${customerId})`);
       // Fetch projects only if expanding and not already fetched
       if (!customerEntry.hasFetchedProjects) {
           console.log(`Fetching projects for ${customerName} on first expand...`);
@@ -291,7 +294,7 @@ function BrowseScreen(): React.ReactElement {
           });
       }
     }
-    setExpandedCustomers(nextExpanded);
+    setExpandedCustomers(nextExpanded); // Update state with the modified Set
 
   }, [customersMap, expandedCustomers, fetchProjects]);
 
@@ -310,7 +313,8 @@ function BrowseScreen(): React.ReactElement {
       return (
         <TouchableOpacity
           style={[styles.rowContainer, isFirst && styles.firstRow]}
-          onPress={() => handleCustomerPress(item.id, item.name)}
+          // Pass customerId and customerName to the handler
+          onPress={() => handleToggleCustomer(item.id, item.name)} 
         >
           <View style={styles.iconContainer}>
             <Ionicons name="business-outline" size={22} color={colors.textSecondary} />
@@ -322,7 +326,8 @@ function BrowseScreen(): React.ReactElement {
             </View>
           ) : (
             <Ionicons
-              name={expandedCustomers.has(item.name) ? "chevron-down" : "chevron-forward"}
+              // Check expansion using item.id
+              name={expandedCustomers.has(item.id) ? "chevron-down" : "chevron-forward"}
               size={20}
               color={colors.textSecondary}
               style={styles.disclosureIcon}

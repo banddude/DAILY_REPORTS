@@ -8,11 +8,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { CommonActions } from '@react-navigation/native';
 
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config'; // Import S3 constants
@@ -79,6 +81,19 @@ const styles = StyleSheet.create({
   disclosureIcon: {
     marginLeft: spacing.sm,
   },
+  headerButton: {
+    padding: spacing.md,
+  },
+  headerBackButtonContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, 
+  },
+  headerBackTitle: {
+    fontSize: typography.fontSizeM,
+    color: colors.textPrimary, 
+    marginLeft: spacing.xs, 
+  }
 });
 
 // --- Project Reports Screen Component ---
@@ -94,10 +109,35 @@ function ProjectReportsScreen(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Set the header title dynamically
+  // Set the header title dynamically and add custom back button
   useEffect(() => {
-    navigation.setOptions({ title: project }); // Set header to project name
-  }, [navigation, project]);
+    navigation.setOptions({ 
+      title: project, // Keep setting the title
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => {
+            console.log("ProjectReports: Navigating back to Browse screen, ensuring focus triggers updates.");
+            navigation.dispatch(
+              CommonActions.navigate({
+                name: 'BrowseBase',
+                params: {
+                  focusedCustomer: customer, 
+                },
+              })
+            );
+          }}
+          style={styles.headerBackButtonContainer}
+        >
+          <Ionicons
+            name="chevron-back-outline"
+            size={24}
+            color={colors.textPrimary}
+          />
+          <Text style={styles.headerBackTitle}>Reports</Text>
+        </TouchableOpacity>
+      ),
+    }); 
+  }, [navigation, project, customer]); // Add customer to dependencies
 
   // Fetch reports
   const fetchReports = useCallback(async () => {

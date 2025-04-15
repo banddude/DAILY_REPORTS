@@ -16,6 +16,7 @@ import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config'; // Import API base URL
 import { useAuth } from '../context/AuthContext'; // Import useAuth
 import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
@@ -112,7 +113,12 @@ export default function SignUpScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <KeyboardAwareScrollView
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingVertical: 24 }}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={180}
+      >
         {/* --- Marketing Card --- */}
         <View style={styles.marketingCard}>
           <Text style={styles.marketingHeadline}>Create Your Account</Text>
@@ -183,7 +189,7 @@ export default function SignUpScreen({ navigation }: Props) {
         >
           <Text style={styles.loginLinkText}>Already have an account? Login</Text>
         </TouchableOpacity>
-      </View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

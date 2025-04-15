@@ -114,6 +114,8 @@ function getUserProfile(userId) {
         }
     });
 }
+// --- HARDCODED WHISPER MODEL ---
+const WHISPER_MODEL = "whisper-1";
 // Modify getDailyReport to accept the full transcription object AND profileData
 function getDailyReport(transcription, profileData) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -287,18 +289,11 @@ function convertVideoToAudio(videoPath, audioPath) {
 function transcribeAudio(audioPath, profileData) {
     return __awaiter(this, void 0, void 0, function* () {
         console.log(`Transcribing audio ${audioPath}...`);
-        // --- Read Config from profileData (NO DEFAULTS) ---
-        const whisperModel = profileData.config.whisperModel;
-        // ---------------------------------------------------
-        console.log(`Using whisper model: ${whisperModel}`);
-        // --- Add check to ensure config value exists --- 
-        if (!whisperModel) {
-            throw new Error('Required configuration (whisperModel) missing in profile.json');
-        }
-        // --------------------------------------------------
+        const whisperModel = WHISPER_MODEL;
+        console.log("Using whisper model:", whisperModel);
         const transcription = yield openai.audio.transcriptions.create({
-            file: yield (0, uploads_1.toFile)(fs.createReadStream(audioPath), path_1.default.basename(audioPath)), // fs.promises doesn't have createReadStream, keep fs
-            model: whisperModel, // Use variable
+            file: yield (0, uploads_1.toFile)(fs.createReadStream(audioPath), path_1.default.basename(audioPath)),
+            model: whisperModel,
             response_format: "verbose_json",
             timestamp_granularities: ["word"]
         });

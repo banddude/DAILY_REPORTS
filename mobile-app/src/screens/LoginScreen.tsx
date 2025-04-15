@@ -8,12 +8,14 @@ import {
   Alert,
   ActivityIndicator,
   SafeAreaView,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
@@ -50,7 +52,12 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <KeyboardAwareScrollView
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingVertical: 24 }}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={150}
+      >
         {/* --- Marketing Card --- */}
         <View style={styles.marketingCard}>
           <Text style={styles.marketingHeadline}>Transform Your Field Videos Into Instant, Professional Reports</Text>
@@ -130,27 +137,27 @@ export default function LoginScreen() {
           onSubmitEditing={handleLoginAttempt}
         />
 
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handleLoginAttempt}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Sign Up Link */}
-        <TouchableOpacity 
-          style={styles.signUpLinkContainer}
-          onPress={() => navigation.navigate('SignUp')}
-        >
-          <Text style={styles.signUpLinkText}>Don't have an account? Sign Up</Text>
-        </TouchableOpacity>
-
-      </View>
+        {/* Button and Sign Up link in a View for spacing */}
+        <View>
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={handleLoginAttempt}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={styles.buttonText}>Login</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.signUpLinkContainer}
+            onPress={() => navigation.navigate('SignUp')}
+          >
+            <Text style={styles.signUpLinkText}>Don't have an account? Sign Up</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

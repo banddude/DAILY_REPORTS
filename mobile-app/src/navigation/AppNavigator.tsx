@@ -27,7 +27,6 @@ import EditAddressScreen from '../screens/EditAddressScreen';
 import EditLogoScreen from '../screens/EditLogoScreen';
 import ProjectReportsScreen from '../screens/ProjectReportsScreen';
 import EditChatModelScreen from '../screens/EditChatModelScreen';
-import EditWhisperModelScreen from '../screens/EditWhisperModelScreen';
 import AddProjectScreen from '../screens/AddProjectScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
 
@@ -52,7 +51,7 @@ export type HomeStackParamList = {
 
 // Params for screens in the Browse stack (inside the main tabs)
 export type BrowseStackParamList = {
-  BrowseBase: undefined; // Removed params as selection is inline
+  BrowseBase: { focusedCustomer?: string } | undefined;
   ReportViewer: { reportKey: string };
   WebViewer: { url: string };
   ReportEditor: { reportKey: string };
@@ -73,7 +72,6 @@ export type ProfileStackParamList = {
   EditAddress: undefined;
   EditLogo: { currentLogoUrl: string | null }; // Add EditLogo screen with param
   EditChatModel: undefined;
-  EditWhisperModel: undefined;
 };
 
 // Params for the main bottom tabs themselves
@@ -104,7 +102,6 @@ export type EditAddressScreenProps = NativeStackScreenProps<ProfileStackParamLis
 export type EditLogoScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditLogo'>;
 export type ProjectReportsScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ProjectReports'>;
 export type EditChatModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditChatModel'>;
-export type EditWhisperModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditWhisperModel'>;
 export type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>; // For navigating *out* to modals
 export type HomeScreenRouteProp = RouteProp<HomeStackParamList, 'HomeBase'>; // For receiving params
 
@@ -142,6 +139,7 @@ function HomeStackNavigator() {
             headerStyle: { backgroundColor: colors.surface },
             headerTintColor: colors.primary,
             headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold', color: colors.textPrimary },
+            headerBackVisible: false
         }}
     >
       <HomeNavStack.Screen
@@ -164,12 +162,13 @@ function BrowseStackNavigator() {
                 headerStyle: { backgroundColor: colors.surface },
                 headerTintColor: colors.textPrimary,
                 headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold' },
+                headerBackVisible: false
             }}
         >
             <BrowseNavStack.Screen 
                 name="BrowseBase" 
                 component={BrowseScreen} 
-                options={{ title: 'Reports' }} 
+                options={{ title: 'Reports', headerLeft: () => null }} 
             />
             <BrowseNavStack.Screen 
                 name="ReportViewer" 
@@ -204,6 +203,7 @@ function ProfileStackNavigator() {
                 headerStyle: { backgroundColor: colors.surface }, // Standard header
                 headerTintColor: colors.primary, // Use primary color for back/buttons
                 headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold', color: colors.textPrimary },
+                headerBackVisible: false
             }}
         >
             <ProfileNavStack.Screen
@@ -266,11 +266,6 @@ function ProfileStackNavigator() {
                 component={EditChatModelScreen}
                 options={{ title: 'Chat Model' }}
             />
-            <ProfileNavStack.Screen
-                name="EditWhisperModel"
-                component={EditWhisperModelScreen}
-                options={{ title: 'Whisper Model' }}
-            />
         </ProfileNavStack.Navigator>
     );
 }
@@ -279,6 +274,7 @@ function ProfileStackNavigator() {
 function MainTabs() {
   return (
     <Tab.Navigator
+      unmountOnBlur={false}
       screenOptions={({ route }) => ({
         headerShown: false, // Hide headers for individual tabs, handled by stacks
         tabBarIcon: ({ focused, color, size }) => {
@@ -326,7 +322,7 @@ function MainTabs() {
       <Tab.Screen 
         name="BrowseTab" 
         component={BrowseStackNavigator} 
-        options={{ title: 'Reports' }} // Label for the tab
+        options={{ title: 'Reports' }} 
       />
        <Tab.Screen 
          name="ProfileTab" 
@@ -420,8 +416,7 @@ function getTabBarVisibility(route: any) {
         'EditCompanyWebsite',
         'EditAddress',
         'EditLogo',
-        'EditChatModel',
-        'EditWhisperModel'
+        'EditChatModel'
     ];
     if (screensToHideTabBar.includes(routeName)) {
         return false;

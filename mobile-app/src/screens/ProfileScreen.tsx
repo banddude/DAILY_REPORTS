@@ -42,7 +42,6 @@ interface ProfileCompany {
 interface ProfileConfig {
     logoFilename?: string; // Keep for potential future use/reference
     chatModel?: string;
-    whisperModel?: string;
     systemPrompt?: string;
     reportJsonSchema?: object; // Store as object, display as string
 }
@@ -270,6 +269,7 @@ interface SettingsRowProps {
   onPress?: () => void;
   numberOfLines?: number; // For potentially long values like system prompt
   showDisclosure?: boolean; // Add this prop
+  labelStyle?: any; // Add labelStyle prop
 }
 
 // --- Reusable Row Component (Adapted) ---
@@ -282,6 +282,7 @@ const SettingsRow: React.FC<SettingsRowProps> = ({
   onPress,
   numberOfLines = 1,
   showDisclosure, // Use the prop
+  labelStyle, // Use the prop
 }) => {
   const displayValue = value ?? 'Not Set';
 
@@ -296,7 +297,7 @@ const SettingsRow: React.FC<SettingsRowProps> = ({
       </View>
       {/* Render label Text if provided, otherwise render an empty View spacer */}
       {label ? (
-        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={[styles.rowLabel, labelStyle]}>{label}</Text>
       ) : (
         <View style={styles.rowLabel} /> /* Spacer to push value right */
       )}
@@ -545,13 +546,6 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                      onPress={() => navigation.navigate('EditChatModel')}
                    />
                    <SettingsRow
-                     icon="mic-outline"
-                     label="Whisper Model"
-                     value={originalProfile.config?.whisperModel || 'Not Set'}
-                     showDisclosure={true}
-                     onPress={() => navigation.navigate('EditWhisperModel')}
-                   />
-                   <SettingsRow
                      icon="reader-outline"
                      label="System Prompt"
                      value={originalProfile.config?.systemPrompt ? 'View/Edit Prompt' : 'Not Set'}
@@ -568,14 +562,17 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                     onPress={() => navigation.navigate('EditReportSchema')}
                     isLink={false}
                   />
-                </View>
-
-                {/* Logout Section */}
-                <View style={styles.section}>
-                  {/* Reuse existing TouchableOpacity and Text, just rely on updated styles */}
-                  <TouchableOpacity style={styles.logoutButtonContainer} onPress={signOut}>
-                      <Text style={styles.logoutButtonText}>Log Out</Text>
-                  </TouchableOpacity>
+                  {/* Logout as a SettingsRow, styled identically to other rows */}
+                  <SettingsRow
+                    icon="log-out-outline"
+                    label="Log Out"
+                    value=""
+                    onPress={signOut}
+                    isFirst={false}
+                    showDisclosure={true}
+                    // Custom label style for red color and centering
+                    labelStyle={{ color: colors.error, textAlign: 'center', flex: 1 }}
+                  />
                 </View>
               </>
             ) : (

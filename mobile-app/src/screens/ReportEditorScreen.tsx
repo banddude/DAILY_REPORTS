@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography, borders } from '../theme/theme';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config';
 import { useAuth } from '../context/AuthContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ReportEditorScreenProps as NavigationProps } from '../navigation/AppNavigator';
@@ -498,18 +498,42 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
 
   // --- Configure Header Buttons ---
   useLayoutEffect(() => {
+    // Construct the viewer URL from the reportKey
+    let viewerUrl = '';
+    if (reportKey) {
+      const keyParts = reportKey.split('/');
+      if (keyParts.length > 1) {
+          keyParts[keyParts.length - 1] = 'report-viewer.html'; // Replace JSON filename with HTML filename
+          const viewerKey = keyParts.join('/');
+          // Assuming S3 bucket structure matches config
+          viewerUrl = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${viewerKey}`;
+          console.log("Editor: Constructed viewer URL for back button:", viewerUrl);
+      } else {
+          console.warn("Editor: Could not parse reportKey to construct viewer URL:", reportKey);
+      }
+    }
+
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity 
-          style={[styles.headerButton, { marginLeft: spacing.xs }]} // Add small left margin
-          onPress={() => navigation.goBack()} 
-          disabled={loading !== false}
+          style={styles.headerBackButtonContainer}
+          onPress={() => {
+            if (viewerUrl) {
+                console.log("Editor: Navigating back to WebViewer with URL:", viewerUrl);
+                navigation.navigate('WebViewer', { url: viewerUrl });
+            } else {
+                console.warn("Editor: No viewer URL, using default goBack()");
+                navigation.goBack(); // Fallback if URL construction failed
+            }
+          }}
+          disabled={loading !== false || !viewerUrl} 
         >
           <Ionicons 
-            name="close-outline" 
-            size={28} 
-            color={loading !== false ? colors.textDisabled : colors.textSecondary} 
+            name="chevron-back-outline"
+            size={24} 
+            color={loading !== false || !viewerUrl ? colors.textDisabled : colors.textPrimary}
           />
+          <Text style={styles.headerBackTitle}>Report View</Text> 
         </TouchableOpacity>
       ),
       headerRight: () => (
@@ -530,7 +554,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
         </TouchableOpacity>
       ),
     });
-  }, [navigation, saveChanges, loading]);
+  }, [navigation, saveChanges, loading, reportKey]); // Added reportKey dependency
 
   // --- Render Functions (Adjusted for Row Style) ---
 
@@ -1161,4 +1185,14 @@ const styles = StyleSheet.create({
       paddingHorizontal: spacing.sm, // Reduce horizontal padding slightly
       paddingVertical: spacing.xs, 
   },
+  headerBackButtonContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, 
+  },
+  headerBackTitle: {
+    fontSize: typography.fontSizeM,
+    color: colors.textPrimary, 
+    marginLeft: spacing.xs, 
+  }
 }); 

@@ -21,7 +21,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useIsFocused, CommonActions } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL } from '../config';
@@ -102,7 +102,7 @@ const HomeScreen: React.FC = () => {
   const loadCustomers = useCallback(async () => {
     if (!userToken) {
       console.log('HomeScreen Customer Effect: No userToken, setting defaults.');
-      // Only include ADD_NEW option if no token
+      // Only include ADD_NEW_CUSTOMER_OPTION if no token
       setFetchedCustomers([ADD_NEW_CUSTOMER_OPTION]); 
       setSelectedCustomer(undefined);
       setIsFetchingCustomers(false);
@@ -377,10 +377,8 @@ const HomeScreen: React.FC = () => {
 
     if (isImage) {
       setThumbnailUri(asset.uri); // Use image URI directly for thumbnail
-      setIsPreviewModalVisible(true);
     } else if (isVideo) {
       // Thumbnail generation for video is handled by the useEffect hook
-      setIsPreviewModalVisible(true); // Show preview modal for video too
     } else {
         Alert.alert('Unsupported File', 'Selected file is not a supported image or video.');
         setSelectedFile(null);
@@ -623,6 +621,7 @@ const HomeScreen: React.FC = () => {
   };
 
   async function handleUpload() {
+    console.log('Generate Report button pressed');
     if (!selectedCustomer || !selectedProject) {
       setResult({ message: 'Please select a customer and project first.', type: 'error' });
       return;
@@ -773,12 +772,35 @@ const HomeScreen: React.FC = () => {
     setIsGeneratingThumbnail(false);
     setResult({ message: '', type: null, data: null }); // Clear results too
 
-    console.log(`Navigating to WebViewer with URL: ${url}`);
-    navigation.navigate('BrowseTab', {
-      screen: 'WebViewer',
-      params: { url: url }
+    // Extract customer and project from the URL (keep this for potential context)
+    let customer: string | null = null;
+    let project: string | null = null;
+    try {
+      const urlObj = new URL(url);
+      const segments = urlObj.pathname.split('/').filter(Boolean);
+      // users/{userId}/{customer}/{project}/{reportFolder}/report-viewer.html
+      if (segments.length >= 5) {
+        customer = segments[2];
+        project = segments[3];
+      }
+    } catch (e) {
+      console.warn("Could not extract customer/project from URL", e);
+    }
+
+    // Navigate directly to the WebViewer within the BrowseTab
+    // The BrowseNavStack will handle placing WebViewer correctly.
+    console.log(`Navigating to BrowseTab -> WebViewer with URL: ${url}`);
+    navigation.navigate('MainAppTabs', {
+      screen: 'BrowseTab',
+      params: { // Navigate to WebViewer within BrowseTab
+        screen: 'WebViewer',
+        params: { url: url }
+      }
     });
   }
+
+  // Debug log for button state
+  console.log('Button disabled:', !selectedFile, !selectedCustomer, selectedCustomer === ADD_NEW_CUSTOMER_OPTION, !selectedProject, selectedProject === ADD_NEW_PROJECT_OPTION, isGeneratingReport);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -873,57 +895,48 @@ const HomeScreen: React.FC = () => {
             </View>
 
             <View style={styles.sectionContainer}>
-                <Text style={styles.sectionHeaderText}>Media</Text>
+                <Text style={styles.sectionHeaderText}>MEDIA</Text>
                 <TouchableOpacity
                   style={[
                     styles.buttonBase,
                     isGeneratingReport && styles.buttonDisabled,
                     { borderTopWidth: borders.widthHairline, borderTopColor: colors.borderLight }
                   ]}
-                  // Temporarily bypass Alert on web for testing
-                  onPress={Platform.OS === 'web' ? () => pickMedia('library', 'video') : showMediaSourceOptions} 
-                  disabled={isGeneratingReport || isFileProcessing} // Disable during processing too
+                  onPress={Platform.OS === 'web' ? () => pickMedia('library', 'video') : showMediaSourceOptions}
+                  disabled={isGeneratingReport || isFileProcessing}
                 >
                   <View style={styles.buttonIconContainer}>
-                     <Ionicons name={selectedFile ? "checkmark-circle-outline" : "add-circle-outline"} size={22} color={isGeneratingReport || isFileProcessing ? colors.textDisabled : (selectedFile ? colors.success : colors.textSecondary)} />
+                    {selectedFile ? (
+                      <Ionicons name="checkmark-circle-outline" size={22} color="#222" />
+                    ) : (
+                      <Ionicons name="add-circle-outline" size={22} color="#222" />
+                    )}
                   </View>
-                  <Text style={[
-                      styles.buttonTextBase,
-                      (isGeneratingReport || isFileProcessing) && styles.buttonTextDisabled
-                  ]}>
-                      {isFileProcessing ? 'Processing...' : (selectedFile ? 'Change Media' : 'Select Image or Video')}
+                  <Text style={[styles.buttonTextBase, (isGeneratingReport || isFileProcessing) && styles.buttonTextDisabled]}>
+                    {/* Conditional Text */}
+                    {selectedFile ? 'Change Media' : 'Choose Media'}
                   </Text>
                   <View style={styles.buttonChevronContainer}>
-                     {isFileProcessing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : <Ionicons name="chevron-forward" size={22} color={isGeneratingReport || isFileProcessing ? colors.textDisabled : colors.textSecondary} />} 
+                    {isFileProcessing ? <ActivityIndicator size="small" color="#888" /> : <Ionicons name="chevron-forward" size={22} color="#888" />} 
                   </View>
                 </TouchableOpacity>
 
-                {/* Preview Area - simplified, relies on thumbnailUri */} 
-                {(isGeneratingThumbnail || selectedFile) && (
-                  <View style={styles.thumbnailContainer}> 
-                     {isGeneratingThumbnail ? (
-                        <View style={styles.thumbnailPlaceholder}> 
-                            <ActivityIndicator size="small" color={colors.textSecondary} />
-                            <Text style={styles.thumbnailPlaceholderText}>Generating preview...</Text>
-                        </View>
-                     ) : thumbnailUri ? (
-                        <TouchableOpacity onPress={() => selectedFile && setIsPreviewModalVisible(true)}> 
-                           <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} /> 
-                        </TouchableOpacity>
-                     ) : (
-                        <View style={styles.thumbnailPlaceholder}> 
-                            <Ionicons name="videocam-off-outline" size={30} color={colors.border} /> 
-                            <Text style={styles.thumbnailPlaceholderText}>Preview unavailable</Text>
-                        </View>
-                     )}
-                     {selectedFile && !isGeneratingThumbnail && (
-                         <View style={styles.thumbnailInfoContainer}> 
-                             <Text style={styles.thumbnailFileName} numberOfLines={1}>{selectedFile.name}</Text> 
-                             <TouchableOpacity onPress={() => { setSelectedFile(null); setThumbnailUri(null); }} style={styles.thumbnailClearButton}> 
-                                 <Ionicons name="close-circle" size={20} color={colors.textSecondary} /> 
-                             </TouchableOpacity> 
-                         </View>
-                     )}
+                {/* Only show the thumbnail, no filename, with play icon and X button */}
+                {selectedFile && !isGeneratingThumbnail && (
+                  <View style={styles.thumbnailPreviewWrapper}>
+                    <TouchableOpacity onPress={() => setIsPreviewModalVisible(true)}>
+                      <View style={styles.thumbnailPreviewContainer}>
+                        <Image source={{ uri: thumbnailUri || '' }} style={styles.thumbnailPreviewImage} />
+                        <Ionicons name="play-circle" size={40} color="#222" style={styles.thumbnailPlayIcon} />
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.thumbnailRemoveButton}
+                      onPress={() => { setSelectedFile(null); setThumbnailUri(null); }}
+                      accessibilityLabel="Remove selected media"
+                    >
+                      <Ionicons name="close" size={24} color="#fff" />
+                    </TouchableOpacity>
                   </View>
                 )}
             </View>
@@ -935,7 +948,7 @@ const HomeScreen: React.FC = () => {
                     (!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport) && styles.disabledButton,
                 ]}
                 onPress={handleUpload}
-                disabled={!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport}
+                // disabled={!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport} // TEMPORARILY REMOVED FOR DEBUGGING
             >
                 {isGeneratingReport ? (
                     <ActivityIndicator color={colors.textPrimary} />
@@ -960,42 +973,46 @@ const HomeScreen: React.FC = () => {
         )}
 
         <Modal
-             visible={isPreviewModalVisible}
-             transparent={true}
-             animationType="fade"
-             onRequestClose={() => setIsPreviewModalVisible(false)}
-         >
-            <View style={styles.modalContainer}>
-               <View style={styles.videoContainer}>
-                 {selectedFile?.uri && (
-                    <>
-                     <Video
-                        ref={videoPlayerRef}
-                        source={{ uri: selectedFile.uri }}
-                        style={styles.videoPlayer}
-                        useNativeControls
-                        resizeMode={ResizeMode.CONTAIN}
-                        onError={(error) => {
-                           console.error('Video playback error string:', error);
-                           Alert.alert(
-                               "Playback Error",
-                               `Sorry, this video could not be played. It might be in an unsupported format or corrupted.\n\nError: ${error}`,
-                               [{ text: "OK", onPress: () => setIsPreviewModalVisible(false) }]
-                           );
-                        }}
-                        onFullscreenUpdate={(event) => {
-                           // Optional: Handle fullscreen updates if needed
-                           console.log('Fullscreen status:', event.fullscreenUpdate);
-                        }}
-                    />
-                    </>
-                 )}
-               </View>
-               <TouchableOpacity style={styles.closeButton} onPress={() => setIsPreviewModalVisible(false)}>
-                  <Ionicons name="close-circle" size={36} color={colors.surface} />
-               </TouchableOpacity>
+          visible={isPreviewModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsPreviewModalVisible(false)}
+        >
+          <SafeAreaView style={styles.previewModalSafeArea}>
+            <View style={styles.previewModalOverlay}>
+              <View style={styles.previewModalContent}>
+                {selectedFile?.uri && (
+                  <Video
+                    ref={videoPlayerRef}
+                    source={{ uri: selectedFile.uri }}
+                    style={styles.previewVideoPlayer}
+                    useNativeControls
+                    resizeMode={ResizeMode.CONTAIN}
+                    onError={(error) => {
+                      console.error('Video playback error string:', error);
+                      Alert.alert(
+                        "Playback Error",
+                        `Sorry, this video could not be played. It might be in an unsupported format or corrupted.\n\nError: ${error}`,
+                        [{ text: "OK", onPress: () => setIsPreviewModalVisible(false) }]
+                      );
+                    }}
+                    onFullscreenUpdate={(event) => {
+                      // Optional: Handle fullscreen updates if needed
+                      console.log('Fullscreen status:', event.fullscreenUpdate);
+                    }}
+                  />
+                )}
+                <TouchableOpacity
+                  style={styles.previewModalCloseButton}
+                  onPress={() => setIsPreviewModalVisible(false)}
+                  accessibilityLabel="Close preview"
+                >
+                  <Ionicons name="close" size={32} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
-         </Modal>
+          </SafeAreaView>
+        </Modal>
 
         {/* Confirmation Modal for Deletion */} 
         {itemToDelete && (
@@ -1009,6 +1026,13 @@ const HomeScreen: React.FC = () => {
             onCancel={handleDeleteCancel}
             isDestructive={true}
           />
+        )}
+
+        {isGeneratingReport && (
+          <View style={styles.loadingOverlay} pointerEvents="auto">
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Generating report…</Text>
+          </View>
         )}
     </SafeAreaView>
   );
@@ -1374,6 +1398,161 @@ const styles = StyleSheet.create({
   tipBold: {
     fontWeight: typography.fontWeightBold as 'bold',
     color: colors.textPrimary,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 18,
+    color: colors.textPrimary,
+    fontWeight: 'bold',
+  },
+  mediaCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  mediaThumbnailWrapper: {
+    position: 'relative',
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  mediaThumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    backgroundColor: colors.borderLight,
+  },
+  playIcon: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -18,
+    marginTop: -18,
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 14,
+    padding: 2,
+    zIndex: 2,
+  },
+  mediaFileName: {
+    fontSize: typography.fontSizeS,
+    color: colors.textPrimary,
+    fontWeight: '500',
+    marginTop: 2,
+    textAlign: 'center',
+    maxWidth: 120,
+  },
+  previewModalSafeArea: {
+    flex: 1,
+  },
+  previewModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewModalContent: {
+    width: '90%',
+    maxWidth: 400,
+    aspectRatio: 9/16,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    position: 'relative',
+  },
+  previewVideoPlayer: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    backgroundColor: '#000',
+  },
+  previewModalCloseButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  thumbnailPreviewWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+    position: 'relative',
+  },
+  thumbnailPreviewContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#eee',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  thumbnailPreviewImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    backgroundColor: '#eee',
+  },
+  thumbnailPlayIcon: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -20,
+    marginTop: -20,
+    opacity: 0.8,
+  },
+  thumbnailRemoveButton: {
+    position: 'absolute',
+    top: 4,
+    right: '25%',
+    backgroundColor: '#222',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
 });
 

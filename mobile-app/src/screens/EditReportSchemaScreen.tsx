@@ -417,24 +417,6 @@ function EditReportSchemaScreen(): React.ReactElement {
             <ScrollView contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
                 {error && <Text style={styles.errorText}>{error}</Text>}
 
-                {/* Example Image Picker Section */} 
-                <View style={styles.imagePreviewContainer}> 
-                  <Text style={styles.label}>Report Header Image (Optional)</Text> 
-                  {selectedImageUri ? ( 
-                    <Image source={{ uri: selectedImageUri }} style={styles.imagePreview} /> 
-                  ) : ( 
-                    <View style={styles.imagePlaceholder}> 
-                      <Ionicons name="image-outline" size={50} color={colors.textSecondary} /> 
-                    </View> 
-                  )} 
-                  <TouchableOpacity onPress={showImageSourceOptions} style={styles.imageButton} disabled={isSaving}> 
-                    <Ionicons name="add-circle-outline" size={20} color={colors.background} />
-                    <Text style={styles.imageButtonText}> 
-                      {selectedImageUri ? 'Change Image' : 'Select Image'} 
-                    </Text> 
-                  </TouchableOpacity> 
-                </View> 
-
                 {/* JSON Schema Editor */} 
                 <View style={styles.fieldContainer}> 
                   <Text style={styles.label}>Report JSON Schema</Text> 
