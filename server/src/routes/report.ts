@@ -203,14 +203,15 @@ const handleVideoUploadAndGenerate = async (req: Request, res: Response) => {
         const reportJsonKey = await generateReportFunction(uploadedVideoPath, userId, customer, project);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
+        // TODO: Review editorUrl logic - /edit-report route seems undefined
         const editorUrl = `${req.protocol}://${req.get('host')}/edit-report?key=${encodeURIComponent(reportJsonKey)}`;
         console.log(`User ${userId}: Editor URL: ${editorUrl}`);
 
         const reportBaseKey = reportJsonKey.substring(0, reportJsonKey.lastIndexOf('/'));
         const viewerKey = `${reportBaseKey}/report-viewer.html`;
-        const region = await s3Client.config.region(); 
-        const viewerUrl = `https://${s3Bucket}.s3.${region}.amazonaws.com/${viewerKey}`;
-        console.log(`User ${userId}: Viewer URL: ${viewerUrl}`);
+        // Construct URL pointing to our server endpoint for viewing S3 assets
+        const viewerUrl = `/assets/view-s3-asset?key=${encodeURIComponent(viewerKey)}`;
+        console.log(`User ${userId}: Viewer URL (using server endpoint): ${viewerUrl}`);
 
         res.status(200).json({ editorUrl, viewerUrl });
 
