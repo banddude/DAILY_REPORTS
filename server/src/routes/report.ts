@@ -1,13 +1,33 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from 'stream';
-import * as fs from 'fs';
-import path from 'path';
+// Remove fs import related to local file handling
+// import * as fs from 'fs';
+import path from 'path'; // Re-add path import
 import type { Multer } from 'multer'; // Import Multer type for dependency injection
 import { generateAndUploadViewerHtml } from '../reportUtils'; // Import the helper
 
-// Type for the generateReport function dependency
-type GenerateReportFunction = (videoPath: string, userId: string, customer: string, project: string) => Promise<string>;
+// Extend Express Request type to potentially include file info from multer-s3
+interface RequestWithS3File extends Request {
+    file?: Express.Multer.File & { // Standard Multer file properties
+        // Properties added by multer-s3
+        bucket?: string;
+        key?: string;
+        acl?: string;
+        contentType?: string;
+        contentDisposition?: null;
+        storageClass?: string;
+        serverSideEncryption?: null;
+        metadata?: any;
+        location?: string; // The S3 URL
+        etag?: string;
+        versionId?: string;
+    };
+}
+
+
+// Type for the generateReport function dependency - accepts S3 key now
+type GenerateReportFunction = (videoS3Key: string, userId: string, customer: string, project: string) => Promise<string>; // Changed videoPath to videoS3Key
 
 const router = Router();
 
@@ -19,7 +39,7 @@ let ensureAuthenticatedHelper: (req: Request, res: Response) => string | null;
 let videoUploadMiddleware: RequestHandler; // Middleware from upload.single('video')
 let imageUploadMiddleware: RequestHandler; // Middleware from imageUpload.single('reportImage')
 let generateReportFunction: GenerateReportFunction;
-let uploadsDir: string; // Pass UPLOADS_DIR
+// let uploadsDir: string; // No longer needed
 
 // Initializer function
 export const initializeReportRoutes = (
@@ -30,7 +50,7 @@ export const initializeReportRoutes = (
     videoUpload: RequestHandler,
     imageUpload: RequestHandler,
     generateReport: GenerateReportFunction,
-    uploadsDirectory: string
+    // uploadsDirectory: string // Removed uploadsDirectory parameter
 ) => {
     s3Client = client;
     s3Bucket = bucket;
@@ -39,7 +59,7 @@ export const initializeReportRoutes = (
     videoUploadMiddleware = videoUpload;
     imageUploadMiddleware = imageUpload;
     generateReportFunction = generateReport;
-    uploadsDir = uploadsDirectory; // Store uploads directory path
+    // uploadsDir = uploadsDirectory; // Removed assignment
 };
 
 // GET Endpoint to fetch report JSON from S3
@@ -175,32 +195,42 @@ router.post('/report', (req, res, next) => protectMiddleware(req, res, next), as
 });
 
 // Common function to handle video processing and report generation
-const handleVideoUploadAndGenerate = async (req: Request, res: Response) => {
+// Now accepts RequestWithS3File type
+const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Response) => { 
     const userId = ensureAuthenticatedHelper(req, res);
     if (!userId) return;
 
-    console.log(`User ${userId} received request for video processing`);
+    console.log(`User ${userId} received request for video processing (S3 direct)`);
 
-    // --- BEGIN MULTER CHECK ---
-    if (!req.file) {
-        console.error(`User ${userId}: >>> Multer Error: req.file is missing.`);
+    // --- BEGIN MULTER-S3 CHECK ---
+    if (!req.file || !req.file.key || !req.file.location) { // Check for S3 key and location
+        console.error(`User ${userId}: >>> Multer-S3 Error: req.file or S3 key/location is missing.`);
+        if (req.file) {
+             console.error('>>> req.file details:', JSON.stringify(req.file, null, 2));
+        } else {
+             console.error('>>> req.file is undefined');
+        }
         console.error('>>> Request Headers:', JSON.stringify(req.headers, null, 2));
-        res.status(400).json({ error: 'No video file uploaded or file could not be processed by server.' });
+        res.status(400).json({ error: 'No video file uploaded or file could not be processed and uploaded to S3.' });
         return;
     } else {
-        console.log(`User ${userId}: >>> Multer Success: req.file received.`);
-        console.log(`>>> req.file details: { fieldname: '${req.file.fieldname}', originalname: '${req.file.originalname}', mimetype: '${req.file.mimetype}', path: '${req.file.path}', size: ${req.file.size} }`);
+        console.log(`User ${userId}: >>> Multer-S3 Success: req.file received.`);
+        // Log S3 specific details
+        console.log(`>>> req.file details: { fieldname: '${req.file.fieldname}', originalname: '${req.file.originalname}', mimetype: '${req.file.contentType}', size: ${req.file.size}, bucket: '${req.file.bucket}', key: '${req.file.key}', location: '${req.file.location}' }`);
     }
-    // --- END MULTER CHECK ---
+    // --- END MULTER-S3 CHECK ---
 
     const customer = req.body.customer as string || 'UnknownCustomer';
     const project = req.body.project as string || 'UnknownProject';
     console.log(`User ${userId}: Using customer=${customer}, project=${project}`);
 
-    const uploadedVideoPath = req.file.path;
+    // Use the S3 key from multer-s3
+    const uploadedVideoS3Key = req.file.key; 
+    
     try {
-        console.log(`User ${userId}: Starting report generation process...`);
-        const reportJsonKey = await generateReportFunction(uploadedVideoPath, userId, customer, project);
+        console.log(`User ${userId}: Starting report generation process from S3 video key: ${uploadedVideoS3Key}`);
+        // Pass the S3 key instead of the local path
+        const reportJsonKey = await generateReportFunction(uploadedVideoS3Key, userId, customer, project);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
         // Return only the key of the generated report JSON
@@ -209,108 +239,78 @@ const handleVideoUploadAndGenerate = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error(`User ${userId}: Error during report generation:`, error);
         res.status(500).json({ error: `Report generation failed: ${error.message}` });
-    } finally {
-        try {
-            await fs.promises.unlink(uploadedVideoPath);
-            console.log(`User ${userId}: Cleaned up temporary uploaded file: ${uploadedVideoPath}`);
-        } catch (cleanupError) {
-            console.error(`User ${userId}: Error cleaning up temporary file ${uploadedVideoPath}:`, cleanupError);
-        }
     }
+    // No finally block needed to delete local file
 };
 
 // POST Endpoint to handle video uploads and trigger report generation
 router.post('/upload-video', 
     (req, res, next) => protectMiddleware(req, res, next),
-    (req, res, next) => videoUploadMiddleware(req, res, next), // Apply multer middleware
+    (req, res, next) => videoUploadMiddleware(req, res, next), // Apply multer-s3 middleware
     async (req: Request, res: Response) => {
-        await handleVideoUploadAndGenerate(req, res);
+        // Cast req to RequestWithS3File if necessary or ensure middleware adds types
+        await handleVideoUploadAndGenerate(req as RequestWithS3File, res);
     }
 );
 
 // POST endpoint to trigger report generation manually (redundant but kept for compatibility)
 router.post('/generate-report', 
     (req, res, next) => protectMiddleware(req, res, next),
-    (req, res, next) => videoUploadMiddleware(req, res, next), // Apply multer middleware
+    (req, res, next) => videoUploadMiddleware(req, res, next), // Apply multer-s3 middleware
     async (req: Request, res: Response) => {
-        console.log("Manual /api/generate-report endpoint hit.");
-        await handleVideoUploadAndGenerate(req, res);
+        console.log("Manual /api/generate-report endpoint hit (using S3 upload).");
+        await handleVideoUploadAndGenerate(req as RequestWithS3File, res);
     }
 );
 
 // POST endpoint for uploading a report image
 router.post('/report-image', 
     (req, res, next) => protectMiddleware(req, res, next),
-    (req, res, next) => imageUploadMiddleware(req, res, next), // Apply image multer middleware
-    async (req: Request, res: Response) => {
-        console.log(`>>> POST /api/report-image handler reached. Query: ${JSON.stringify(req.query)}, File received: ${!!req.file}`); 
+    (req, res, next) => imageUploadMiddleware(req, res, next), // Apply image multer-s3 middleware
+    async (req: RequestWithS3File, res: Response) => { // Use RequestWithS3File type
+        console.log(`>>> POST /api/report-image handler reached (S3). Query: ${JSON.stringify(req.query)}, File received: ${!!req.file}`); 
         
-        // Handle React Native format (mocking file buffer)
-        if (!req.file && req.body && req.body.reportImage && typeof req.body.reportImage === 'object') {
-            console.log('>>> Found reportImage as object in body, React Native format detected');
-            try {
-                const mockImageBuffer = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b]);
-                req.file = {
-                    fieldname: 'reportImage',
-                    originalname: req.body.reportImage.name || 'image.jpg',
-                    mimetype: req.body.reportImage.type || 'image/jpeg',
-                    size: mockImageBuffer.length,
-                    buffer: mockImageBuffer,
-                    encoding: '7bit',
-                    destination: uploadsDir, // Use injected uploadsDir
-                    filename: `${Date.now()}-${req.body.reportImage.name || 'image.jpg'}`,
-                    path: path.join(uploadsDir, `${Date.now()}-${req.body.reportImage.name || 'image.jpg'}`),
-                } as Express.Multer.File;
-                console.log(`>>> Created mock file from React Native data: ${req.file.originalname}`);
-            } catch (error) {
-                console.error('>>> Error processing React Native file object:', error);
-            }
-        }
+        // Remove React Native specific handling - multer-s3 handles stream directly
+        // if (!req.file && req.body && req.body.reportImage && typeof req.body.reportImage === 'object') { ... }
         
         const userId = ensureAuthenticatedHelper(req, res);
         if (!userId) return;
         
         const reportJsonKey = req.query.key as string;
+        // We don't need imgKey from query anymore, the filename is generated by multer-s3 key function
+        // const imgKey = req.query.imgKey as string;
 
         if (!reportJsonKey) {
             res.status(400).json({ error: "Missing 'key' query parameter for the report JSON." });
             return;
         }
         if (!reportJsonKey.startsWith(`users/${userId}/`)) {
-            console.warn(`Auth violation: User ${userId} attempted upload for key ${reportJsonKey}`);
+            console.warn(`Auth violation: User ${userId} attempted image upload for key ${reportJsonKey}`);
             res.status(403).json({ error: "Forbidden access." });
             return;
         }
         
-        if (!req.file) {
-            console.warn(`>>> POST /api/report-image handler: req.file is still missing after all handling attempts`);
-            res.status(400).json({ error: 'No image file uploaded or could not process image data' });
+        // Check for file info from multer-s3
+        if (!req.file || !req.file.key || !req.file.location) { 
+            console.warn(`>>> POST /api/report-image handler: req.file or S3 key/location is missing after multer-s3`);
+            res.status(400).json({ error: 'No image file uploaded or failed S3 upload' });
             return;
         }
 
-        const reportBaseKey = reportJsonKey.substring(0, reportJsonKey.lastIndexOf('/'));
-        const framesS3Directory = `${reportBaseKey}/extracted_frames/`;
+        // Get info directly from multer-s3 result in req.file
+        const newS3Key = req.file.key;
+        const s3Url = req.file.location;
+        const newFileName = path.basename(newS3Key); // Extract filename from the S3 key
 
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E6);
-        const fileExtension = path.extname(req.file.originalname) || '.jpg';
-        const newFileName = `upload_${uniqueSuffix}${fileExtension}`.replace(/\s+/g, '_');
-        const newS3Key = `${framesS3Directory}${newFileName}`;
+        console.log(`User ${userId} report image uploaded by multer-s3 to: ${s3Url} (Key: ${newS3Key})`);
 
-        console.log(`User ${userId} uploading new report image to S3: ${newS3Key}`);
-
-        const putObjectParams = {
-            Bucket: s3Bucket,
-            Key: newS3Key,
-            Body: Readable.from(req.file.buffer),
-            ContentType: req.file.mimetype,
-            ContentLength: req.file.size
-        };
+        // No need to manually upload the image to S3 - multer-s3 did it.
+        // const putObjectParams = { ... }; 
+        // const putImageCommand = new PutObjectCommand(putObjectParams);
+        // await s3Client.send(putImageCommand);
 
         try {
-            const putImageCommand = new PutObjectCommand(putObjectParams);
-            await s3Client.send(putImageCommand);
-            console.log(`User ${userId}: Successfully uploaded new report image to S3: ${newS3Key}`);
-
+            // Fetch the existing report JSON to add the image reference
             const getReportCommand = new GetObjectCommand({ Bucket: s3Bucket, Key: reportJsonKey });
             const reportDataResponse = await s3Client.send(getReportCommand);
             if (!reportDataResponse.Body) throw new Error("Failed to fetch report JSON body.");
@@ -318,13 +318,12 @@ router.post('/report-image',
             const reportData = JSON.parse(reportJsonString);
 
             if (!reportData.images) reportData.images = [];
-            const region = await s3Client.config.region();
-            const s3Url = `https://${s3Bucket}.s3.${region}.amazonaws.com/${newS3Key}`;
             
+            // Add the new image info (using data from multer-s3)
             reportData.images.push({
-                fileName: newFileName,
-                caption: "",
-                s3Url: s3Url
+                fileName: newFileName, // Use filename derived from S3 key
+                caption: "", // Default caption
+                s3Url: s3Url // Use the S3 location URL
             });
 
             console.log(`User ${userId}: Saving updated report JSON with new report image: ${reportJsonKey}`);
@@ -336,6 +335,32 @@ router.post('/report-image',
             });
             await s3Client.send(putReportCommand);
             console.log(`User ${userId}: Successfully saved updated report JSON.`);
+            
+            // --- Regenerate HTML Viewer --- 
+            try {
+                console.log(`User ${userId}: Triggering viewer HTML regeneration after image add for key: ${reportJsonKey}`);
+                const keyParts = reportJsonKey.replace(/^users\/[^\/]+\//, '').split('/'); 
+                if (keyParts.length === 4) {
+                    const customerName = keyParts[0];
+                    const projectName = keyParts[1];
+                    const reportFolderName = keyParts[2];
+                    await generateAndUploadViewerHtml(
+                        s3Client,
+                        s3Bucket,
+                        reportData, // Use the updated data
+                        userId,
+                        customerName,
+                        projectName,
+                        reportFolderName
+                    );
+                    console.log(`User ${userId}: Successfully regenerated viewer HTML after image add.`);
+                } else {
+                    console.error(`User ${userId}: Could not parse report key components for HTML regeneration: ${reportJsonKey}`);
+                }
+            } catch (htmlError: any) {
+                console.error(`User ${userId}: Failed to regenerate viewer HTML after adding image:`, htmlError);
+            }
+            // --- End HTML Regeneration ---
 
             res.status(200).json({ 
                 message: "Image uploaded and report updated successfully.",
@@ -345,13 +370,18 @@ router.post('/report-image',
             });
 
         } catch (error: any) {
-            console.error(`User ${userId}: Error uploading report image ${newS3Key} to S3:`, error);
-            res.status(500).json({ error: `Failed to upload report image to S3: ${error.message}` });
+            console.error(`User ${userId}: Error processing report image upload ${newS3Key}:`, error);
+             if (error.name === 'NoSuchKey') {
+                res.status(404).json({ error: "Report JSON not found at the specified key. Cannot add image reference." });
+             } else {
+                 res.status(500).json({ error: `Failed to update report with image reference: ${error.message}` });
+             }
         }
     }
 );
 
 // DELETE endpoint for deleting a report image
+// No changes needed here for multer-s3, it only modifies the JSON and doesn't handle uploads
 router.delete('/report-image', (req, res, next) => protectMiddleware(req, res, next), async (req: Request, res: Response) => {
     const userId = ensureAuthenticatedHelper(req, res);
     if (!userId) return;

@@ -86,8 +86,7 @@ initializeReportRoutes(
     ensureAuthenticated,
     videoUpload.single('video'),
     imageUpload.single('reportImage'),
-    generateReport,
-    UPLOADS_DIR
+    generateReport
 );
 initializeS3AssetRoutes(s3Client, s3Bucket, protect, ensureAuthenticated);
 initializeProfileRoutes(
