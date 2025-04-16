@@ -16,7 +16,7 @@ import browseRouter, { initializeBrowseRoutes } from './routes/browse';
 
 // Configurations
 import { videoUpload, imageUpload } from './fileUploadConfig';
-import { s3Client, s3Bucket, UPLOADS_DIR, DATA_DIR, port } from './config';
+import { s3Client, s3Bucket, DATA_DIR, port } from './config';
 
 const app = express();
 
