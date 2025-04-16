@@ -1,20 +1,31 @@
 import { API_BASE_URL } from '../config';
+// Import the Supabase client
+import { supabase } from '../utils/supabaseClient';
 
 // Helper function to fetch data from the API
-export const fetchApi = async (endpoint: string, token: string | null): Promise<string[]> => {
+export const fetchApi = async (endpoint: string): Promise<string[]> => {
   const url = `${API_BASE_URL}${endpoint}`;
   console.log('Fetching:', url);
 
+  // Get the current session from Supabase
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    console.error("Error getting Supabase session for fetchApi:", sessionError);
+    throw new Error("Could not retrieve authentication session.");
+  }
+
+  if (!session?.access_token) {
+      console.warn('fetchApi called but no active session found for endpoint:', endpoint);
+      // Decide how to handle - throw error? Return empty? Let's throw.
+      throw new Error("User is not authenticated.");
+  }
+
   const headers: HeadersInit = {
       'Accept': 'application/json',
+      // Add Authorization header using the token from the session
+      'Authorization': `Bearer ${session.access_token}`,
   };
-
-  if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-  } else {
-      console.warn('fetchApi called without a token for endpoint:', endpoint);
-      return [];
-  }
 
   try {
     const response = await fetch(url, { headers });

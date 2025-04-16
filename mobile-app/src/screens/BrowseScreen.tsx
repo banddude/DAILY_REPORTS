@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
   FlatList,
@@ -14,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { BrowseStackParamList } from '../navigation/AppNavigator';
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { fetchApi } from './fetchApiHelper';
@@ -39,89 +38,12 @@ type ListItem =
 type BrowseScreenNavigationProp = NativeStackNavigationProp<BrowseStackParamList, 'BrowseBase'>;
 
 // --- Styles (Adapted from ProfileScreen/Existing BrowseScreen) ---
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  statusContainer: {
-    flex: 1, // Allow it to take full space for centering
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    fontWeight: typography.fontWeightMedium as '500',
-    fontSize: typography.fontSizeM,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    fontSize: typography.fontSizeM,
-    fontStyle: 'italic',
-  },
-  // Row Styles adapted from ProfileScreen
-  rowContainer: {
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.sm, // Reduced padding
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: borders.widthHairline,
-    borderBottomColor: colors.borderLight,
-    minHeight: 48, // Consistent height
-  },
-  firstRow: { // Apply to the very first row if needed, or manage border sections
-    borderTopWidth: borders.widthHairline,
-    borderTopColor: colors.borderLight,
-  },
-  iconContainer: {
-    marginRight: spacing.md,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowText: {
-    flex: 1,
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-  },
-  loadingIconContainer: { // Specific container for the loading spinner on rows
-    marginLeft: 'auto', // Push to the right
-    paddingLeft: spacing.sm,
-  },
-  disclosureIcon: {
-    marginLeft: spacing.sm, // Push to the right after text/spinner
-  },
-  projectRowContainer: { // Style for project rows to add indentation
-    paddingLeft: spacing.lg + spacing.md + 24, // Indent past customer icon+margin
-  },
-  searchContainer: { // Styles for the search bar area
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    backgroundColor: colors.background, // Or colors.surface if preferred
-    borderBottomWidth: borders.widthHairline,
-    borderBottomColor: colors.borderLight,
-  },
-  searchInput: { // Styles for the TextInput itself
-    backgroundColor: colors.surfaceAlt, // A slightly different background
-    borderRadius: borders.radiusMedium,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm, // Adjust for optimal height
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-  },
-});
 
 // --- Browse Screen Component ---
 function BrowseScreen(): React.ReactElement {
   const navigation = useNavigation<BrowseScreenNavigationProp>();
   const isFocused = useIsFocused();
-  const { userToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   // Use a Map to store customer data, preserving insertion order for display
   const [customersMap, setCustomersMap] = useState<Map<string, CustomerEntry>>(new Map());
@@ -134,11 +56,11 @@ function BrowseScreen(): React.ReactElement {
 
   // --- Data Fetching ---
   const fetchCustomers = useCallback(async () => {
-    if (!userToken) return;
+    if (!isAuthenticated) return;
     console.log('Fetching customers...');
     setErrorCustomers(null);
     try {
-      const customerNames = await fetchApi('/api/browse-reports', userToken);
+      const customerNames = await fetchApi('/api/browse-reports');
       const newMap = new Map<string, CustomerEntry>();
       const newOrder: string[] = [];
       customerNames.forEach(name => {
@@ -162,14 +84,14 @@ function BrowseScreen(): React.ReactElement {
       setCustomersMap(new Map());
       setCustomerOrder([]);
     }
-  }, [userToken]);
+  }, [isAuthenticated]);
 
   const fetchProjects = useCallback(async (customerId: string, customerName: string): Promise<ProjectData[]> => {
-    if (!userToken) return [];
+    if (!isAuthenticated) return [];
     console.log(`Fetching projects for ${customerName}...`);
     try {
       const endpoint = `/api/browse-reports?customer=${encodeURIComponent(customerName)}`;
-      const projectNames = await fetchApi(endpoint, userToken);
+      const projectNames = await fetchApi(endpoint);
       const projects: ProjectData[] = projectNames.map(name => ({
         id: `project_${customerName}_${name}`,
         name: name,
@@ -181,15 +103,15 @@ function BrowseScreen(): React.ReactElement {
       Alert.alert('Error', `Failed to load projects for ${customerName}: ${err.message}`);
       return []; // Return empty array on error
     }
-  }, [userToken]);
+  }, [isAuthenticated]);
 
   // Initial fetch
   useEffect(() => {
-    if (isFocused && userToken) {
+    if (isFocused && isAuthenticated) {
       setIsLoadingCustomers(true);
       fetchCustomers().finally(() => setIsLoadingCustomers(false));
     }
-  }, [isFocused, userToken, fetchCustomers]);
+  }, [isFocused, isAuthenticated, fetchCustomers]);
 
   // --- Filtering Logic (Uses customersMap) ---
   const filteredListData = useMemo(() => {
@@ -248,179 +170,178 @@ function BrowseScreen(): React.ReactElement {
     return filteredList;
   }, [searchQuery, customersMap, expandedCustomers, customerOrder]);
 
-  // --- Handlers ---
+  // --- Event Handlers ---
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await fetchCustomers(); // Refetch customers, which resets map and order
+    await fetchCustomers();
     setIsRefreshing(false);
   }, [fetchCustomers]);
 
-  const handleToggleCustomer = useCallback(async (customerId: string, customerName: string, shouldFetchProjects = true) => {
-    // Check expansion based on customerId
-    const isCurrentlyExpanded = expandedCustomers.has(customerId); 
-    const customerEntry = customersMap.get(customerId);
+  const handleCustomerPress = useCallback((customer: CustomerEntry) => {
+    if (!customer.hasFetchedProjects) {
+      // Fetch projects if not already fetched
+      setCustomersMap(prevMap => {
+          const newMap = new Map(prevMap);
+          const updatedCustomer = { ...customer, isLoadingProjects: true };
+          newMap.set(customer.id, updatedCustomer);
+          return newMap;
+      });
 
-    if (!customerEntry) return;
-
-    // Toggle expansion state using customerId
-    const nextExpanded = new Set(expandedCustomers);
-    if (isCurrentlyExpanded) {
-      nextExpanded.delete(customerId); // Use ID
-      console.log(`Collapsed customer: ${customerName} (ID: ${customerId})`);
-    } else {
-      nextExpanded.add(customerId); // Use ID
-      console.log(`Expanded customer: ${customerName} (ID: ${customerId})`);
-      // Fetch projects only if expanding and not already fetched
-      if (!customerEntry.hasFetchedProjects) {
-          console.log(`Fetching projects for ${customerName} on first expand...`);
+      fetchProjects(customer.id, customer.name)
+        .then(projects => {
           setCustomersMap(prevMap => {
-              const newMap = new Map(prevMap);
-              const entry = newMap.get(customerId);
-              if(entry) entry.isLoadingProjects = true;
-              return newMap;
+            const newMap = new Map(prevMap);
+            const updatedCustomer = { 
+                ...customer, 
+                projects: projects, 
+                isLoadingProjects: false, 
+                hasFetchedProjects: true 
+            };
+            newMap.set(customer.id, updatedCustomer);
+            return newMap;
           });
-
-          const fetchedProjects = await fetchProjects(customerId, customerName);
-
-          setCustomersMap(prevMap => {
-              const newMap = new Map(prevMap);
-              const entry = newMap.get(customerId);
-              if (entry) {
-                  entry.projects = fetchedProjects;
-                  entry.isLoadingProjects = false;
-                  entry.hasFetchedProjects = true;
-              }
-              return newMap;
-          });
-      }
+        })
+        .catch(() => { // Handle error within fetchProjects already alerts
+           setCustomersMap(prevMap => {
+                const newMap = new Map(prevMap);
+                const updatedCustomer = { 
+                    ...customer, 
+                    isLoadingProjects: false, 
+                    hasFetchedProjects: true, // Mark as fetched even on error to prevent retrying on expand
+                    projects: [] // Show as empty on error
+                };
+                newMap.set(customer.id, updatedCustomer);
+                return newMap;
+            });
+        });
     }
-    setExpandedCustomers(nextExpanded); // Update state with the modified Set
 
-  }, [customersMap, expandedCustomers, fetchProjects]);
+    // Toggle expansion
+    setExpandedCustomers(prevExpanded => {
+      const newExpanded = new Set(prevExpanded);
+      if (newExpanded.has(customer.id)) {
+        newExpanded.delete(customer.id);
+      } else {
+        newExpanded.add(customer.id);
+      }
+      return newExpanded;
+    });
+  }, [fetchProjects]);
 
-  const handleProjectPress = useCallback((customerName: string, projectName: string) => {
-    console.log(`Navigating to project: ${customerName} / ${projectName}`);
+  const handleProjectPress = (customerName: string, projectName: string) => {
+    console.log('Navigate to Project View for:', customerName, projectName);
+    // Navigate to a Project Detail screen (to be created)
     navigation.navigate('ProjectReports', { customer: customerName, project: projectName });
-  }, [navigation]);
+  };
 
-
-  // --- Render Functions ---
+  // --- Render Item ---
   const renderItem = ({ item, index }: { item: ListItem, index: number }) => {
     const isFirst = index === 0;
 
     if (item.type === 'customer') {
-      // Customer Row - uses item directly as it contains CustomerEntry data
-      return (
-        <TouchableOpacity
-          style={[styles.rowContainer, isFirst && styles.firstRow]}
-          // Pass customerId and customerName to the handler
-          onPress={() => handleToggleCustomer(item.id, item.name)} 
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="business-outline" size={22} color={colors.textSecondary} />
-          </View>
-          <Text style={styles.rowText}>{item.name}</Text>
-          {item.isLoadingProjects ? (
-            <View style={styles.loadingIconContainer}>
-              <ActivityIndicator size="small" color={colors.textSecondary} />
+        const isExpanded = expandedCustomers.has(item.id);
+        return (
+          <TouchableOpacity 
+              style={[theme.screens.browseScreen.rowContainer, isFirst && theme.screens.browseScreen.firstRow]}
+              onPress={() => handleCustomerPress(item)} // Pass the full customer item
+          >
+            <View style={theme.screens.browseScreen.iconContainer}>
+              <Ionicons name={isExpanded ? 'folder-open-outline' : 'folder-outline'} size={24} color={colors.textSecondary} />
             </View>
-          ) : (
-            <Ionicons
-              // Check expansion using item.id
-              name={expandedCustomers.has(item.id) ? "chevron-down" : "chevron-forward"}
-              size={20}
-              color={colors.textSecondary}
-              style={styles.disclosureIcon}
-            />
-          )}
-        </TouchableOpacity>
-      );
+            <Text style={theme.screens.browseScreen.rowText}>{item.name}</Text>
+            {item.isLoadingProjects ? (
+                <View style={theme.screens.browseScreen.loadingIconContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+            ) : (
+                <Ionicons 
+                    name={isExpanded ? 'chevron-down' : 'chevron-forward'} 
+                    size={20} 
+                    color={colors.textDisabled}
+                    style={theme.screens.browseScreen.disclosureIcon}
+                />
+            )}
+          </TouchableOpacity>
+        );
     }
 
     if (item.type === 'project') {
-      // Project Row - uses item directly as it contains ProjectData
       return (
-        <TouchableOpacity
-          style={[styles.rowContainer, styles.projectRowContainer]}
-          onPress={() => handleProjectPress(item.customerName, item.name)}
+        <TouchableOpacity 
+            style={theme.screens.browseScreen.projectRowContainer} // Use indented style
+            onPress={() => handleProjectPress(item.customerName, item.name)}
         >
-          <View style={styles.iconContainer}>
-            <Ionicons name="folder-outline" size={22} color={colors.textSecondary} />
-          </View>
-          <Text style={styles.rowText}>{item.name}</Text>
-          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} style={styles.disclosureIcon} />
+           {/* No specific icon for project needed with indentation */}
+          <Text style={theme.screens.browseScreen.rowText}>{item.name}</Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.textDisabled} style={theme.screens.browseScreen.disclosureIcon} />
         </TouchableOpacity>
       );
     }
 
-    return null;
+    return null; // Should not happen
   };
 
+  // --- Empty List Component ---
   const ListEmptyComponent = () => (
-    <View style={styles.statusContainer}>
-      <Text style={styles.emptyText}>
-        {searchQuery
-          ? 'No customers or projects match your search.'
-          : 'No customers found.'}
-      </Text>
-    </View>
+      <View style={theme.screens.browseScreen.statusContainer}>
+        <Text style={theme.screens.browseScreen.emptyText}>
+          {searchQuery 
+            ? "No customers or projects found matching your search."
+            : "No customers found. Pull down to refresh."
+          }
+        </Text>
+      </View>
   );
 
   // --- Main Render ---
-  if (isLoadingCustomers && customersMap.size === 0) { // Check map size for initial loading
+  if (isLoadingCustomers) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-        <View style={styles.statusContainer}>
+      <SafeAreaView style={theme.screens.browseScreen.safeArea} edges={['left', 'right', 'bottom']}>
+        <View style={theme.screens.browseScreen.statusContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
-  if (errorCustomers) {
+  if (errorCustomers && customersMap.size === 0) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-        <View style={styles.statusContainer}>
-          <Text style={styles.errorText}>{errorCustomers}</Text>
-          {/* Optionally add a retry button */}
-          <TouchableOpacity onPress={handleRefresh}>
-             <Text style={{ color: colors.primary, marginTop: spacing.md }}>Retry</Text>
-          </TouchableOpacity>
+      <SafeAreaView style={theme.screens.browseScreen.safeArea} edges={['left', 'right', 'bottom']}>
+        <View style={theme.screens.browseScreen.statusContainer}>
+          <Text style={theme.screens.browseScreen.errorText}>{errorCustomers}</Text>
+          {/* Optional: Add a retry button */}
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-      {/* Add Search Input */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search Customers & Projects..."
-          placeholderTextColor={colors.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing" // iOS clear button
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+    <SafeAreaView style={theme.screens.browseScreen.safeArea} edges={['left', 'right', 'bottom']}>
+      <View style={theme.screens.browseScreen.searchContainer}>
+          <TextInput
+            style={theme.screens.browseScreen.searchInput}
+            placeholder="Search Customers or Projects..."
+            placeholderTextColor={colors.textDisabled}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
       </View>
-
       <FlatList
-        data={filteredListData} // Use the data generated by the new useMemo
+        data={filteredListData}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id} // Use the item's id (customer or project)
-        ListEmptyComponent={!isLoadingCustomers ? ListEmptyComponent : null}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={ListEmptyComponent}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             colors={[colors.primary]} // iOS tint color
-            tintColor={colors.primary} // Android color
+            tintColor={colors.primary} // Android spinner color
           />
         }
-        keyboardShouldPersistTaps="handled" // Dismiss keyboard on scroll
       />
     </SafeAreaView>
   );

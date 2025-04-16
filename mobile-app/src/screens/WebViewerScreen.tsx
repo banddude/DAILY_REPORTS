@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity, Alert, Share, Button } from 'react-native';
+import { View, Text, ActivityIndicator, Platform, TouchableOpacity, Alert, Share, Button } from 'react-native';
 import { RouteProp, useRoute, useNavigation, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../theme/theme';
+import theme, { colors, spacing } from '../theme/theme';
 import { BrowseStackParamList } from '../navigation/AppNavigator';
 import { S3_BUCKET_NAME, AWS_REGION, API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { WebViewerScreenProps } from '../navigation/AppNavigator';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
 // Define route prop type based on the correct stack
 type WebViewerScreenRouteProp = RouteProp<BrowseStackParamList, 'WebViewer'>;
@@ -21,14 +23,17 @@ interface Props {
   navigation: WebViewerScreenNavigationProp;
 }
 
-export default function WebViewerScreen({ route, navigation }: WebViewerScreenProps) {
+const WebViewerScreen: React.FC<WebViewerScreenProps> = (props) => {
+  const { route, navigation } = props;
   const { url } = route.params;
+  // const navigation = useNavigation(); // No longer needed
+  // Get session instead of userToken
+  const { session, isAuthenticated } = useAuth(); 
+  const webviewRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
-  const webviewRef = useRef<WebView>(null);
-  const { userToken } = useAuth();
   // State for the URL with a cache-busting parameter
   const [refreshableUrl, setRefreshableUrl] = useState<string>('');
 
@@ -112,14 +117,14 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
 
   // Function to fetch and inject JSON data
   const injectReportData = async () => {
-    if (!reportJsonKey || !userToken || !webviewRef.current) return;
+    if (!reportJsonKey || !session || !webviewRef.current) return;
 
     try {
       // Fetch JSON data from your API endpoint
       const apiUrl = `${API_BASE_URL}/api/report?key=${encodeURIComponent(reportJsonKey)}`;
       const response = await fetch(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${session?.access_token}`,
           'Accept': 'application/json'
         }
       });
@@ -227,7 +232,7 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
                 navigation.navigate('ProjectReports', { customer, project });
               }}
               // Adjust style for row layout
-              style={styles.headerBackButtonContainer} 
+              style={theme.screens.webViewerScreen.headerBackButtonContainer} 
             >
               <Ionicons
                 // name="arrow-back"
@@ -236,14 +241,14 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
                 color={colors.textPrimary} // Use standard header text color
               />
               {/* Add Previous Screen Title */}
-              <Text style={styles.headerBackTitle}>{project}</Text> 
+              <Text style={theme.screens.webViewerScreen.headerBackTitle}>{project}</Text> 
             </TouchableOpacity>
           );
         }
         return null; 
       },
       headerRight: () => (
-         <View style={styles.headerButtonContainer}>
+         <View style={theme.screens.webViewerScreen.headerButtonContainer}>
            {/* Edit Icon Button */}
            <TouchableOpacity
              onPress={() => {
@@ -254,7 +259,7 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
                  Alert.alert("Cannot Edit", "Could not determine the report data file needed for editing.");
                }
              }}
-             style={styles.headerButton}
+             style={theme.screens.webViewerScreen.headerButton}
              disabled={!reportJsonKey}
            >
              <Ionicons
@@ -266,7 +271,8 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
            {/* Share Icon Button */}
            <TouchableOpacity
              onPress={handleShare}
-             style={[styles.headerButton, { marginLeft: spacing.sm }]}
+             // Apply theme style and potential inline margin
+             style={[theme.screens.webViewerScreen.headerButton, { marginLeft: spacing.sm }]}
              disabled={isLoading}
            >
              <Ionicons
@@ -285,7 +291,7 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
     // If there's an error OR the URL to load is still empty, show the error.
     // This prevents passing an empty uri to WebView.
     if (error || !refreshableUrl) {
-      return <Text style={styles.errorText}>{error || 'Invalid or missing URL for viewer.'}</Text>;
+      return <Text style={theme.screens.webViewerScreen.errorText}>{error || 'Invalid or missing URL for viewer.'}</Text>;
     }
 
     if (Platform.OS === 'web') {
@@ -293,7 +299,12 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
       return (
         <iframe
           src={url}
-          style={styles.iframeStyle}
+          style={{
+            flex: 1, 
+            width: '100%', 
+            height: '100%', 
+            borderWidth: 0, 
+          }}
           onLoad={() => setIsLoading(false)}
           onError={() => {
               setError('Failed to load content in iframe.');
@@ -307,7 +318,7 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
       return (
         <WebView
           source={{ uri: refreshableUrl }}
-          style={{ flex: 1, paddingTop: 0, marginTop: 0 }}
+          style={theme.screens.webViewerScreen.webview}
           cacheEnabled={false}
           incognito={true}
           onLoadStart={() => setIsLoading(true)}
@@ -345,10 +356,10 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   };
 
   return (
-    <View style={styles.container}>
+    <View style={theme.screens.webViewerScreen.container}>
       {renderContent()}
       {isLoading && (
-        <View style={styles.loadingContainer}>
+        <View style={theme.screens.webViewerScreen.loadingContainer}>
           <ActivityIndicator
             size="large"
             color={colors.primary}
@@ -359,47 +370,4 @@ export default function WebViewerScreen({ route, navigation }: WebViewerScreenPr
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    position: 'relative',
-    paddingTop: 0,
-    marginTop: 0,
-  },
-  loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  errorText: {
-    color: colors.error,
-    padding: 20,
-    textAlign: 'center',
-  },
-  iframeStyle: {
-      flex: 1,
-      width: '100%',
-      height: '100%',
-      borderWidth: 0,
-  },
-  headerButton: {
-      padding: spacing.xs,
-  },
-  headerButtonContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  // Style for the custom back button (icon + text)
-  headerBackButtonContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center',
-    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, // Standard iOS left padding
-  },
-  headerBackTitle: {
-    fontSize: typography.fontSizeM, // Make text smaller
-    color: colors.textPrimary, // Match header text color
-    marginLeft: spacing.xs, // Space between icon and text
-  }
-});
+export default WebViewerScreen;

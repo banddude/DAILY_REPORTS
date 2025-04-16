@@ -58,7 +58,7 @@ interface SelectedAsset {
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
-  const { userToken } = useAuth();
+  const { user, session, isAuthenticated } = useAuth();
   const [selectedFile, setSelectedFile] = useState<SelectedAsset | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
   const [result, setResult] = useState<ResultState>({ message: '', type: null, data: null });
@@ -94,14 +94,14 @@ const HomeScreen: React.FC = () => {
   // State for tips modal
   const [showTipsModal, setShowTipsModal] = useState(false);
 
-  // Log token value on every render
-  console.log(`HomeScreen Render: userToken is ${userToken ? 'present' : 'null'}`);
+  // Log token value on every render - Use session
+  console.log(`HomeScreen Render: Session is ${session ? 'present' : 'null'}. isAuthenticated: ${isAuthenticated}`);
 
   // Restore and adapt Fetch customers function
   const loadCustomers = useCallback(async () => {
-    if (!userToken) {
-      console.log('HomeScreen Customer Effect: No userToken, setting defaults.');
-      // Only include ADD_NEW_CUSTOMER_OPTION if no token
+    if (!isAuthenticated) {
+      console.log('HomeScreen Customer Effect: Not authenticated, setting defaults.');
+      // Only include ADD_NEW_CUSTOMER_OPTION if not authenticated
       setFetchedCustomers([ADD_NEW_CUSTOMER_OPTION]); 
       setSelectedCustomer(undefined);
       setIsFetchingCustomers(false);
@@ -114,7 +114,7 @@ const HomeScreen: React.FC = () => {
     const previouslySelectedCustomer = selectedCustomer;
 
     try {
-      const fetchedData: string[] = await fetchApi('/api/browse-reports', userToken);
+      const fetchedData: string[] = await fetchApi('/api/browse-reports');
       console.log('HomeScreen: Successfully fetched customers from server:', fetchedData.length);
 
       // Merge fetched data with existing local state, keep ADD_NEW first, ensure uniqueness
@@ -160,15 +160,15 @@ const HomeScreen: React.FC = () => {
     } finally {
       setIsFetchingCustomers(false);
     }
-  // Re-add selectedCustomer dependency here as we check it
-  }, [userToken, selectedCustomer]); 
+  // Update dependency array - use isAuthenticated
+  }, [isAuthenticated, selectedCustomer]); 
 
   // Restore Effect to load customers on focus
   useEffect(() => {
-    if (isFocused && userToken) {
+    if (isFocused && isAuthenticated) {
        console.log("HomeScreen Focus Effect: Triggering loadCustomers.");
        loadCustomers();
-    } else if (!userToken) {
+    } else if (!isAuthenticated) {
       // Ensure list is reset correctly if user logs out
       setFetchedCustomers([ADD_NEW_CUSTOMER_OPTION]);
       setFetchedProjects([]);
@@ -176,12 +176,12 @@ const HomeScreen: React.FC = () => {
       setSelectedProject(undefined);
       setFetchError(null);
     }
-  // Add loadCustomers back to dependencies
-  }, [isFocused, userToken, loadCustomers]); 
+  // Update dependency array - use isAuthenticated and loadCustomers
+  }, [isFocused, isAuthenticated, loadCustomers]); 
 
   // Fetch projects - Refactored Logic
   const loadProjects = useCallback(async () => {
-    if (!selectedCustomer || !userToken) {
+    if (!selectedCustomer || !isAuthenticated) {
       setFetchedProjects([]);
       setIsFetchingProjects(false);
       return;
@@ -194,7 +194,7 @@ const HomeScreen: React.FC = () => {
     setSelectedProject(undefined);
 
     try {
-      const projectsData: string[] = await fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`, userToken);
+      const projectsData: string[] = await fetchApi(`/api/browse-reports?customer=${encodeURIComponent(selectedCustomer)}`);
       console.log(`HomeScreen: Successfully fetched projects for ${selectedCustomer}.`, projectsData.length);
       // Ensure "Add New" option is always first
       setFetchedProjects([ADD_NEW_PROJECT_OPTION, ...projectsData.filter(p => p !== ADD_NEW_PROJECT_OPTION)]);
@@ -207,7 +207,8 @@ const HomeScreen: React.FC = () => {
     } finally {
       setIsFetchingProjects(false);
     }
-  }, [selectedCustomer, userToken]);
+  // Update dependency array - use isAuthenticated
+  }, [selectedCustomer, isAuthenticated]);
 
   // Effect to load projects when selectedCustomer changes
   useEffect(() => {
@@ -324,11 +325,6 @@ const HomeScreen: React.FC = () => {
         isLoading: isFetchingProjects,
         onSelect: (project) => {
             // REMOVED check for ADD_NEW_PROJECT_OPTION - modal handles this now
-            /*
-            if (project === ADD_NEW_PROJECT_OPTION) {
-                console.log("Navigating to Add Project Screen");
-                navigation.navigate('AddProject', { customer: selectedCustomer });
-            } else */
             // This runs for existing selections OR newly saved items from the modal
             console.log(`HomeScreen project onSelect called with: ${project}`);
             // Add to list if it's a new name saved from the modal
@@ -607,7 +603,8 @@ const HomeScreen: React.FC = () => {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!itemToDelete || !userToken) {
+    if (!itemToDelete || !isAuthenticated) {
+      console.warn("Delete requested but user is not authenticated or item is missing.");
       setIsConfirmDeleteVisible(false);
       return;
     }
@@ -627,10 +624,20 @@ const HomeScreen: React.FC = () => {
         throw new Error("Invalid deletion parameters.");
       }
 
-      const response = await fetch(url, {
+      // Use updated fetchApi which handles auth, or manually add header if fetchApi wasn't updated
+      // Assuming fetchApi handles auth now:
+      // const response = await fetchApi(url, { method: 'DELETE' }); 
+      // OR Manually add header using session:
+      if (!session?.access_token) {
+          console.error("Cannot delete: No access token found in session.");
+          setResult({ message: 'Authentication error. Please log out and back in.', type: 'error' });
+          setItemToDelete(null);
+          return;
+      }
+      const response = await fetch(url, { // Using fetch directly, assuming fetchApi not modified for DELETE etc.
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${session.access_token}`, // Use session token
         },
       });
 
@@ -678,7 +685,7 @@ const HomeScreen: React.FC = () => {
       setResult({ message: 'Please select or record a video file first.', type: 'error' });
       return;
     }
-    if (!userToken) {
+    if (!isAuthenticated) {
         setResult({ message: 'Authentication error. Please log out and back in.', type: 'error' });
         return;
     }
@@ -712,12 +719,22 @@ const HomeScreen: React.FC = () => {
       // --- End Platform Specific File Handling ---
 
       console.log('HomeScreen handleUpload: Calling /api/generate-report');
+      
+      // Get token from session for manual fetch
+      if (!session?.access_token) {
+          console.error("Cannot upload: No access token found in session.");
+          setResult({ message: 'Authentication error. Please log out and back in.', type: 'error' });
+          setIsGeneratingReport(false);
+          return;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/generate-report`, {
         method: 'POST',
         body: formData,
         headers: {
            'Accept': 'application/json',
-           'Authorization': `Bearer ${userToken}`,
+           // Add Authorization header manually using session token
+           'Authorization': `Bearer ${session.access_token}`, 
            // Content-Type is set automatically by browser/fetch for FormData
         },
       });

@@ -11,7 +11,6 @@ import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import HomeScreen from '../screens/HomeScreen';
 import BrowseScreen from '../screens/BrowseScreen';
-import ReportViewerScreen from '../screens/ReportViewerScreen';
 import ReportEditorScreen from '../screens/ReportEditorScreen';
 import WebViewerScreen from '../screens/WebViewerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -27,7 +26,6 @@ import EditAddressScreen from '../screens/EditAddressScreen';
 import EditLogoScreen from '../screens/EditLogoScreen';
 import ProjectReportsScreen from '../screens/ProjectReportsScreen';
 import EditChatModelScreen from '../screens/EditChatModelScreen';
-import AddProjectScreen from '../screens/AddProjectScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
 
 // --- Define Param Lists ---
@@ -52,7 +50,6 @@ export type HomeStackParamList = {
 // Params for screens in the Browse stack (inside the main tabs)
 export type BrowseStackParamList = {
   BrowseBase: { focusedCustomer?: string } | undefined;
-  ReportViewer: { reportKey: string };
   WebViewer: { url: string };
   ReportEditor: { reportKey: string };
   ProjectReports: { customer: string; project: string };
@@ -86,7 +83,6 @@ export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login
 export type SignUpScreenProps = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 export type HomeScreenProps = NativeStackScreenProps<HomeStackParamList, 'HomeBase'>;
 export type BrowseScreenProps = NativeStackScreenProps<BrowseStackParamList, 'BrowseBase'>;
-export type ReportViewerScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ReportViewer'>;
 export type WebViewerScreenProps = NativeStackScreenProps<BrowseStackParamList, 'WebViewer'>;
 export type ReportEditorScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ReportEditor'>;
 export type ProfileScreenProps = NativeStackScreenProps<ProfileStackParamList, 'ProfileBase'>;
@@ -169,11 +165,6 @@ function BrowseStackNavigator() {
                 name="BrowseBase" 
                 component={BrowseScreen} 
                 options={{ title: 'Reports', headerLeft: () => null }} 
-            />
-            <BrowseNavStack.Screen 
-                name="ReportViewer" 
-                component={ReportViewerScreen} 
-                options={{ title: 'View Report' }} 
             />
              <BrowseNavStack.Screen 
                 name="WebViewer" 
@@ -274,7 +265,6 @@ function ProfileStackNavigator() {
 function MainTabs() {
   return (
     <Tab.Navigator
-      unmountOnBlur={false}
       screenOptions={({ route }) => ({
         headerShown: false, // Hide headers for individual tabs, handled by stacks
         tabBarIcon: ({ focused, color, size }) => {
@@ -335,7 +325,7 @@ function MainTabs() {
 
 // --- Root Stack (Handles Auth vs Main App and Modals) ---
 function RootStackContainer() {
-  const { userToken, loading } = useAuth();
+  const { session, isAuthenticated, loading } = useAuth();
 
   if (loading) {
     // Show a loading spinner or splash screen while checking token
@@ -352,23 +342,12 @@ function RootStackContainer() {
           headerShown: false // Generally hide header for root, let inner stacks manage
        }}
     >
-      {userToken ? (
+      {isAuthenticated ? (
         // User is signed in, show main app with tabs
         <>
             <RootStack.Screen name="MainAppTabs" component={MainTabs} />
             {/* Define Modal/Top-Level Screens accessible from anywhere when logged in */}
-             <RootStack.Screen
-                name="AddProject"
-                component={AddProjectScreen}
-                options={{
-                    presentation: 'modal', // Present as a modal
-                    headerShown: true, // Show header for modal
-                    title: 'Add Project',
-                    headerStyle: { backgroundColor: colors.surface },
-                    headerTintColor: colors.primary,
-                    headerTitleStyle: { fontWeight: typography.fontWeightBold as 'bold', color: colors.textPrimary },
-                }}
-            />
+             
         </>
       ) : (
         // User is not signed in, show auth flow

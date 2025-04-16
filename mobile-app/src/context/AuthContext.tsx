@@ -1,67 +1,79 @@
 import React, { createContext, useState, useEffect, useContext, PropsWithChildren } from 'react';
-// import { Session, User } from '@supabase/supabase-js'; // <<< Can remove if not using Supabase types directly
-// import { supabase } from '../utils/supabaseClient'; // <<< REMOVE THIS COMMENTED IMPORT
-// import AsyncStorage from '@react-native-async-storage/async-storage'; // <<< Remove AsyncStorage
+// Import Supabase client and types
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '../utils/supabaseClient'; // <<< IMPORT Supabase client
+// import AsyncStorage from '@react-native-async-storage/async-storage'; // Not needed directly here
 import { API_BASE_URL } from '../config';
 
-// Interface for the user data we expect and store
+// Use Supabase User type, remove custom AppUser
+/*
 interface AppUser {
-  id: string; // Supabase user ID
+  id: string;
   email: string;
 }
-
-// Remove old DebugSession interface if not used
+*/
 
 interface AuthContextProps {
-  user: AppUser | null;
-  userToken: string | null; // This will store the JWT Access Token
-  isAuthenticated: boolean; 
+  user: User | null; // Use Supabase User type
+  session: Session | null; // Add session state
+  // userToken: string | null; // REMOVED userToken state
+  isAuthenticated: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>; 
+  login: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  // Expose signup if needed for auto-login logic
-  // signup: (email: string, password: string) => Promise<any>; // Returns the server response data
 }
 
 export const AuthContext = createContext<AuthContextProps | undefined>(undefined);
 
 export const AuthProvider: React.FC<PropsWithChildren<{}>> = ({ children }) => {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [userToken, setUserToken] = useState<string | null>(null); // State for the JWT
-  const [loading, setLoading] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null); // Use Supabase User type
+  const [session, setSession] = useState<Session | null>(null); // Add session state
+  // const [userToken, setUserToken] = useState<string | null>(null); // REMOVED userToken state
+  const [loading, setLoading] = useState<boolean>(true); // Start loading true
 
-  const isAuthenticated = !!userToken && !!user;
+  // Derive isAuthenticated from session presence
+  const isAuthenticated = !!session?.access_token; // Use session presence
 
   useEffect(() => {
-    // TODO: Implement loading token/user from secure storage on app start
+    setLoading(true);
+    // Check initial session state
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      console.log('[AuthContext Effect] Initial session fetched:', initialSession ? 'Exists' : 'Null');
+      setSession(initialSession);
+      setUser(initialSession?.user ?? null);
+      setLoading(false);
+    }).catch(error => {
+       console.error("[AuthContext Effect] Error getting initial session:", error);
+       setLoading(false);
+    });
+
+    // Listen for auth state changes (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, etc.)
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, newSession) => {
+        console.log(`[AuthContext Listener] Auth event: ${_event}`, newSession ? 'Session updated' : 'No session');
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+      }
+    );
+
+    // Cleanup listener on unmount
+    return () => {
+      if (authListener?.subscription) {
+         console.log('[AuthContext Cleanup] Unsubscribing from auth state changes.');
+         authListener.subscription.unsubscribe();
+      }
+    };
   }, []);
 
-  // SIGNUP Function (Optional but useful for auto-login)
-  // const handleSignup = async (email: string, password: string) => {
-  //    setLoading(true);
-  //    try {
-  //        const response = await fetch(`${API_BASE_URL}/api/signup`, { ... });
-  //        const data = await response.json();
-  //        if (!response.ok || !data.success) {
-  //             throw new Error(data.message || 'Signup failed');
-  //        }
-  //        console.log("Signup successful, received data:", data);
-  //        // IMPORTANT: Return the raw data for auto-login logic to parse
-  //        return data;
-  //    } catch (e: any) {
-  //        console.error("Error during signup:", e.message);
-  //        throw e;
-  //    } finally {
-  //        setLoading(false);
-  //    }
-  // };
+  // SIGNUP Function - Update if you want auto-login after signup
+  // const handleSignup = async (...) => { ... };
 
   const handleLogin = async (email: string, password: string) => {
       setLoading(true);
-      setUser(null);
-      setUserToken(null);
+      // No need to clear state manually, listener handles it
       try {
-          const response = await fetch(`${API_BASE_URL}/api/login`, {
+          // Call backend /api/login
+          const response = await fetch(`${API_BASE_URL}/api/login`, { // Keep path as /api/login
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
@@ -72,32 +84,40 @@ export const AuthProvider: React.FC<PropsWithChildren<{}>> = ({ children }) => {
 
           const data = await response.json();
 
-          if (!response.ok || !data.success) {
-              throw new Error(data.message || 'Login failed');
+          if (!response.ok) {
+              const errorMsg = data?.message || data?.error || 'Login request failed';
+              console.error(`[AuthContext Login] Backend login failed (${response.status}):`, errorMsg);
+              throw new Error(errorMsg);
           }
 
-          console.log("Login successful, received data:", data);
-          // NEW EXPECTATION: { success: true, token: <JWT>, user: { id: <supabase_id>, email: <user_email> } }
-          if (data.token && data.user && data.user.id && data.user.email) {
-             // Set user state with nested data
-             setUser({ email: data.user.email, id: data.user.id }); 
-             // Store the JWT access token
-             setUserToken(data.token);
-             // TODO: Store token (and maybe refresh token data.refreshToken) securely
-             // await SecureStore.setItemAsync('userToken', data.token);
-             // await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+          console.log("[AuthContext Login] Backend login successful, received:", data);
+          // Expect { access_token: ..., refresh_token: ..., user: ... }
+          if (data.access_token && data.refresh_token) {
+             // >>> Use supabase.auth.setSession <<<
+             console.log("[AuthContext Login] Calling supabase.auth.setSession...");
+             const { error: setSessionError } = await supabase.auth.setSession({
+                 access_token: data.access_token,
+                 refresh_token: data.refresh_token,
+             });
+
+             if (setSessionError) {
+                 console.error("[AuthContext Login] Error setting Supabase session:", setSessionError);
+                 throw new Error(setSessionError.message || 'Failed to set session locally.');
+             }
+
+             console.log("[AuthContext Login] Supabase session set successfully. Listener should update state.");
+             // State update is handled by the onAuthStateChange listener
+
           } else {
-              // Log the actual data received for easier debugging
-              console.error('Invalid login response structure received:', data);
-              throw new Error('Invalid login response from server.'); 
+              console.error('[AuthContext Login] Invalid response structure from backend:', data);
+              throw new Error('Invalid login response structure from server.');
           }
 
       } catch (e: any) {
-          console.error("Error during login:", e.message);
-          setUser(null);
-          setUserToken(null);
-          // TODO: Clear secure storage on error
-          throw e; 
+          console.error("[AuthContext Login] Error during login process:", e.message);
+          // Optionally clear state here if needed on failure, though listener might handle it
+          // setUser(null); setSession(null);
+          throw e; // Re-throw error for UI handling
       } finally {
           setLoading(false);
       }
@@ -105,25 +125,27 @@ export const AuthProvider: React.FC<PropsWithChildren<{}>> = ({ children }) => {
 
   const handleSignOut = async () => {
     setLoading(true);
-    setUser(null);
-    setUserToken(null);
-    // TODO: Remove token/user from secure storage
-    // await SecureStore.deleteItemAsync('userToken');
-    // await SecureStore.deleteItemAsync('refreshToken');
-    console.log("User signed out.");
+    console.log("[AuthContext SignOut] Calling supabase.auth.signOut...");
+    // >>> Use supabase.auth.signOut <<< 
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error("[AuthContext SignOut] Error signing out:", error);
+        // Decide how to handle signout error (e.g., show message)
+    } else {
+         console.log("[AuthContext SignOut] Sign out successful. Listener should clear state.");
+         // State (user, session) will be cleared by onAuthStateChange listener
+    }
     setLoading(false);
-    // TODO: Consider calling Supabase signout if managing sessions server-side becomes complex
-    // await supabase.auth.signOut(); 
   };
 
   const value = {
     user,
-    userToken,
+    session, // Expose session
+    // userToken, // Removed
     isAuthenticated,
     loading,
     login: handleLogin,
     signOut: handleSignOut,
-    // signup: handleSignup, // Expose signup if needed
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

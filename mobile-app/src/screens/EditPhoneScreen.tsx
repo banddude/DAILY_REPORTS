@@ -1,107 +1,134 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ActivityIndicator, Alert, Button, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, ActivityIndicator, Alert, Button, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { EditPhoneScreenProps } from '../navigation/AppNavigator';
 
-const styles = StyleSheet.create({ /* Common editor styles */ safeArea:{flex:1,backgroundColor:colors.background}, container:{flex:1,padding:spacing.lg}, loadingContainer:{flex:1,justifyContent:'center',alignItems:'center'}, errorText:{color:colors.error,textAlign:'center',marginBottom:spacing.md}, label:{fontSize:typography.fontSizeS,fontWeight:typography.fontWeightMedium as '500',color:colors.textSecondary,marginBottom:spacing.sm,textTransform:'uppercase'}, textInput:{backgroundColor:colors.surface,borderRadius:borders.radiusMedium,paddingHorizontal:spacing.md,paddingVertical:spacing.md,fontSize:typography.fontSizeM,color:colors.textPrimary,borderWidth:borders.widthThin,borderColor:colors.borderLight} });
-
-function EditPhoneScreen(): React.ReactElement {
-  const navigation = useNavigation<EditPhoneScreenProps['navigation']>();
-  const { userToken } = useAuth();
-  const [initialValue, setInitialValue] = useState<string>('');
-  const [currentValue, setCurrentValue] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
+const EditPhoneScreen: React.FC<EditPhoneScreenProps> = ({ navigation }) => {
+  const { session, isAuthenticated } = useAuth();
+  const [phone, setPhone] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCurrentValue = useCallback(async () => {
-    if (!userToken) { setError('Auth required'); setIsLoading(false); return; }
-    setIsLoading(true); setError(null);
+    if (!session || !isAuthenticated) {
+      setError("Not authenticated.");
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+
+    const token = session.access_token;
+    if (!token) {
+      setError("No access token found.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, { 
-          method: 'GET',
-          headers: { 
-              'Authorization': `Bearer ${userToken}`,
-              'Accept': 'application/json' 
-          }
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
       });
       if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          if (response.status === 404) {
-              throw new Error('Profile not found. Cannot edit phone.');
-          }
-          throw new Error(errData.error || 'Fetch failed');
-       }
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 404) {
+          throw new Error('Profile not found. Cannot edit phone.');
+        }
+        throw new Error(errData.error || 'Fetch failed');
+      }
       const data = await response.json();
       const value = data?.phone || '';
-      setInitialValue(value);
-      setCurrentValue(value);
-    } catch (err: any) { setError(`Load failed: ${err.message}`); }
-    finally { setIsLoading(false); }
-  }, [userToken]);
+      setPhone(value);
+    } catch (err: any) {
+      setError(`Load failed: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session, isAuthenticated]);
 
   useEffect(() => { fetchCurrentValue(); }, [fetchCurrentValue]);
 
   const handleSave = useCallback(async () => {
-    if (!userToken || currentValue.trim() === initialValue.trim()) { 
-        navigation.goBack(); 
-        return; 
+    if (!session || !isAuthenticated || phone.trim() === '') {
+      navigation.goBack();
+      return;
     }
-    setIsSaving(true); setError(null);
+    setIsLoading(true);
+    setError(null);
+
+    const token = session.access_token;
+    if (!token) {
+      setError("No access token found.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const payload = { 
-          phone: currentValue.trim()
+      const payload = {
+        phone: phone.trim()
       };
 
       console.log("Saving Phone:", payload);
 
-      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, { 
-          method: 'POST', 
-          headers: { 
-              'Content-Type': 'application/json', 
-              'Authorization': `Bearer ${userToken}`,
-              'Accept': 'application/json'
-          }, 
-          body: JSON.stringify(payload)
+      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
-      if (!saveResponse.ok) { 
-          const d = await saveResponse.json().catch(() => ({})); 
-          throw new Error(d.error || 'Save failed'); 
+      if (!saveResponse.ok) {
+        const d = await saveResponse.json().catch(() => ({}));
+        throw new Error(d.error || 'Save failed');
       }
       
       console.log("Phone save successful");
       navigation.goBack();
-
-    } catch (err: any) { 
-        setError(`Save failed: ${err.message}`); 
-        Alert.alert('Save Failed', err.message); 
-    } finally { 
-        setIsSaving(false); 
+    } catch (err: any) {
+      setError(`Save failed: ${err.message}`);
+      Alert.alert('Save Failed', err.message);
+    } finally {
+      setIsLoading(false);
     }
-  }, [userToken, currentValue, initialValue, navigation]);
+  }, [session, isAuthenticated, phone, navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => <Button onPress={() => navigation.goBack()} title="Cancel" disabled={isSaving} color={Platform.OS === 'ios' ? colors.primary : undefined}/>,
-      headerRight: () => <Button onPress={handleSave} title={isSaving ? "Saving..." : "Save"} disabled={isLoading || isSaving || currentValue.trim() === initialValue.trim()} color={Platform.OS === 'ios' ? colors.primary : undefined} />,
+      headerLeft: () => <Button onPress={() => navigation.goBack()} title="Cancel" disabled={isLoading} color={Platform.OS === 'ios' ? colors.primary : undefined}/>,
+      headerRight: () => <Button onPress={handleSave} title={isLoading ? "Saving..." : "Save"} disabled={isLoading || phone.trim() === ''} color={Platform.OS === 'ios' ? colors.primary : undefined} />,
     });
-  }, [navigation, handleSave, isLoading, isSaving, currentValue, initialValue]);
+  }, [navigation, handleSave, isLoading, phone]);
 
-  if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
+  if (isLoading) return <View style={theme.screens.editPhoneScreen.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-      <ScrollView style={styles.container}>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-        <Text style={styles.label}>Phone Number</Text>
-        <TextInput style={styles.textInput} value={currentValue} onChangeText={setCurrentValue} placeholder="Enter phone number" editable={!isSaving} keyboardType="phone-pad" autoComplete='tel' />
+    <SafeAreaView style={theme.screens.editPhoneScreen.safeArea} edges={['left', 'right', 'bottom']}>
+      <ScrollView style={theme.screens.editPhoneScreen.container}>
+        {error && <Text style={theme.screens.editPhoneScreen.errorText}>{error}</Text>}
+        <Text style={theme.screens.editPhoneScreen.label}>Phone Number</Text>
+        <TextInput 
+          style={theme.screens.editPhoneScreen.textInput} 
+          value={phone} 
+          onChangeText={setPhone} 
+          placeholder="Enter phone number" 
+          editable={!isLoading} 
+          keyboardType="phone-pad" 
+          autoComplete='tel' 
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 export default EditPhoneScreen; 

@@ -83,7 +83,7 @@ interface ReportData {
 // --- Component ---
 export default function ReportEditorScreen({ route, navigation }: NavigationProps): React.ReactElement {
   const { reportKey } = route.params;
-  const { userToken } = useAuth(); // Get token for authenticated fetch
+  const { session, isAuthenticated } = useAuth(); // Get session and isAuthenticated
 
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [editedData, setEditedData] = useState<ReportData | null>(null); // State to hold changes
@@ -99,10 +99,10 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
       setLoading(false);
       return;
     }
-    if (!userToken) {
-      setError("Authentication token not found. Cannot load report.");
+    if (!session || !isAuthenticated) {
+      setError("Authentication session not found. Cannot load report.");
       setLoading(false);
-      return; // Need token to fetch
+      return; // Need session to fetch
     }
 
     setLoading('initial');
@@ -114,9 +114,17 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
     console.log(`ReportEditor: Fetching data from ${url}`);
     console.log(`ReportEditor: Using raw reportKey: "${reportKey}"`);
     
+    // Get token
+    const token = session.access_token;
+    if (!token) {
+      setError("Authentication token not found. Cannot load report.");
+      setLoading(false);
+      return;
+    }
+
     fetch(url, {
         headers: {
-            'Authorization': `Bearer ${userToken}`, // Include Auth header
+            'Authorization': `Bearer ${token}`, // Include Auth header
             'Accept': 'application/json'
         }
     })
@@ -147,7 +155,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
       .finally(() => {
         setLoading(false);
       });
-  }, [reportKey, userToken]); // Depend on userToken as well
+  }, [reportKey, session, isAuthenticated]); // Depend on session and isAuthenticated
 
 
   // --- Edit Handlers ---
@@ -267,7 +275,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
   };
 
   const handleImageUpload = async (asset: ImagePicker.ImagePickerAsset) => {
-      if (!userToken) {
+      if (!session || !isAuthenticated) {
           setStatusMessage({ message: 'Authentication error.', type: 'error' });
           return;
       }
@@ -303,7 +311,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
             body: webFormData,
             headers: {
               'Accept': 'application/json',
-              'Authorization': `Bearer ${userToken}`,
+              'Authorization': `Bearer ${session.access_token}`,
               // Don't set Content-Type, browser will add the correct multipart boundary
             },
           });
@@ -346,7 +354,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
         // Create a simplified fetch for debugging
         const xhr = new XMLHttpRequest();
         xhr.open('POST', uploadUrl);
-        xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
+        xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
         xhr.setRequestHeader('Accept', 'application/json');
         
         // Set up listeners
@@ -399,7 +407,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
           text: "Remove",
           style: "destructive",
           onPress: async () => {
-              if (!userToken) {
+              if (!session || !isAuthenticated) {
                   setStatusMessage({ message: 'Authentication error.', type: 'error' });
                   return;
               }
@@ -414,7 +422,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                       method: 'DELETE',
                       headers: {
                           'Accept': 'application/json',
-                          'Authorization': `Bearer ${userToken}` // ADD AUTH HEADER
+                          'Authorization': `Bearer ${session.access_token}` // ADD AUTH HEADER
                       }
                   });
 
@@ -449,7 +457,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
         setStatusMessage({ message: 'No changes to save.', type: 'error' });
         return;
     }
-    if (!userToken) {
+    if (!session || !isAuthenticated) {
         setStatusMessage({ message: 'Authentication error.', type: 'error' });
         return;
     }
@@ -466,7 +474,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization': `Bearer ${userToken}` // ADD AUTH HEADER
+          'Authorization': `Bearer ${session.access_token}` // ADD AUTH HEADER
         },
         body: JSON.stringify(editedData),
       });

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   Image,
   Switch,
@@ -19,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
 import { useNavigation, useIsFocused } from '@react-navigation/native'; // Import useIsFocused
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors, spacing } from '../theme/theme'; // Import theme and other needed values
 import { API_BASE_URL } from '../config'; // <-- Add back config
 import { useAuth } from '../context/AuthContext'; // <-- Add back AuthContext
 import * as ImagePicker from 'expo-image-picker'; // <-- Import ImagePicker
@@ -52,169 +51,6 @@ interface ProfileData {
   company?: ProfileCompany;
   config?: ProfileConfig;
 }
-
-// --- Styles ---
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background, // Use theme background
-  },
-  keyboardAvoidingView: {
-      flex: 1,
-  },
-  scrollViewContent: {
-    // No vertical padding here anymore
-  },
-  contentContainer: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md, // Reduced bottom padding
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-    backgroundColor: colors.background,
-  },
-  errorTextContainer: {
-     flex: 1,
-     justifyContent: 'center',
-     alignItems: 'center',
-     padding: spacing.lg,
-     backgroundColor: colors.background,
-   },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    fontWeight: typography.fontWeightBold as '600',
-    fontSize: typography.fontSizeM,
-  },
-  statusMessageContainer: { // For save status
-      paddingHorizontal: spacing.lg,
-      marginBottom: spacing.md,
-      marginTop: spacing.xs,
-  },
-  successText: { // For save status
-      color: colors.success,
-      textAlign: 'center',
-      fontWeight: typography.fontWeightBold as '600',
-      fontSize: typography.fontSizeXS,
-  },
-  section: {
-    marginBottom: spacing.md, // Further reduce bottom margin from lg to md
-  },
-  sectionHeader: {
-    paddingBottom: spacing.xs, // Reduce padding bottom
-    marginBottom: spacing.xxs, // Reduce margin bottom
-    color: colors.textSecondary,
-    fontSize: typography.fontSizeS,
-    fontWeight: typography.fontWeightMedium as '500',
-    textTransform: 'uppercase',
-  },
-  rowContainer: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm, // Reduce vertical padding from md to sm
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: borders.widthHairline,
-    borderBottomColor: colors.borderLight,
-    minHeight: 44, // Reduce minHeight slightly
-  },
-  firstRowInSection: {
-    borderTopWidth: borders.widthHairline,
-    borderTopColor: colors.borderLight,
-  },
-  iconContainer: {
-    marginRight: spacing.md,
-    width: 24, // Fixed width for alignment
-    alignItems: 'center',
-  },
-  label: {
-    flex: 1,
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-  },
-  valueContainer: {
-    flexShrink: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: spacing.sm,
-  },
-  valueText: {
-    fontSize: typography.fontSizeM,
-    color: colors.textSecondary,
-    textAlign: 'right',
-  },
-  linkValueText: {
-    color: colors.primary,
-    textDecorationLine: 'underline',
-  },
-  disclosureIcon: {
-     marginLeft: spacing.xs,
-  },
-  fieldContainer: {
-      marginBottom: spacing.md,
-      backgroundColor: colors.surface,
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.xs, // Less vertical padding than rows
-      borderBottomWidth: borders.widthHairline,
-      borderBottomColor: colors.borderLight,
-  },
-  firstFieldInSection: {
-      borderTopWidth: borders.widthHairline,
-      borderTopColor: colors.borderLight,
-  },
-  fieldLabel: {
-      fontSize: typography.fontSizeS, // Smaller label above input
-      color: colors.textSecondary,
-      marginBottom: spacing.xs,
-      paddingTop: spacing.sm, // Add some top padding for the label
-  },
-  textInput: {
-      fontSize: typography.fontSizeM,
-      color: colors.textPrimary,
-      paddingVertical: Platform.OS === 'ios' ? 8 : 6, // Adjust padding for input itself
-  },
-  saveButtonContainer: {
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)', // Semi-transparent background
-      borderTopColor: colors.borderLight,
-      borderTopWidth: borders.widthHairline,
-  },
-  rowLabel: {
-    flex: 1,
-  },
-  iconImage: {
-    width: 24, // Match icon container width
-    height: 24, // Match icon size
-    borderRadius: borders.radiusSmall, // Optional: round corners slightly
-  },
-  logoutButtonContainer: {
-      backgroundColor: colors.surface, // Match row background
-      paddingHorizontal: spacing.lg, // Match row horizontal padding
-      paddingVertical: spacing.sm, // Match row vertical padding (use sm like other rows)
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center', // Center the text
-      borderBottomWidth: borders.widthHairline, // Match row border
-      borderBottomColor: colors.borderLight, // Match row border color
-      borderTopWidth: borders.widthHairline, // Match row border (as first in section)
-      borderTopColor: colors.borderLight, // Match row border color
-      minHeight: 44, // Match row min height
-  },
-  logoutButtonText: {
-      fontSize: typography.fontSizeM, // Match row label font size
-      color: colors.error, // Keep error color for logout
-      // fontWeight: typography.fontWeightMedium as '500', // Remove potential bolding to match standard labels
-      textAlign: 'center', // Keep text centered
-  },
-});
 
 // --- Utility to safely get/set nested properties (Adding set back) ---
 const getNestedValue = (obj: any, path: string): any => {
@@ -287,36 +123,34 @@ const SettingsRow: React.FC<SettingsRowProps> = ({
   const displayValue = value ?? 'Not Set';
 
   const rowContent = (
-    <View style={[styles.rowContainer, isFirst && styles.firstRowInSection]}>
-      <View style={styles.iconContainer}>
+    <View style={[theme.screens.profileScreen.rowContainer, isFirst && theme.screens.profileScreen.firstRowInSection]}>
+      <View style={theme.screens.profileScreen.iconContainer}>
         {typeof icon === 'string' ? (
           <Ionicons name={icon} size={22} color={colors.textSecondary} />
         ) : (
-          <Image source={icon} style={styles.iconImage} resizeMode="contain" />
+          <Image source={icon} style={theme.screens.profileScreen.iconImage} resizeMode="contain" />
         )}
       </View>
-      {/* Render label Text if provided, otherwise render an empty View spacer */}
       {label ? (
-        <Text style={[styles.rowLabel, labelStyle]}>{label}</Text>
+        <Text style={[theme.screens.profileScreen.rowLabel, labelStyle]}>{label}</Text> 
       ) : (
-        <View style={styles.rowLabel} /> /* Spacer to push value right */
+        <View style={theme.screens.profileScreen.rowLabel} />
       )}
-      <View style={styles.valueContainer}>
+      <View style={theme.screens.profileScreen.valueContainer}>
          <Text
-            style={[styles.valueText, isLink && styles.linkValueText]}
+            style={[theme.screens.profileScreen.valueText, isLink && theme.screens.profileScreen.linkValueText]}
             numberOfLines={numberOfLines}
             ellipsizeMode="tail"
           >
               {displayValue}
          </Text>
          {showDisclosure && (
-             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} style={styles.disclosureIcon} />
+             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} style={theme.screens.profileScreen.disclosureIcon} />
          )}
       </View>
     </View>
   );
 
-  // Wrap with TouchableOpacity only if it's a link or has an onPress handler
   if (isLink || onPress) {
       const handlePress = isLink ? () => openLink(value || '') : onPress;
       return (
@@ -346,11 +180,12 @@ const formatAddress = (address?: ProfileCompanyAddress): string => {
 
 // --- Main Settings Screen Component ---
 function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
-  const auth = useAuth();
-  const isFocused = useIsFocused();
+  const isFocused = useIsFocused(); // Add useIsFocused hook
+  // Get session and user, not userToken
+  const { session, user, signOut, loading: authLoading, isAuthenticated } = useAuth(); 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [initialProfileData, setInitialProfileData] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -358,20 +193,34 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
   const [logoTimestamp, setLogoTimestamp] = useState(Date.now()); // For cache busting
 
   const fetchProfile = useCallback(async ({ isInitialLoad = false } = {}) => {
-    if (!auth.userToken) {
-      setError('Authentication token is missing.');
-      setLoading(false);
+    // Use isAuthenticated
+    if (!isAuthenticated) { 
+      console.log("fetchProfile: Not authenticated, skipping fetch.");
+      // Don't set loading if it's not an initial load (e.g., focus-based refresh)
+      if (isInitialLoad) setIsLoading(false); 
+      setError('Not logged in.'); // Set an error if not logged in
+      setProfileData(null);
       return;
     }
-    if (isInitialLoad) setLoading(true);
+    
+    // Only set main loading state on initial load
+    if (isInitialLoad) setIsLoading(true);
     setError(null);
-    setSaveStatus(null); // Clear save status on fetch
+    setSaveStatus(null); // Clear save status on refresh
 
     try {
+      // Get token from session
+      const token = session?.access_token;
+      if (!token) {
+         throw new Error("Authentication token not found.");
+      }
+
+      console.log("Fetching profile data...");
       const response = await fetch(`${API_BASE_URL}/api/profile`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${auth.userToken}`,
+          // Use token from session
+          'Authorization': `Bearer ${token}`, 
           'Accept': 'application/json',
         },
       });
@@ -391,7 +240,7 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
          // Convert snake_case from server to camelCase for local state
          const camelCaseData: ProfileData = {
              name: data.full_name, // Map full_name to name
-             email: data.email || auth.user?.email, // Use server email or fallback to auth context
+             email: data.email || user?.email, // Use server email or fallback to auth context
              phone: data.phone,
              company: {
                  name: data.company_name,
@@ -425,44 +274,54 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
       // Only clear profile if it was an initialization error maybe?
       // setProfileData(null);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
       setRefreshing(false);
     }
-  }, [auth.userToken, auth.user?.email]);
+  }, [session?.access_token, user?.email]);
 
   // Initial fetch on mount
   useEffect(() => {
-    fetchProfile({ isInitialLoad: true });
-  }, [fetchProfile]); // Depend on fetchProfile
+    console.log("ProfileScreen useEffect: isFocused, isAuthenticated:", isFocused, isAuthenticated);
+    // Check isAuthenticated
+    if (isFocused && isAuthenticated) { 
+       fetchProfile({ isInitialLoad: !profileData }); // Trigger fetch, only set initial load if no data yet
+    } else if (!isAuthenticated) {
+       // Clear data if user logs out while screen might be cached
+       setProfileData(null);
+       setError('Please log in to view your profile.');
+       setIsLoading(false);
+    }
+  // Depend on isAuthenticated and isFocused
+  }, [isFocused, isAuthenticated]); // Removed fetchProfile from deps to avoid loops
 
   // Re-fetch on focus to update data (including logo if changed on EditLogo screen)
   useEffect(() => {
-    if (isFocused && !loading) {
+    if (isFocused && !isLoading) {
       fetchProfile(); // Re-fetch profile data
       // Also specifically re-fetch the logo URL in case it changed
-      if (auth.userToken) {
+      if (session?.access_token) {
         setLogoTimestamp(Date.now()); // Refresh logo timestamp on focus
       }
     }
-  }, [isFocused, loading, fetchProfile, auth.userToken]);
+  }, [isFocused, isLoading, fetchProfile, session?.access_token]);
 
   // --- Loading State (Only shows on initial mount) ---
-  if (loading) { // This is now only true during the isInitialLoad fetch
-      return (
-        <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: spacing.md, color: colors.textSecondary }}>Loading Settings...</Text>
-        </SafeAreaView>
-      );
+  if (authLoading || (isLoading && !profileData && !error)) {
+    return (
+      <SafeAreaView style={[theme.screens.profileScreen.safeArea, theme.screens.profileScreen.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ marginTop: spacing.md, color: colors.textSecondary }}>Loading Settings...</Text>
+      </SafeAreaView>
+    );
   }
 
   // --- Error State (Shows if initial load failed AND we have no data) ---
   if (error && !profileData) {
-    const handleRetry = () => fetchProfile({ isInitialLoad: true }); // Retry should be initial load
+    const handleRetry = () => fetchProfile({ isInitialLoad: true });
     return (
-      <SafeAreaView style={[styles.safeArea, styles.errorTextContainer]}>
+      <SafeAreaView style={[theme.screens.profileScreen.safeArea, theme.screens.profileScreen.errorTextContainer]}>
         <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-        <Text style={[styles.errorText, { marginTop: spacing.md }]}>{error}</Text>
+        <Text style={[theme.screens.profileScreen.errorText, { marginTop: spacing.md }]}>{error}</Text>
          <TouchableOpacity onPress={handleRetry} style={{ marginTop: spacing.lg }}>
               <Text style={{ color: colors.primary }}>Try Again</Text>
          </TouchableOpacity>
@@ -472,32 +331,29 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
 
   // --- Main Render Logic ---
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={theme.screens.profileScreen.safeArea} edges={['left', 'right', 'bottom']}>
           <ScrollView
-              style={styles.scrollViewContent}
-              contentContainerStyle={styles.contentContainer}
+              style={theme.screens.profileScreen.scrollViewContent}
+              contentContainerStyle={theme.screens.profileScreen.contentContainer}
               refreshControl={
                   <RefreshControl
-                      refreshing={refreshing} // Use the dedicated refreshing state
-                      onRefresh={() => fetchProfile({ isInitialLoad: true })} // Trigger refresh fetch
+                      refreshing={refreshing}
+                      onRefresh={() => fetchProfile({ isInitialLoad: true })}
                       tintColor={colors.primary}
                       colors={[colors.primary]}
                   />
               }
               keyboardShouldPersistTaps="handled"
           >
-             {/* Display Fetch Error Inline if stale data exists */}
-             <View style={styles.statusMessageContainer}>
-                 {/* Display only general fetch errors here */}
-                 {error && profileData && <Text style={[styles.errorText, {marginBottom: spacing.md}]}>{`Failed to refresh: ${error}`}</Text>}
+             <View style={theme.screens.profileScreen.statusMessageContainer}>
+                 {error && profileData && <Text style={[theme.screens.profileScreen.errorText, {marginBottom: spacing.md}]}>{`Failed to refresh: ${error}`}</Text>}
              </View>
 
-            {/* Render sections only if profileData exists */}
             {profileData ? (
               <>
-                <View style={styles.section}>
-                  <Text style={styles.sectionHeader}>Account</Text>
-                   <SettingsRow
+                <View style={theme.screens.profileScreen.section}>
+                  <Text style={theme.screens.profileScreen.sectionHeader}>Account</Text>
+                  <SettingsRow
                        icon="person-circle-outline"
                        value={profileData.name || 'Not Set'}
                        isFirst
@@ -518,9 +374,9 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                    />
                 </View>
 
-                <View style={styles.section}>
-                  <Text style={styles.sectionHeader}>Company</Text>
-                   <SettingsRow
+                <View style={theme.screens.profileScreen.section}>
+                  <Text style={theme.screens.profileScreen.sectionHeader}>Company</Text>
+                  <SettingsRow
                        icon="business-outline"
                        value={profileData.company?.name || 'Not Set'}
                        isFirst
@@ -546,17 +402,16 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                        showDisclosure={true}
                        onPress={() => navigation.navigate('EditCompanyWebsite')}
                    />
-                   {/* Logo Row - Moved Here */}
                    <SettingsRow
-                     icon={profileData.config?.logoFilename ? { uri: `${API_BASE_URL}/api/logo/${auth.user?.id}?t=${logoTimestamp}` } : 'image-outline'}
+                     icon={profileData.config?.logoFilename ? { uri: `${API_BASE_URL}/api/logo/${user?.id}?t=${logoTimestamp}` } : 'image-outline'}
                      value="Logo"
-                     onPress={() => navigation.navigate('EditLogo', { currentLogoUrl: `${API_BASE_URL}/api/logo/${auth.user?.id}?t=${logoTimestamp}` })}
+                     onPress={() => navigation.navigate('EditLogo', { currentLogoUrl: `${API_BASE_URL}/api/logo/${user?.id}?t=${logoTimestamp}` })}
                      showDisclosure={true}
                    />
                 </View>
 
-                <View style={styles.section}>
-                  <Text style={styles.sectionHeader}>Configuration</Text>
+                <View style={theme.screens.profileScreen.section}>
+                  <Text style={theme.screens.profileScreen.sectionHeader}>Configuration</Text>
                    <SettingsRow
                      icon="chatbubbles-outline"
                      label="Chat Model"
@@ -582,21 +437,18 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                     onPress={() => navigation.navigate('EditReportSchema')}
                     isLink={false}
                   />
-                  {/* Logout as a SettingsRow, styled identically to other rows */}
                   <SettingsRow
                     icon="log-out-outline"
                     label="Log Out"
                     value=""
-                    onPress={auth.signOut}
+                    onPress={signOut}
                     isFirst={false}
                     showDisclosure={true}
-                    // Custom label style for red color and centering
                     labelStyle={{ color: colors.error, textAlign: 'center', flex: 1 }}
                   />
                 </View>
               </>
             ) : (
-                 // Optional: Show a message if profile is somehow null after load/refresh
                  <Text style={{textAlign: 'center', color: colors.textSecondary, marginTop: spacing.xl}}>Profile data unavailable.</Text>
             )}
 

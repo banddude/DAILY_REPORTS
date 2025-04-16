@@ -53,14 +53,9 @@ router.post('/login', (async (req: Request, res: Response, next: NextFunction) =
     console.log(`Login successful: ${data.user.email} (User ID: ${data.user.id})`);
     // Return the JWT access token and relevant user info
     res.json({
-        success: true,
-        token: data.session.access_token, // Send the JWT access token
-        refreshToken: data.session.refresh_token, // Optionally send refresh token if client needs it
-        user: {
-            id: data.user.id,
-            email: data.user.email,
-            // Add other relevant user fields if needed
-        }
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        user: data.user,
     });
 
 }) as RequestHandler);

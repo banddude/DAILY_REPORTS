@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   ActivityIndicator,
   TouchableOpacity,
@@ -16,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CommonActions } from '@react-navigation/native';
 
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors } from '../theme/theme'; // Import theme and colors
 import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config'; // Import S3 constants
 import { useAuth } from '../context/AuthContext';
 import { fetchApi } from './fetchApiHelper';
@@ -28,79 +27,11 @@ type ProjectReportsScreenRouteProp = RouteProp<BrowseStackParamList, 'ProjectRep
 // Type for navigation prop
 type ProjectReportsNavigationProp = NativeStackNavigationProp<BrowseStackParamList, 'ProjectReports'>;
 
-// --- Styles (Reusing styles similar to BrowseScreen/ProfileScreen) ---
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  statusContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    fontWeight: typography.fontWeightMedium as '500',
-    fontSize: typography.fontSizeM,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    fontSize: typography.fontSizeM,
-    fontStyle: 'italic',
-  },
-  rowContainer: {
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: borders.widthHairline,
-    borderBottomColor: colors.borderLight,
-    minHeight: 48,
-  },
-  firstRow: {
-    borderTopWidth: borders.widthHairline,
-    borderTopColor: colors.borderLight,
-  },
-  iconContainer: {
-    marginRight: spacing.md,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowText: {
-    flex: 1,
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-  },
-  disclosureIcon: {
-    marginLeft: spacing.sm,
-  },
-  headerButton: {
-    padding: spacing.md,
-  },
-  headerBackButtonContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center',
-    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, 
-  },
-  headerBackTitle: {
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary, 
-    marginLeft: spacing.xs, 
-  }
-});
-
 // --- Project Reports Screen Component ---
 function ProjectReportsScreen(): React.ReactElement {
   const navigation = useNavigation<ProjectReportsNavigationProp>();
   const route = useRoute<ProjectReportsScreenRouteProp>();
-  const { userToken, user } = useAuth();
+  const { session, user, isAuthenticated } = useAuth();
   const userId = user?.id;
   const { customer, project } = route.params;
 
@@ -126,14 +57,14 @@ function ProjectReportsScreen(): React.ReactElement {
               })
             );
           }}
-          style={styles.headerBackButtonContainer}
+          style={theme.screens.projectReportsScreen.headerBackButtonContainer}
         >
           <Ionicons
             name="chevron-back-outline"
             size={24}
             color={colors.textPrimary}
           />
-          <Text style={styles.headerBackTitle}>Reports</Text>
+          <Text style={theme.screens.projectReportsScreen.headerBackTitle}>Reports</Text>
         </TouchableOpacity>
       ),
     }); 
@@ -141,12 +72,12 @@ function ProjectReportsScreen(): React.ReactElement {
 
   // Fetch reports
   const fetchReports = useCallback(async () => {
-    if (!userToken || !customer || !project) return;
+    if (!session || !isAuthenticated || !customer || !project) return;
     console.log(`Fetching reports for ${customer} / ${project}...`);
     setError(null);
     const endpoint = `/api/browse-reports?customer=${encodeURIComponent(customer)}&project=${encodeURIComponent(project)}`;
     try {
-      const reportFolders = await fetchApi(endpoint, userToken);
+      const reportFolders = await fetchApi(endpoint);
       // Sort reports, potentially reverse chronologically if folder names allow
       const sortedReports = reportFolders.sort().reverse(); // Basic reverse alpha sort
       setReports(sortedReports);
@@ -156,7 +87,7 @@ function ProjectReportsScreen(): React.ReactElement {
       setError(`Failed to load reports: ${err.message}`);
       setReports([]);
     }
-  }, [userToken, customer, project]);
+  }, [session, isAuthenticated, customer, project]);
 
   // Initial fetch
   useEffect(() => {
@@ -247,64 +178,51 @@ function ProjectReportsScreen(): React.ReactElement {
 
     return (
       <TouchableOpacity
-        style={[styles.rowContainer, index === 0 && styles.firstRow]}
+        style={[theme.screens.projectReportsScreen.rowContainer, index === 0 && theme.screens.projectReportsScreen.firstRow]}
         onPress={() => handleReportPress(reportString)} // Pass the original string
       >
-        <View style={styles.iconContainer}>
+        <View style={theme.screens.projectReportsScreen.iconContainer}>
           <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
         </View>
-        <Text style={styles.rowText}>{displayValue}</Text>
-        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} style={styles.disclosureIcon} />
+        <Text style={theme.screens.projectReportsScreen.rowText}>{displayValue}</Text>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} style={theme.screens.projectReportsScreen.disclosureIcon} />
       </TouchableOpacity>
     );
   };
 
   const ListEmptyComponent = () => (
-    <View style={styles.statusContainer}>
-      <Text style={styles.emptyText}>No reports found for this project.</Text>
+    <View style={theme.screens.projectReportsScreen.statusContainer}>
+      {isLoading ? (
+        <ActivityIndicator size="large" color={colors.primary} />
+      ) : error ? (
+        <Text style={theme.screens.projectReportsScreen.errorText}>{error}</Text>
+      ) : (
+        <Text style={theme.screens.projectReportsScreen.emptyText}>No reports found for this project.</Text>
+      )}
     </View>
   );
 
   // --- Main Render ---
-  if (isLoading && reports.length === 0) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-        <View style={styles.statusContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (error) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-        <View style={styles.statusContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={handleRefresh}>
-             <Text style={{ color: colors.primary, marginTop: spacing.md }}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-      <FlatList
-        data={reports}
-        renderItem={renderItem}
-        keyExtractor={(item) => item}
-        ListEmptyComponent={!isLoading ? ListEmptyComponent : null}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
-      />
+    <SafeAreaView style={theme.screens.projectReportsScreen.safeArea} edges={['bottom']}>
+      {reports.length > 0 ? (
+        <FlatList
+          data={reports}
+          renderItem={renderItem}
+          keyExtractor={(item) => item}
+          ListEmptyComponent={isLoading ? null : ListEmptyComponent} // Only show if not loading
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        />
+      ) : (
+        ListEmptyComponent()
+      )}
     </SafeAreaView>
   );
 }

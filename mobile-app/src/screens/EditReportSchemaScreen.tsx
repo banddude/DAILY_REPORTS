@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react'
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   ScrollView,
   ActivityIndicator,
@@ -17,203 +16,112 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { EditReportSchemaScreenProps } from '../navigation/AppNavigator';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
 
-// --- Styles ---
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-   keyboardAvoidingView: {
-      flex: 1,
-   },
-  scrollViewContent: {
-    padding: spacing.lg,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-  fieldContainer: {
-    marginBottom: spacing.xl,
-  },
-  label: {
-    fontSize: typography.fontSizeS,
-    fontWeight: typography.fontWeightMedium as '500',
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-  },
-  textInput: {
-    backgroundColor: colors.surface,
-    borderRadius: borders.radiusMedium,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: typography.fontSizeM, // Standard size for readability
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace', // Monospace for JSON
-    color: colors.textPrimary,
-    borderWidth: borders.widthThin,
-    borderColor: colors.borderLight,
-    minHeight: 300, // Taller for JSON schema
-    textAlignVertical: 'top',
-  },
-  jsonErrorText: {
-      color: colors.error,
-      marginTop: spacing.sm,
-      fontSize: typography.fontSizeXS,
-  },
-  imagePreviewContainer: {
-      alignItems: 'center',
-      marginVertical: spacing.lg,
-      borderWidth: 1,
-      borderColor: colors.borderLight,
-      borderRadius: borders.radiusMedium,
-      padding: spacing.md,
-  },
-  imagePreview: {
-      width: 150,
-      height: 150,
-      borderRadius: borders.radiusSmall,
-      marginBottom: spacing.md,
-  },
-  imagePlaceholder: {
-      width: 150,
-      height: 150,
-      borderRadius: borders.radiusSmall,
-      backgroundColor: colors.surfaceAlt,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: spacing.md,
-  },
-  imageButton: {
-      backgroundColor: colors.primary,
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: borders.radiusMedium,
-      flexDirection: 'row',
-      alignItems: 'center',
-  },
-  imageButtonText: {
-      color: colors.background,
-      marginLeft: spacing.sm,
-      fontWeight: typography.fontWeightMedium as '500',
-  },
-});
-
 // --- Component ---
 function EditReportSchemaScreen(): React.ReactElement {
   const navigation = useNavigation<EditReportSchemaScreenProps['navigation']>();
-  const { userToken } = useAuth();
-  const [initialSchemaString, setInitialSchemaString] = useState<string>('');
-  const [currentSchemaString, setCurrentSchemaString] = useState<string>('');
+  const { session, isAuthenticated } = useAuth();
+  const [currentValue, setCurrentValue] = useState<string>('');
+  const [initialValue, setInitialValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCurrentSchema = useCallback(async () => {
-    if (!userToken) {
+  const fetchCurrentValue = useCallback(async () => {
+    if (!session || !isAuthenticated) {
       setError('Authentication required.');
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     setError(null);
+    const token = session.access_token;
+    if (!token) {
+      setError('Token not found.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Accept': 'application/json'
-        }
-      });
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        if (response.status === 404) {
-          throw new Error('Profile not found. Cannot edit schema.');
-        }
-        throw new Error(errData.error || 'Fetch failed');
-      }
+      const response = await fetch(`${API_BASE_URL}/api/profile`, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
+      if (!response.ok) throw new Error('Fetch failed');
       const data = await response.json();
-      const schemaStr = data?.config_report_json_schema || '';
-      setInitialSchemaString(schemaStr);
-      setCurrentSchemaString(schemaStr);
+      const schemaData = data?.config_report_json_schema;
+      const value = schemaData ? JSON.stringify(schemaData, null, 2) : '';
+      setInitialValue(value);
+      setCurrentValue(value);
     } catch (err: any) {
-      setError(`Failed to load schema: ${err.message}`);
+      setError(`Load failed: ${err.message}`);
       console.error("Error fetching schema:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [userToken]);
+  }, [session, isAuthenticated]);
 
   useEffect(() => {
-    fetchCurrentSchema();
-  }, [fetchCurrentSchema]);
+    fetchCurrentValue();
+  }, [fetchCurrentValue]);
 
   const handleSave = useCallback(async () => {
-    if (!userToken) {
-      Alert.alert('Error', 'Authentication required.');
-      return;
-    }
-    const currentTrimmed = typeof currentSchemaString === 'string' ? currentSchemaString.trim() : '';
-    const initialTrimmed = typeof initialSchemaString === 'string' ? initialSchemaString.trim() : '';
-
-    if (currentTrimmed === initialTrimmed) {
+    if (!session || !isAuthenticated || currentValue.trim() === initialValue.trim()) {
       navigation.goBack();
       return;
     }
+    
+    let parsedSchema;
+    try {
+      parsedSchema = JSON.parse(currentValue.trim());
+      setError(null);
+    } catch (jsonError: any) {
+      setError(`Invalid JSON format: ${jsonError.message}`);
+      Alert.alert('Invalid JSON', 'Please correct the JSON format before saving.');
+      return;
+    }
+
     setIsSaving(true);
-    setError(null);
+    const token = session.access_token;
+    if (!token) {
+      setError('Token not found.');
+      Alert.alert('Error', 'Authentication required.');
+      setIsSaving(false);
+      return;
+    }
 
     try {
       const payload = {
-        config_report_json_schema: currentTrimmed || null
+        config_report_json_schema: parsedSchema
       };
-
-      console.log("Saving Report Schema (as string):", payload);
-
+      console.log("Saving Report Schema:", payload);
       const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
         },
         body: JSON.stringify(payload)
       });
-
       if (!saveResponse.ok) {
         const d = await saveResponse.json().catch(() => ({}));
         throw new Error(d.error || 'Save failed');
       }
-      
-      console.log("Report Schema save successful");
       navigation.goBack();
-
     } catch (err: any) {
       setError(`Save failed: ${err.message}`);
       Alert.alert('Save Failed', err.message || 'Could not save the report schema.');
     } finally {
       setIsSaving(false);
     }
-  }, [userToken, currentSchemaString, initialSchemaString, navigation]);
+  }, [session, isAuthenticated, currentValue, initialValue, navigation]);
 
   useLayoutEffect(() => {
-    const currentTrimmed = typeof currentSchemaString === 'string' ? currentSchemaString.trim() : '';
-    const initialTrimmed = typeof initialSchemaString === 'string' ? initialSchemaString.trim() : '';
-    const isDisabled = isLoading || isSaving || currentTrimmed === initialTrimmed;
+    const isDisabled = isLoading || isSaving || currentValue.trim() === initialValue.trim();
 
     navigation.setOptions({
       headerLeft: () => (
@@ -223,32 +131,32 @@ function EditReportSchemaScreen(): React.ReactElement {
         <Button onPress={handleSave} title={isSaving ? "Saving..." : "Save"} disabled={isDisabled} color={Platform.OS === 'ios' ? colors.primary : undefined} />
       ),
     });
-  }, [navigation, handleSave, isLoading, isSaving, currentSchemaString, initialSchemaString]);
+  }, [navigation, handleSave, isLoading, isSaving, currentValue, initialValue]);
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={theme.screens.editReportSchemaScreen.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={theme.screens.editReportSchemaScreen.safeArea} edges={['left', 'right', 'bottom']}>
         <KeyboardAvoidingView
              behavior={Platform.OS === "ios" ? "padding" : "height"}
-             style={styles.keyboardAvoidingView}
+             style={theme.screens.editReportSchemaScreen.keyboardAvoidingView}
              keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
         >
-            <ScrollView contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
-                {error && <Text style={styles.errorText}>{error}</Text>}
+            <ScrollView contentContainerStyle={theme.screens.editReportSchemaScreen.scrollViewContent} keyboardShouldPersistTaps="handled">
+                {error && <Text style={theme.screens.editReportSchemaScreen.errorText}>{error}</Text>}
 
-                <View style={styles.fieldContainer}> 
-                  <Text style={styles.label}>Report JSON Schema (Raw Text)</Text> 
+                <View style={theme.screens.editReportSchemaScreen.fieldContainer}> 
+                  <Text style={theme.screens.editReportSchemaScreen.label}>Report JSON Schema (Raw Text)</Text> 
                   <TextInput
-                    style={styles.textInput}
-                    value={currentSchemaString}
-                    onChangeText={setCurrentSchemaString}
+                    style={theme.screens.editReportSchemaScreen.textInput}
+                    value={currentValue}
+                    onChangeText={setCurrentValue}
                     multiline={true}
                     autoCapitalize="none"
                     autoCorrect={false}

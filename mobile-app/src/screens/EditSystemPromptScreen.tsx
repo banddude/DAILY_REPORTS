@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react'
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   ScrollView,
   ActivityIndicator,
@@ -14,79 +13,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors } from '../theme/theme'; // Import theme and colors
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { EditSystemPromptScreenProps } from '../navigation/AppNavigator'; // Import navigation props type
 
-// --- Styles (Inspired by the screenshot) ---
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background, // Use theme background
-  },
-  keyboardAvoidingView: {
-      flex: 1,
-  },
-  scrollViewContent: {
-    padding: spacing.lg,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-  fieldContainer: {
-    marginBottom: spacing.xl,
-  },
-  label: {
-    fontSize: typography.fontSizeS,
-    fontWeight: typography.fontWeightMedium as '500',
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-  },
-  textInput: {
-    backgroundColor: colors.surface,
-    borderRadius: borders.radiusMedium,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-    borderWidth: borders.widthThin,
-    borderColor: colors.borderLight,
-    minHeight: 200, // Make it taller for the prompt
-    textAlignVertical: 'top',
-  },
-  // Style for the toggle row (like "Enable for new chats")
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderRadius: borders.radiusMedium,
-    borderWidth: borders.widthThin,
-    borderColor: colors.borderLight,
-    marginBottom: spacing.xl,
-  },
-  toggleLabel: {
-      fontSize: typography.fontSizeM,
-      color: colors.textPrimary,
-  },
-});
-
 // --- Component ---
 function EditSystemPromptScreen(): React.ReactElement {
   const navigation = useNavigation<EditSystemPromptScreenProps['navigation']>();
-  const { userToken } = useAuth();
+  const { session, isAuthenticated } = useAuth();
   const [initialPrompt, setInitialPrompt] = useState<string>('');
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -94,7 +29,7 @@ function EditSystemPromptScreen(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
 
   const fetchCurrentPrompt = useCallback(async () => {
-    if (!userToken) {
+    if (!session || !isAuthenticated) {
         setError('Authentication required.');
         setIsLoading(false);
         return;
@@ -102,9 +37,13 @@ function EditSystemPromptScreen(): React.ReactElement {
     setIsLoading(true);
     setError(null);
     try {
+      const token = session.access_token;
+      if (!token) {
+        throw new Error('Token not found');
+      }
       const response = await fetch(`${API_BASE_URL}/api/profile`, {
         headers: {
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
         }
       });
@@ -119,20 +58,24 @@ function EditSystemPromptScreen(): React.ReactElement {
     } finally {
       setIsLoading(false);
     }
-  }, [userToken]);
+  }, [session, isAuthenticated]);
 
   useEffect(() => {
     fetchCurrentPrompt();
   }, [fetchCurrentPrompt]);
 
   const handleSave = useCallback(async () => {
-    if (!userToken || currentPrompt.trim() === initialPrompt.trim()) {
+    if (!session || !isAuthenticated || currentPrompt.trim() === initialPrompt.trim()) {
         navigation.goBack();
         return;
     }
     setIsSaving(true);
     setError(null);
     try {
+      const token = session.access_token;
+      if (!token) {
+        throw new Error('Token not found');
+      }
       const payload = {
           config_system_prompt: currentPrompt.trim()
       };
@@ -143,7 +86,7 @@ function EditSystemPromptScreen(): React.ReactElement {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -164,7 +107,7 @@ function EditSystemPromptScreen(): React.ReactElement {
     } finally {
       setIsSaving(false);
     }
-  }, [userToken, currentPrompt, initialPrompt, navigation]);
+  }, [session, isAuthenticated, currentPrompt, initialPrompt, navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -179,27 +122,27 @@ function EditSystemPromptScreen(): React.ReactElement {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={theme.screens.editSystemPromptScreen.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={theme.screens.editSystemPromptScreen.safeArea} edges={['left', 'right', 'bottom']}>
        <KeyboardAvoidingView
          behavior={Platform.OS === "ios" ? "padding" : "height"}
-         style={styles.keyboardAvoidingView}
+         style={theme.screens.editSystemPromptScreen.keyboardAvoidingView}
          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0} // Adjust if needed
        >
-         <ScrollView style={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
-            {error && <Text style={styles.errorText}>{error}</Text>} 
+         <ScrollView style={theme.screens.editSystemPromptScreen.scrollViewContent} keyboardShouldPersistTaps="handled">
+            {error && <Text style={theme.screens.editSystemPromptScreen.errorText}>{error}</Text>} 
 
             {/* System Prompt Input */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>System Prompt</Text>
+            <View style={theme.screens.editSystemPromptScreen.fieldContainer}>
+              <Text style={theme.screens.editSystemPromptScreen.label}>System Prompt</Text>
               <TextInput
-                style={styles.textInput}
+                style={theme.screens.editSystemPromptScreen.textInput}
                 value={currentPrompt}
                 onChangeText={setCurrentPrompt}
                 placeholder="Enter system prompt instructions..."

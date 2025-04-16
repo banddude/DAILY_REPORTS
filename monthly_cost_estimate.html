@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Cost Estimate - Job Site Reporter App</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: auto; }
+        h1, h2, h3 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        td:nth-child(n+2) { text-align: right; } /* Right-align numeric columns */
+        .chart-container { margin: 20px auto; }
+        .caveats { background-color: #fffbe6; border-left: 4px solid #ffe58f; padding: 10px; margin-top: 20px; }
+        .cost { font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Monthly Cost Estimate - Job Site Reporter App</h1>
+
+    <p>This report estimates the monthly operating costs for the Job Site Reporter application based on two potential usage levels derived from the server capacity analysis (assuming an 8vCPU/8GB Railway plan). It compares costs when using different OpenAI GPT models.</p>
+
+    <h2>Key Assumptions</h2>
+    <ul>
+        <li><strong>Railway Server Plan:</strong> 8vCPU / 8GB RAM (~$60/month). Assumed capable of handling up to 900k reports/month.</li>
+        <li><strong>Reports/Month:</strong> Low Estimate: 450,000; High Estimate: 900,000.</li>
+        <li><strong>Input per Report:</strong> 3.5-minute video (~50 MB).</li>
+        <li><strong>Report Generation Costs (Per Report):</strong>
+            <ul>
+                <li>Whisper Transcription (3.5 min): $0.02100</li>
+                <li>S3 PUT Requests (14 per report): ~$0.00007</li>
+                <li>GPT Tokens: 4500 input, 500 output.
+                    <ul>
+                        <li><code>gpt-4.1</code>: $0.01300</li>
+                        <li><code>gpt-4.1-mini</code>: $0.00260</li>
+                        <li><code>gpt-4.1-nano</code>: $0.00065</li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+         <li><strong>Report Storage (S3):</strong> ~52.2 MB per report (Video, Whisper JSON, Report JSON, HTML Viewer, 10 Frames). Costed at $0.023/GB/month. This estimate assumes storing *one month's worth* of newly generated reports. Total storage cost will accumulate if reports are retained longer.</li>
+         <li><strong>Report Viewing (S3):</strong> Assumed 1 view per report per month.
+            <ul>
+                <li>GET Requests (12 per view): ~$0.0000048 per view</li>
+                <li>Data Transfer Out (~52 MB per view): Costed at $0.09/GB.</li>
+            </ul>
+         </li>
+         <li><strong>Supabase:</strong> Estimated $25/month (covers basic Pro plan, actual cost depends heavily on specific usage patterns beyond simple auth/profile reads).</li>
+         <li><strong>Pricing Data:</strong> Based on user-provided OpenAI rates and standard AWS S3 pricing (us-east-1, early 2025 estimates).</li>
+    </ul>
+
+    <h2>Cost Breakdown per Report (Generation Only)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>GPT Model</th>
+                <th>Whisper Cost</th>
+                <th>Est. GPT Cost</th>
+                <th>Est. S3 PUT Cost</th>
+                <th>Est. Total Generation Cost per Report</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>gpt-4.1</code></td>
+                <td>$0.02100</td>
+                <td>$0.01300</td>
+                <td>$0.00007</td>
+                <td class="cost">$0.03407</td>
+            </tr>
+            <tr>
+                <td><code>gpt-4.1-mini</code></td>
+                <td>$0.02100</td>
+                <td>$0.00260</td>
+                <td>$0.00007</td>
+                <td class="cost">$0.02367</td>
+            </tr>
+            <tr>
+                <td><code>gpt-4.1-nano</code></td>
+                <td>$0.02100</td>
+                <td>$0.00065</td>
+                <td>$0.00007</td>
+                <td class="cost">$0.02172</td>
+            </tr>
+        </tbody>
+    </table>
+    <p><i>Note: S3 Storage and Viewing costs are applied monthly based on total volume, not included in this per-report generation breakdown.</i></p>
+
+    <h2>Estimated Monthly Costs</h2>
+
+    <h3>Low Capacity Scenario (450,000 Reports/Month)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Cost Component</th>
+                <th>Using gpt-4.1</th>
+                <th>Using gpt-4.1-mini</th>
+                <th>Using gpt-4.1-nano</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Whisper Cost</td>
+                <td>$9,450.00</td>
+                <td>$9,450.00</td>
+                <td>$9,450.00</td>
+            </tr>
+            <tr>
+                <td>GPT Cost</td>
+                <td>$5,850.00</td>
+                <td>$1,170.00</td>
+                <td>$292.50</td>
+            </tr>
+            <tr>
+                <td>S3 PUT Cost</td>
+                <td>$31.50</td>
+                <td>$31.50</td>
+                <td>$31.50</td>
+            </tr>
+            <tr>
+                <td>S3 Storage (for this month's reports)</td>
+                <td>$527.62</td>
+                <td>$527.62</td>
+                <td>$527.62</td>
+            </tr>
+            <tr>
+                <td>S3 Viewing (GETs + Transfer Out)</td>
+                <td>$2,058.84</td>
+                <td>$2,058.84</td>
+                <td>$2,058.84</td>
+            </tr>
+             <tr>
+                <td>Railway Server</td>
+                <td>$60.00</td>
+                <td>$60.00</td>
+                <td>$60.00</td>
+            </tr>
+             <tr>
+                <td>Supabase (Estimate)</td>
+                <td>$25.00</td>
+                <td>$25.00</td>
+                <td>$25.00</td>
+            </tr>
+            <tr>
+                <th style="background-color: #e2e2e2;">Total Estimated Monthly Cost</th>
+                <td class="cost" style="background-color: #e2e2e2;">$18,002.96</td>
+                <td class="cost" style="background-color: #e2e2e2;">$13,322.96</td>
+                <td class="cost" style="background-color: #e2e2e2;">$12,445.46</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>High Capacity Scenario (900,000 Reports/Month)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Cost Component</th>
+                <th>Using gpt-4.1</th>
+                <th>Using gpt-4.1-mini</th>
+                <th>Using gpt-4.1-nano</th>
+            </tr>
+        </thead>
+        <tbody>
+             <tr>
+                <td>Whisper Cost</td>
+                <td>$18,900.00</td>
+                <td>$18,900.00</td>
+                <td>$18,900.00</td>
+            </tr>
+             <tr>
+                <td>GPT Cost</td>
+                <td>$11,700.00</td>
+                <td>$2,340.00</td>
+                <td>$585.00</td>
+            </tr>
+            <tr>
+                <td>S3 PUT Cost</td>
+                <td>$63.00</td>
+                <td>$63.00</td>
+                <td>$63.00</td>
+            </tr>
+            <tr>
+                <td>S3 Storage (for this month's reports)</td>
+                <td>$1,055.24</td>
+                <td>$1,055.24</td>
+                <td>$1,055.24</td>
+            </tr>
+            <tr>
+                <td>S3 Viewing (GETs + Transfer Out)</td>
+                <td>$4,117.59</td>
+                <td>$4,117.59</td>
+                <td>$4,117.59</td>
+            </tr>
+             <tr>
+                <td>Railway Server</td>
+                <td>$60.00</td>
+                <td>$60.00</td>
+                <td>$60.00</td>
+            </tr>
+             <tr>
+                <td>Supabase (Estimate)</td>
+                <td>$25.00</td>
+                <td>$25.00</td>
+                <td>$25.00</td>
+            </tr>
+            <tr>
+                <th style="background-color: #e2e2e2;">Total Estimated Monthly Cost</th>
+                <td class="cost" style="background-color: #e2e2e2;">$35,920.83</td>
+                <td class="cost" style="background-color: #e2e2e2;">$26,560.83</td>
+                <td class="cost" style="background-color: #e2e2e2;">$24,805.83</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Visualizations</h2>
+
+    <h3>Monthly Cost Comparison (Bar Chart)</h3>
+    <div class="chart-container" style="width: 80%;">
+        <canvas id="monthlyCostComparisonChart"></canvas>
+    </div>
+
+    <h3>Cost Breakdown - High Capacity (900k Reports/Month)</h3>
+    <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
+        <div class="chart-container" style="width: 45%; min-width: 300px;">
+            <h4>Using gpt-4.1</h4>
+            <canvas id="costBreakdownPieChart_4_1"></canvas>
+        </div>
+        <div class="chart-container" style="width: 45%; min-width: 300px;">
+            <h4>Using gpt-4.1-mini</h4>
+            <canvas id="costBreakdownPieChart_4_1_mini"></canvas>
+        </div>
+        <div class="chart-container" style="width: 45%; min-width: 300px; margin-top: 20px;">
+            <h4>Using gpt-4.1-nano</h4>
+            <canvas id="costBreakdownPieChart_4_1_nano"></canvas>
+        </div>
+    </div>
+
+
+    <div class="caveats">
+        <h3>Important Caveats</h3>
+        <ul>
+            <li><strong>Estimates Only:</strong> These are projections based on specific assumptions. Actual costs can vary significantly based on real-world usage patterns, video file sizes, report complexity, viewing frequency, and API performance.</li>
+            <li><strong>API Rate Limits:</strong> OpenAI API rate limits might become a bottleneck before reaching the theoretical server capacity, potentially limiting the actual number of reports processed per month or requiring higher-tier plans.</li>
+            <li><strong>S3 Costs:</strong>
+                <ul>
+                    <li>Storage costs are calculated for *one month's* worth of new reports. If reports are retained longer, total storage costs will accumulate month over month. Implementing data lifecycle policies (e.g., deleting reports after X days) will be crucial for managing costs.</li>
+                    <li>Viewing costs assume 1 view per report. Higher viewing frequency will increase S3 Data Transfer costs significantly.</li>
+                 </ul>
+            </li>
+             <li><strong>Supabase Costs:</strong> The $25 estimate is a placeholder. Costs could increase if usage exceeds the Pro plan limits (e.g., high database reads/writes, concurrent connections).</li>
+             <li><strong>Network Variability:</strong> Fluctuations in network performance can affect API call times and potentially increase processing duration, although direct cost impact might be minimal unless it forces scaling.</li>
+             <li><strong>Contingency:</strong> No buffer for unexpected issues, retries, or cost fluctuations is included. A 10-20% contingency buffer is often recommended for budget planning.</li>
+        </ul>
+    </div>
+
+    <script>
+        // Data for Charts
+        const labels_models = ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'];
+        const costs_low = [18002.96, 13322.96, 12445.46];
+        const costs_high = [35920.83, 26560.83, 24805.83];
+
+        // Updated Breakdown Data for High Capacity (900k Reports)
+        const costs_high_4_1_breakdown = [18900.00, 11700.00, 63.00, 1055.24, 4117.59, 60.00, 25.00]; // Whisper, GPT, S3 PUT, S3 Store, S3 View, Server, Supabase
+        const costs_high_mini_breakdown = [18900.00, 2340.00, 63.00, 1055.24, 4117.59, 60.00, 25.00];
+        const costs_high_nano_breakdown = [18900.00, 585.00, 63.00, 1055.24, 4117.59, 60.00, 25.00];
+        const breakdown_labels = ['Whisper Cost', 'GPT Cost', 'S3 PUT Cost', 'S3 Storage', 'S3 Viewing', 'Railway Server', 'Supabase'];
+        const breakdown_colors = [
+            'rgba(255, 99, 132, 0.6)', // Whisper (Pink)
+            'rgba(255, 159, 64, 0.6)', // GPT (Orange)
+            'rgba(201, 203, 207, 0.6)', // S3 PUT (Grey)
+            'rgba(54, 162, 235, 0.6)', // S3 Storage (Blue)
+            'rgba(255, 206, 86, 0.6)', // S3 Viewing (Yellow)
+            'rgba(75, 192, 192, 0.6)', // Server (Teal)
+            'rgba(153, 102, 255, 0.6)' // Supabase (Purple)
+        ];
+        const breakdown_borders = [
+            'rgba(255, 99, 132, 1)',
+            'rgba(255, 159, 64, 1)',
+            'rgba(201, 203, 207, 1)',
+            'rgba(54, 162, 235, 1)',
+            'rgba(255, 206, 86, 1)',
+            'rgba(75, 192, 192, 1)',
+            'rgba(153, 102, 255, 1)'
+        ];
+
+        // Monthly Cost Comparison Bar Chart
+        const ctxBar = document.getElementById('monthlyCostComparisonChart').getContext('2d');
+        new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: labels_models,
+                datasets: [
+                    {
+                        label: 'Low Capacity (450k reports/mo)',
+                        data: costs_low,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'High Capacity (900k reports/mo)',
+                        data: costs_high,
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Estimated Monthly Cost ($)' }
+                    }
+                },
+                plugins: {
+                    title: { display: true, text: 'Total Estimated Monthly Cost by GPT Model and Capacity' }
+                }
+            }
+        });
+
+        // Cost Breakdown Pie Charts (High Capacity)
+        const pieConfig = (data, title) => ({
+            type: 'pie',
+            data: {
+                labels: breakdown_labels,
+                datasets: [{
+                    label: 'Cost Breakdown',
+                    data: data,
+                    backgroundColor: breakdown_colors,
+                    borderColor: breakdown_borders,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // Allow chart to resize within container
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: title
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed);
+                                }
+                                // Calculate percentage
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const value = context.parsed;
+                                const percentage = ((value / total) * 100).toFixed(1) + '%';
+                                label += ` (${percentage})`;
+                                return label;
+                            }
+                        }
+                    }
+                }
+            },
+        });
+
+        const ctxPie41 = document.getElementById('costBreakdownPieChart_4_1').getContext('2d');
+        new Chart(ctxPie41, pieConfig(costs_high_4_1_breakdown, 'gpt-4.1 Cost Breakdown (900k reports/mo)'));
+
+        const ctxPieMini = document.getElementById('costBreakdownPieChart_4_1_mini').getContext('2d');
+        new Chart(ctxPieMini, pieConfig(costs_high_mini_breakdown, 'gpt-4.1-mini Cost Breakdown (900k reports/mo)'));
+
+        const ctxPieNano = document.getElementById('costBreakdownPieChart_4_1_nano').getContext('2d');
+        new Chart(ctxPieNano, pieConfig(costs_high_nano_breakdown, 'gpt-4.1-nano Cost Breakdown (900k reports/mo)'));
+
+    </script>
+
+</body>
+</html> 
