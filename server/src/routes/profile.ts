@@ -12,7 +12,6 @@ let s3Bucket: string;
 let protectMiddleware: RequestHandler;
 let ensureAuthenticatedHelper: (req: Request, res: Response) => string | null;
 let imageUploadMiddleware: RequestHandler; // For logo and profile image
-let uploadsDir: string;
 
 // Initializer function
 export const initializeProfileRoutes = (
@@ -20,15 +19,13 @@ export const initializeProfileRoutes = (
     bucket: string,
     protect: RequestHandler,
     ensureAuth: (req: Request, res: Response) => string | null,
-    imageUpload: RequestHandler,
-    uploadsDirectory: string
+    imageUpload: RequestHandler
 ) => {
     s3Client = client;
     s3Bucket = bucket;
     protectMiddleware = protect;
     ensureAuthenticatedHelper = ensureAuth;
     imageUploadMiddleware = imageUpload;
-    uploadsDir = uploadsDirectory;
 };
 
 // --- Profile Routes ---
@@ -157,9 +154,7 @@ router.post('/upload-logo',
                     size: mockImageBuffer.length,
                     buffer: mockImageBuffer,
                     encoding: '7bit',
-                    destination: uploadsDir, // Use injected uploadsDir
                     filename: `${Date.now()}-${req.body.logo.name || 'logo.jpg'}`,
-                    path: path.join(uploadsDir, `${Date.now()}-${req.body.logo.name || 'logo.jpg'}`),
                 } as Express.Multer.File;
                 console.log(`>>> Created mock file from React Native data: ${req.file.originalname}`);
             } catch (error) {

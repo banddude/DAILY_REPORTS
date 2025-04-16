@@ -94,8 +94,7 @@ initializeProfileRoutes(
     s3Bucket,
     protect,
     ensureAuthenticated,
-    imageUpload.single('logo'),
-    UPLOADS_DIR
+    imageUpload.single('logo')
 );
 initializeBrowseRoutes(s3Client, s3Bucket, protect, ensureAuthenticated);
 

@@ -12,7 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 // Note: __dirname in a standard Node.js setup running from dist/src will be /path/to/project/server/dist/src
 // We resolve relative to this __dirname to get project paths.
 export const PROJECT_ROOT = path.resolve(__dirname, '..', '..'); // Go up two levels from dist/src to get server/
-export const UPLOADS_DIR = path.join(PROJECT_ROOT, 'uploads');
+// export const UPLOADS_DIR = path.join(PROJECT_ROOT, 'uploads'); // REMOVED - No longer used
 export const PUBLIC_DIR = path.join(PROJECT_ROOT, 'public'); // Path to the public directory
 export const DATA_DIR = path.join(PROJECT_ROOT, 'data'); // Path to the data directory
 export const USERS_JSON_PATH = path.join(DATA_DIR, 'users.json'); // Path for users.json (if needed)
