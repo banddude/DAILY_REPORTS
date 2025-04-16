@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  StyleSheet,
   Text,
   View,
   TouchableOpacity,
@@ -16,6 +15,7 @@ import {
   TextInput,
   Button,
   AlertButton,
+  StyleSheet,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,7 +23,7 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { useNavigation, useIsFocused, CommonActions } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { fetchApi } from './fetchApiHelper';
@@ -771,22 +771,22 @@ const HomeScreen: React.FC = () => {
     if (result.type === null || result.type === 'success') return null;
 
     const resultContainerStyle = [
-      styles.resultsContainerBase,
-      result.type === 'loading' && styles.resultsContainerLoading,
-      result.type === 'error' && styles.resultsContainerError,
+      theme.screens.homeScreen.resultsContainerBase,
+      result.type === 'loading' && theme.screens.homeScreen.resultsContainerLoading,
+      result.type === 'error' && theme.screens.homeScreen.resultsContainerError,
     ];
 
     const resultTextStyle = [
-      styles.resultTextBase,
-      result.type === 'error' && styles.resultTextError,
-      result.type === 'loading' && styles.resultTextLoading,
+      theme.screens.homeScreen.resultTextBase,
+      result.type === 'error' && theme.screens.homeScreen.resultTextError,
+      result.type === 'loading' && theme.screens.homeScreen.resultTextLoading,
     ];
 
     return (
       <View style={resultContainerStyle}>
         <Text style={resultTextStyle}>{result.message}</Text>
         {isGeneratingReport && result.type === 'loading' && (
-          <ActivityIndicator size="small" color={colors.textSecondary} style={styles.resultLoadingIndicator} />
+          <ActivityIndicator size="small" color={colors.textSecondary} style={theme.screens.homeScreen.resultLoadingIndicator} />
         )}
       </View>
     );
@@ -881,19 +881,19 @@ const HomeScreen: React.FC = () => {
   console.log('Button disabled:', !selectedFile, !selectedCustomer, selectedCustomer === ADD_NEW_CUSTOMER_OPTION, !selectedProject, selectedProject === ADD_NEW_PROJECT_OPTION, isGeneratingReport);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={theme.screens.homeScreen.safeArea}>
        <ScrollView
-         contentContainerStyle={styles.scrollContainer}
+         contentContainerStyle={theme.screens.homeScreen.scrollContainer}
          keyboardShouldPersistTaps="handled"
          showsVerticalScrollIndicator={false}
        >
-            <View style={styles.headerRow}>
-              <Text style={styles.title}>Daily Report Generator</Text>
-              <TouchableOpacity onPress={() => setShowTipsModal(true)} style={styles.tipsButton} accessibilityLabel="How to Get the Best Report">
+            <View style={theme.screens.homeScreen.headerRow}>
+              <Text style={theme.screens.homeScreen.title}>Daily Report Generator</Text>
+              <TouchableOpacity onPress={() => setShowTipsModal(true)} style={theme.screens.homeScreen.tipsButton} accessibilityLabel="How to Get the Best Report">
                 <Ionicons name="help-circle-outline" size={28} color={colors.primary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.description}>
+            <Text style={theme.screens.homeScreen.description}>
                 Select customer & project, then upload or record a video walkthrough to generate a report.
             </Text>
 
@@ -904,30 +904,30 @@ const HomeScreen: React.FC = () => {
               transparent
               onRequestClose={() => setShowTipsModal(false)}
             >
-              <View style={styles.modalOverlay}>
-                <View style={styles.tipsModalContainer}>
-                  <View style={styles.tipsModalHeader}>
-                    <Text style={styles.tipsModalTitle}>How to Get the Best Report</Text>
-                    <TouchableOpacity onPress={() => setShowTipsModal(false)} style={styles.tipsModalCloseButton} accessibilityLabel="Close Tips">
+              <View style={theme.screens.homeScreen.modalOverlay}>
+                <View style={theme.screens.homeScreen.tipsModalContainer}>
+                  <View style={theme.screens.homeScreen.tipsModalHeader}>
+                    <Text style={theme.screens.homeScreen.tipsModalTitle}>How to Get the Best Report</Text>
+                    <TouchableOpacity onPress={() => setShowTipsModal(false)} style={theme.screens.homeScreen.tipsModalCloseButton} accessibilityLabel="Close Tips">
                       <Ionicons name="close" size={28} color={colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.tipsList}>
-                    <View style={styles.tipRow}>
-                      <Ionicons name="mic-outline" size={22} color={colors.primary} style={styles.tipIcon} />
-                      <Text style={styles.tipText}><Text style={styles.tipBold}>Speak Clearly:</Text> Enunciate near your device's mic. The AI transcribes exactly what it hears.</Text>
+                  <View style={theme.screens.homeScreen.tipsList}>
+                    <View style={theme.screens.homeScreen.tipRow}>
+                      <Ionicons name="mic-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
+                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Speak Clearly:</Text> Enunciate near your device's mic. The AI transcribes exactly what it hears.</Text>
                     </View>
-                    <View style={styles.tipRow}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} style={styles.tipIcon} />
-                      <Text style={styles.tipText}><Text style={styles.tipBold}>Verbalize Everything:</Text> Mention details, observations, measurements, and even the desired tone or sections for your report (e.g., "In the summary, mention that the framing is complete."). The AI uses your words to write the report.</Text>
+                    <View style={theme.screens.homeScreen.tipRow}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
+                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Verbalize Everything:</Text> Mention details, observations, measurements, and even the desired tone or sections for your report (e.g., "In the summary, mention that the framing is complete."). The AI uses your words to write the report.</Text>
                     </View>
-                    <View style={styles.tipRow}>
-                      <Ionicons name="camera-outline" size={22} color={colors.primary} style={styles.tipIcon} />
-                      <Text style={styles.tipText}><Text style={styles.tipBold}>Steady Camera for Images:</Text> The AI selects images based on your speech timestamps. When describing something you want a picture of, <Text style={styles.tipBold}>hold the camera steady on the subject for a few seconds while speaking about it.</Text></Text>
+                    <View style={theme.screens.homeScreen.tipRow}>
+                      <Ionicons name="camera-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
+                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Steady Camera for Images:</Text> The AI selects images based on your speech timestamps. When describing something you want a picture of, <Text style={theme.screens.homeScreen.tipBold}>hold the camera steady on the subject for a few seconds while speaking about it.</Text></Text>
                     </View>
-                    <View style={styles.tipRow}>
-                      <Ionicons name="sunny-outline" size={22} color={colors.primary} style={styles.tipIcon} />
-                      <Text style={styles.tipText}><Text style={styles.tipBold}>Good Lighting & Minimal Noise:</Text> Ensure the environment is well-lit and reasonably quiet for best results.</Text>
+                    <View style={theme.screens.homeScreen.tipRow}>
+                      <Ionicons name="sunny-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
+                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Good Lighting & Minimal Noise:</Text> Ensure the environment is well-lit and reasonably quiet for best results.</Text>
                     </View>
                   </View>
                 </View>
@@ -935,81 +935,81 @@ const HomeScreen: React.FC = () => {
             </Modal>
             {/* ------------------- */}
 
-            <View style={styles.sectionContainer}>
-                <Text style={styles.sectionHeaderText}>Details</Text>
-                 {fetchError && <Text style={styles.fetchErrorText}>{fetchError}</Text>}
+            <View style={theme.screens.homeScreen.sectionContainer}>
+                <Text style={theme.screens.homeScreen.sectionHeaderText}>Details</Text>
+                 {fetchError && <Text style={theme.screens.homeScreen.fetchErrorText}>{fetchError}</Text>}
 
                 {/* Restore Original Customer Row */}
                 <TouchableOpacity
-                    style={[styles.rowContainer, styles.firstRowInSection]}
+                    style={[theme.screens.homeScreen.rowContainer, theme.screens.homeScreen.firstRowInSection]}
                     onPress={openCustomerModal}
                     disabled={isFetchingCustomers}
                 >
-                    <View style={styles.rowIconContainer}>
+                    <View style={theme.screens.homeScreen.rowIconContainer}>
                         <Ionicons name="business-outline" size={22} color={colors.textSecondary} />
                     </View>
-                    <Text style={styles.rowLabel}>Customer</Text>
-                    <View style={styles.rowValueContainer}>
-                        <Text style={styles.rowValueText} numberOfLines={1}>{isFetchingCustomers ? 'Loading...' : (selectedCustomer || 'Select')}</Text>
-                        {isFetchingCustomers ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} style={styles.rowChevron} />}
+                    <Text style={theme.screens.homeScreen.rowLabel}>Customer</Text>
+                    <View style={theme.screens.homeScreen.rowValueContainer}>
+                        <Text style={theme.screens.homeScreen.rowValueText} numberOfLines={1}>{isFetchingCustomers ? 'Loading...' : (selectedCustomer || 'Select')}</Text>
+                        {isFetchingCustomers ? <ActivityIndicator size="small" color={colors.textSecondary} style={theme.screens.homeScreen.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} style={theme.screens.homeScreen.rowChevron} />}
                     </View>
                 </TouchableOpacity>
 
                 {/* Project Row - Renders normally */}
                 <TouchableOpacity
-                    style={[styles.rowContainer, !selectedCustomer && styles.rowDisabled]}
+                    style={[theme.screens.homeScreen.rowContainer, !selectedCustomer && theme.screens.homeScreen.rowDisabled]}
                     onPress={openProjectModal}
                     disabled={!selectedCustomer || isFetchingProjects}
                 >
-                     <View style={styles.rowIconContainer}>
+                     <View style={theme.screens.homeScreen.rowIconContainer}>
                          <Ionicons name="folder-outline" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} />
                      </View>
-                    <Text style={[styles.rowLabel, !selectedCustomer && styles.rowLabelDisabled]}>Project</Text>
-                    <View style={styles.rowValueContainer}>
-                         <Text style={[styles.rowValueText, !selectedCustomer && styles.rowValueDisabled]} numberOfLines={1}>{!selectedCustomer ? 'Select Customer First' : (isFetchingProjects ? 'Loading...' : (selectedProject || 'Select'))}</Text>
-                        {isFetchingProjects ? <ActivityIndicator size="small" color={colors.textSecondary} style={styles.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} style={styles.rowChevron} />}
+                    <Text style={[theme.screens.homeScreen.rowLabel, !selectedCustomer && theme.screens.homeScreen.rowLabelDisabled]}>Project</Text>
+                    <View style={theme.screens.homeScreen.rowValueContainer}>
+                         <Text style={[theme.screens.homeScreen.rowValueText, !selectedCustomer && theme.screens.homeScreen.rowValueDisabled]} numberOfLines={1}>{!selectedCustomer ? 'Select Customer First' : (isFetchingProjects ? 'Loading...' : (selectedProject || 'Select'))}</Text>
+                        {isFetchingProjects ? <ActivityIndicator size="small" color={colors.textSecondary} style={theme.screens.homeScreen.rowSpinner} /> : <Ionicons name="chevron-forward" size={22} color={!selectedCustomer ? colors.borderLight : colors.textSecondary} style={theme.screens.homeScreen.rowChevron} />}
                     </View>
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.sectionContainer}>
-                <Text style={styles.sectionHeaderText}>MEDIA</Text>
+            <View style={theme.screens.homeScreen.sectionContainer}>
+                <Text style={theme.screens.homeScreen.sectionHeaderText}>MEDIA</Text>
                 <TouchableOpacity
                   style={[
-                    styles.buttonBase,
-                    isGeneratingReport && styles.buttonDisabled,
-                    { borderTopWidth: borders.widthHairline, borderTopColor: colors.borderLight }
+                    theme.screens.homeScreen.buttonBase,
+                    isGeneratingReport && theme.screens.homeScreen.buttonDisabled,
+                    theme.screens.homeScreen.firstRowInSection
                   ]}
                   onPress={showMediaSourceOptions}
                   disabled={isGeneratingReport || isFileProcessing}
                 >
-                  <View style={styles.buttonIconContainer}>
+                  <View style={theme.screens.homeScreen.buttonIconContainer}>
                     {selectedFile ? (
                       <Ionicons name="checkmark-circle-outline" size={22} color="#222" />
                     ) : (
                       <Ionicons name="add-circle-outline" size={22} color="#222" />
                     )}
                   </View>
-                  <Text style={[styles.buttonTextBase, (isGeneratingReport || isFileProcessing) && styles.buttonTextDisabled]}>
+                  <Text style={[theme.screens.homeScreen.buttonTextBase, (isGeneratingReport || isFileProcessing) && theme.screens.homeScreen.buttonTextDisabled]}>
                     {/* Conditional Text */}
                     {selectedFile ? 'Change Media' : 'Choose Media'}
                   </Text>
-                  <View style={styles.buttonChevronContainer}>
+                  <View style={theme.screens.homeScreen.buttonChevronContainer}>
                     {isFileProcessing ? <ActivityIndicator size="small" color="#888" /> : <Ionicons name="chevron-forward" size={22} color="#888" />} 
                   </View>
                 </TouchableOpacity>
 
                 {/* Only show the thumbnail, no filename, with play icon and X button */}
                 {selectedFile && !isGeneratingThumbnail && (
-                  <View style={styles.thumbnailPreviewWrapper}>
+                  <View style={theme.screens.homeScreen.thumbnailPreviewWrapper}>
                     <TouchableOpacity onPress={() => setIsPreviewModalVisible(true)}>
-                      <View style={styles.thumbnailPreviewContainer}>
-                        <Image source={{ uri: thumbnailUri || '' }} style={styles.thumbnailPreviewImage} />
-                        <Ionicons name="play-circle" size={40} color="#222" style={styles.thumbnailPlayIcon} />
+                      <View style={theme.screens.homeScreen.thumbnailPreviewContainer}>
+                        <Image source={{ uri: thumbnailUri || '' }} style={theme.screens.homeScreen.thumbnailPreviewImage} />
+                        <Ionicons name="play-circle" size={40} color="#222" style={theme.screens.homeScreen.thumbnailPlayIcon} />
                       </View>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.thumbnailRemoveButton}
+                      style={theme.screens.homeScreen.thumbnailRemoveButton}
                       onPress={() => { setSelectedFile(null); setThumbnailUri(null); }}
                       accessibilityLabel="Remove selected media"
                     >
@@ -1022,8 +1022,8 @@ const HomeScreen: React.FC = () => {
             {/* --- Generate Report Button --- */}
             <TouchableOpacity
                 style={[
-                    styles.generateButton,
-                    (!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport) && styles.disabledButton,
+                    theme.screens.homeScreen.generateButton,
+                    (!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport) && theme.screens.homeScreen.disabledButton,
                 ]}
                 onPress={handleUpload}
                 // disabled={!selectedFile || !selectedCustomer || selectedCustomer === ADD_NEW_CUSTOMER_OPTION || !selectedProject || selectedProject === ADD_NEW_PROJECT_OPTION || isGeneratingReport} // TEMPORARILY REMOVED FOR DEBUGGING
@@ -1031,7 +1031,7 @@ const HomeScreen: React.FC = () => {
                 {isGeneratingReport ? (
                     <ActivityIndicator color={colors.textPrimary} />
                 ) : (
-                    <Text style={styles.generateButtonText}>Generate Report</Text>
+                    <Text style={theme.screens.homeScreen.generateButtonText}>Generate Report</Text>
                 )}
             </TouchableOpacity>
 
@@ -1056,14 +1056,14 @@ const HomeScreen: React.FC = () => {
           animationType="fade"
           onRequestClose={() => setIsPreviewModalVisible(false)}
         >
-          <SafeAreaView style={styles.previewModalSafeArea}>
-            <View style={styles.previewModalOverlay}>
-              <View style={styles.previewModalContent}>
+          <SafeAreaView style={theme.screens.homeScreen.previewModalSafeArea}>
+            <View style={theme.screens.homeScreen.previewModalOverlay}>
+              <View style={theme.screens.homeScreen.previewModalContent}>
                 {selectedFile?.uri && (
                   <Video
                     ref={videoPlayerRef}
                     source={{ uri: selectedFile.uri }}
-                    style={styles.previewVideoPlayer}
+                    style={theme.screens.homeScreen.previewVideoPlayer}
                     useNativeControls
                     resizeMode={ResizeMode.CONTAIN}
                     onError={(error) => {
@@ -1081,7 +1081,7 @@ const HomeScreen: React.FC = () => {
                   />
                 )}
                 <TouchableOpacity
-                  style={styles.previewModalCloseButton}
+                  style={theme.screens.homeScreen.previewModalCloseButton}
                   onPress={() => setIsPreviewModalVisible(false)}
                   accessibilityLabel="Close preview"
                 >
@@ -1107,531 +1107,13 @@ const HomeScreen: React.FC = () => {
         )}
 
         {isGeneratingReport && (
-          <View style={styles.loadingOverlay} pointerEvents="auto">
+          <View style={theme.screens.homeScreen.loadingOverlay} pointerEvents="auto">
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Generating report…</Text>
+            <Text style={theme.screens.homeScreen.loadingText}>Generating report…</Text>
           </View>
         )}
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContainer: {
-      flexGrow: 1,
-      paddingVertical: spacing.lg,
-  },
-  title: {
-    fontSize: typography.fontSizeXL,
-    fontWeight: typography.fontWeightBold as 'bold',
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-    lineHeight: typography.lineHeightXL,
-    paddingHorizontal: spacing.lg,
-  },
-  description: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSizeM,
-    marginBottom: spacing.xl,
-    textAlign: 'center',
-    lineHeight: typography.lineHeightM,
-    paddingHorizontal: spacing.lg,
-  },
-  sectionContainer: {
-      marginBottom: spacing.xl,
-  },
-  sectionHeaderText: {
-      paddingBottom: spacing.xs,
-      marginBottom: spacing.xxs,
-      paddingHorizontal: spacing.lg,
-      color: colors.textSecondary,
-      fontSize: typography.fontSizeS,
-      fontWeight: typography.fontWeightMedium as '500',
-      textTransform: 'uppercase',
-  },
-  rowContainer: {
-      backgroundColor: colors.surface,
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderBottomWidth: borders.widthHairline,
-      borderBottomColor: colors.borderLight,
-      minHeight: 48,
-  },
-  firstRowInSection: {
-      borderTopWidth: borders.widthHairline,
-      borderTopColor: colors.borderLight,
-  },
-  rowDisabled: {
-      opacity: 0.6,
-  },
-  rowIconContainer: {
-      marginRight: spacing.md,
-      width: 24,
-      alignItems: 'center',
-  },
-  rowLabel: {
-      fontSize: typography.fontSizeM,
-      color: colors.textPrimary,
-      flexGrow: 1,
-      flexShrink: 0,
-  },
-  rowLabelDisabled: {
-      color: colors.textDisabled,
-  },
-  rowValueContainer: {
-      flexShrink: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginLeft: spacing.sm,
-  },
-  rowValueText: {
-      fontSize: typography.fontSizeM,
-      color: colors.textSecondary,
-      textAlign: 'right',
-      marginRight: spacing.xs,
-  },
-  rowValueDisabled: {
-      color: colors.textDisabled,
-      fontStyle: 'italic',
-  },
-  rowChevron: {
-  },
-  rowSpinner: {
-      marginLeft: spacing.xs, // Add some space for spinner
-  },
-  fetchErrorText: {
-     color: colors.error,
-     fontSize: typography.fontSizeS,
-     textAlign: 'center',
-     paddingVertical: spacing.sm,
-     marginHorizontal: spacing.lg,
-     fontWeight: typography.fontWeightMedium as '500',
-     backgroundColor: colors.errorBg,
-     borderRadius: borders.radiusSmall,
-     marginBottom: spacing.sm,
-     borderWidth: borders.widthThin,
-     borderColor: colors.errorBorder,
-   },
-  uploadSectionContent: {
-    backgroundColor: colors.surface,
-    borderTopWidth: borders.widthHairline,
-    borderTopColor: colors.borderLight,
-    borderBottomWidth: borders.widthHairline,
-    borderBottomColor: colors.borderLight,
-    paddingHorizontal: 0,
-    marginBottom: spacing.xl,
-  },
-  buttonBase: {
-      backgroundColor: colors.surface,
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderBottomWidth: borders.widthHairline,
-      borderBottomColor: colors.borderLight,
-      minHeight: 48,
-      width: '100%',
-      justifyContent: 'space-between',
-  },
-  buttonDisabled: {
-      opacity: 0.6,
-  },
-  buttonTextBase: {
-      fontSize: typography.fontSizeM,
-      color: colors.textPrimary,
-      flexShrink: 1,
-      marginLeft: spacing.md,
-  },
-  buttonTextDisabled: {
-      color: colors.textDisabled,
-  },
-  buttonIconContainer: {
-      width: 24,
-      alignItems: 'center',
-  },
-  buttonChevronContainer: {
-      marginLeft: spacing.sm,
-  },
-  buttonActivityIndicator: {
-  },
-  thumbnailContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.md,
-    padding: spacing.sm,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: borders.radiusMedium,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  thumbnail: {
-    width: 60,
-    height: 60,
-    borderRadius: borders.radiusSmall,
-    backgroundColor: colors.borderLight,
-  },
-  thumbnailPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: borders.radiusSmall,
-    backgroundColor: colors.surfaceAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.xs,
-  },
-  thumbnailPlaceholderText: {
-      fontSize: typography.fontSizeXS,
-      color: colors.textSecondary,
-      textAlign: 'center',
-      marginTop: spacing.xxs,
-  },
-  thumbnailInfoContainer: {
-      flex: 1,
-      marginLeft: spacing.md,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-  },
-  thumbnailFileName: {
-    fontSize: typography.fontSizeS,
-    color: colors.textPrimary,
-    fontWeight: typography.fontWeightMedium as '500',
-    flexShrink: 1, // Allow text to shrink
-    marginRight: spacing.xs, // Space before clear button
-  },
-  thumbnailClearButton: {
-     padding: spacing.xs,
-  },
-  resultsContainerBase: {
-      marginTop: 0,
-      marginHorizontal: 0,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      backgroundColor: colors.surface,
-      borderTopWidth: borders.widthHairline,
-      borderTopColor: colors.borderLight,
-      borderBottomWidth: borders.widthHairline,
-      borderBottomColor: colors.borderLight,
-  },
-  resultsContainerLoading: {
-      alignItems: 'center',
-  },
-  resultsContainerError: {
-  },
-  resultTextBase: {
-      fontSize: typography.fontSizeM,
-      lineHeight: typography.lineHeightM,
-      marginBottom: spacing.sm,
-      textAlign: 'left',
-  },
-  resultTextLoading: {
-      color: colors.textSecondary,
-      textAlign: 'center',
-      fontWeight: typography.fontWeightNormal as 'normal',
-  },
-  resultTextError: {
-      color: colors.error,
-      fontWeight: typography.fontWeightNormal as 'normal',
-  },
-  resultLoadingIndicator: {
-      marginTop: spacing.sm,
-      alignSelf: 'center',
-  },
-  modalContainer: {
-     flex: 1,
-     justifyContent: 'center',
-     alignItems: 'center',
-     paddingBottom: 100,
-  },
-  videoContainer: {
-     width: Dimensions.get('window').width * 0.9,
-     height: Dimensions.get('window').height * 0.7,
-     backgroundColor: colors.background,
-     borderRadius: borders.radiusMedium,
-     overflow: 'hidden',
-     marginBottom: spacing.lg,
-  },
-  videoPlayer: {
-     width: '100%',
-     height: '100%',
-  },
-  closeButton: {
-  },
-  generateButton: {
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
-    marginHorizontal: spacing.lg,
-    minHeight: 44,
-    borderTopWidth: borders.widthHairline,
-    borderBottomWidth: borders.widthHairline,
-    borderTopColor: colors.borderLight,
-    borderBottomColor: colors.borderLight,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  generateButtonText: {
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    fontWeight: typography.fontWeightNormal as 'normal',
-  },
-  // --- Instruction Styles ---
-  instructionsContainer: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface, 
-    borderRadius: borders.radiusMedium,
-    padding: spacing.md,
-    marginBottom: spacing.lg, // Space before the next section
-    borderWidth: borders.widthThin,
-    borderColor: colors.borderLight,
-  },
-  instructionsIcon: {
-    marginRight: spacing.sm,
-    marginTop: 1, // Align icon slightly better
-  },
-  instructionsTextContainer: {
-    flex: 1,
-  },
-  instructionsTitle: {
-    fontSize: typography.fontSizeS,
-    fontWeight: typography.fontWeightBold as 'bold',
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  instructionsText: {
-    fontSize: typography.fontSizeS-1, // Slightly smaller
-    lineHeight: typography.lineHeightS,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  instructionsBold: {
-    fontWeight: typography.fontWeightBold as 'bold',
-    color: colors.textPrimary, // Make bold parts stand out more
-  },
-  // -------------------------
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  tipsButton: {
-    padding: spacing.sm,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tipsModalContainer: {
-    backgroundColor: colors.surface,
-    padding: spacing.lg,
-    borderRadius: borders.radiusMedium,
-    width: Dimensions.get('window').width * 0.9,
-    maxHeight: Dimensions.get('window').height * 0.9,
-  },
-  tipsModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  tipsModalTitle: {
-    fontSize: typography.fontSizeM,
-    fontWeight: typography.fontWeightBold as 'bold',
-    color: colors.textPrimary,
-  },
-  tipsModalCloseButton: {
-    padding: spacing.sm,
-  },
-  tipsList: {
-    marginBottom: spacing.lg,
-  },
-  tipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  tipIcon: {
-    marginRight: spacing.sm,
-  },
-  tipText: {
-    flex: 1,
-  },
-  tipBold: {
-    fontWeight: typography.fontWeightBold as 'bold',
-    color: colors.textPrimary,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 18,
-    color: colors.textPrimary,
-    fontWeight: 'bold',
-  },
-  mediaCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 12,
-    marginTop: 16,
-    marginBottom: 8,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  mediaThumbnailWrapper: {
-    position: 'relative',
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  mediaThumbnail: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-    backgroundColor: colors.borderLight,
-  },
-  playIcon: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -18,
-    marginTop: -18,
-  },
-  removeMediaButton: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 14,
-    padding: 2,
-    zIndex: 2,
-  },
-  mediaFileName: {
-    fontSize: typography.fontSizeS,
-    color: colors.textPrimary,
-    fontWeight: '500',
-    marginTop: 2,
-    textAlign: 'center',
-    maxWidth: 120,
-  },
-  previewModalSafeArea: {
-    flex: 1,
-  },
-  previewModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewModalContent: {
-    width: '90%',
-    maxWidth: 400,
-    aspectRatio: 9/16,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-    position: 'relative',
-  },
-  previewVideoPlayer: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 20,
-    backgroundColor: '#000',
-  },
-  previewModalCloseButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  thumbnailPreviewWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-    position: 'relative',
-  },
-  thumbnailPreviewContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#eee',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#ccc',
-  },
-  thumbnailPreviewImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-    backgroundColor: '#eee',
-  },
-  thumbnailPlayIcon: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -20,
-    marginTop: -20,
-    opacity: 0.8,
-  },
-  thumbnailRemoveButton: {
-    position: 'absolute',
-    top: 4,
-    right: '25%',
-    backgroundColor: '#222',
-    borderRadius: 14,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-});
 
 export default HomeScreen; 

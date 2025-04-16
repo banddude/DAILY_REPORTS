@@ -1,4 +1,4 @@
-import { StyleSheet, Platform } from 'react-native';
+import { StyleSheet, Platform, Dimensions } from 'react-native';
 import type { ViewStyle, TextStyle, ImageStyle, FlexAlignType } from 'react-native';
 
 // --- Modern Color Palette ---
@@ -1321,6 +1321,794 @@ const theme = {
             flex: 1,
             paddingTop: 0,
             marginTop: 0,
+        } as ViewStyle,
+    },
+    reportEditorScreen: {
+      safeArea: {
+        flex: 1,
+        backgroundColor: colors.background,
+      } as ViewStyle,
+      container: {
+        flex: 1,
+      } as ViewStyle,
+      centered: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center' as FlexAlignType,
+        padding: spacing.lg,
+        backgroundColor: colors.background,
+      } as ViewStyle,
+      loadingText: {
+        marginTop: spacing.sm,
+        fontSize: typography.fontSizeM,
+        color: colors.textSecondary,
+      } as TextStyle,
+      errorText: {
+        color: colors.error,
+        fontSize: typography.fontSizeM,
+        textAlign: 'center',
+        marginBottom: spacing.md,
+        fontWeight: typography.fontWeightBold as '600',
+      } as TextStyle,
+      placeholderText: {
+          fontSize: typography.fontSizeS,
+          color: colors.textSecondary,
+          fontStyle: 'italic',
+          textAlign: 'center',
+          paddingVertical: spacing.lg,
+      } as TextStyle,
+      placeholderTextSmall: {
+          fontSize: typography.fontSizeXS,
+          color: colors.textSecondary,
+          fontStyle: 'italic',
+          textAlign: 'center',
+          marginTop: spacing.xs,
+      } as TextStyle,
+      metaContainer: {
+        alignItems: 'center' as FlexAlignType,
+        marginBottom: spacing.lg,
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.md,
+      } as ViewStyle,
+      logo: {
+        maxHeight: 50,
+        width: '50%',
+        marginBottom: spacing.md,
+      } as ImageStyle,
+      mainTitle: {
+        fontSize: typography.fontSizeXL,
+        fontWeight: typography.fontWeightBold as '600',
+        color: colors.textPrimary,
+        marginBottom: spacing.md,
+        textAlign: 'center',
+      } as TextStyle,
+      metaInfo: {
+        fontSize: typography.fontSizeS,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: spacing.xs,
+        lineHeight: typography.lineHeightS,
+      } as TextStyle,
+      companyInfo: {
+        marginTop: spacing.md,
+      } as ViewStyle,
+      companyName: {
+          fontWeight: typography.fontWeightMedium as '500',
+          fontSize: typography.fontSizeS,
+          color: colors.textPrimary,
+          textAlign: 'center',
+          marginBottom: spacing.xs,
+      } as TextStyle,
+      statusContainer: {
+         marginHorizontal: spacing.lg,
+         marginBottom: spacing.md,
+      } as ViewStyle,
+      statusText: {
+          textAlign: 'center',
+          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.sm,
+          borderRadius: borders.radiusSmall,
+          fontWeight: typography.fontWeightMedium as '500',
+          fontSize: typography.fontSizeXS,
+          overflow: 'hidden',
+          borderWidth: borders.widthThin,
+      } as TextStyle,
+      statusSuccess: {
+          backgroundColor: colors.successBg,
+          color: colors.successText,
+          borderColor: colors.successBorder,
+      } as TextStyle,
+      statusError: {
+          backgroundColor: colors.errorBg,
+          color: colors.error,
+          borderColor: colors.errorBorder,
+      } as TextStyle,
+      sectionContainer: {
+          marginBottom: spacing.xl,
+      } as ViewStyle,
+      sectionHeader: {
+          paddingBottom: spacing.xs,
+          marginBottom: spacing.xxs,
+          paddingHorizontal: spacing.lg,
+          color: colors.textSecondary,
+          fontSize: typography.fontSizeS,
+          fontWeight: typography.fontWeightMedium as '500',
+          textTransform: 'uppercase',
+      } as TextStyle,
+      rowContainer: {
+          backgroundColor: colors.surface,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.sm,
+          flexDirection: 'row',
+          alignItems: 'flex-start' as FlexAlignType,
+          borderBottomWidth: borders.widthHairline,
+          borderBottomColor: colors.borderLight,
+          minHeight: 48,
+      } as ViewStyle,
+      firstRowInSection: {
+          borderTopWidth: borders.widthHairline,
+          borderTopColor: colors.borderLight,
+      } as ViewStyle,
+      rowContentContainer: {
+         flex: 1,
+         marginRight: spacing.sm,
+      } as ViewStyle,
+      rowInput: {
+          fontSize: typography.fontSizeM,
+          color: colors.textPrimary,
+          paddingVertical: Platform.OS === 'ios' ? 6 : 4,
+          paddingHorizontal: 0,
+          textAlignVertical: 'top',
+      } as TextStyle,
+      rowMultiInputContainer: {
+         // No specific styles, used for layout
+      } as ViewStyle,
+      fieldLabel: {
+          fontSize: typography.fontSizeXS,
+          fontWeight: typography.fontWeightMedium as '500',
+          color: colors.textSecondary,
+          marginBottom: spacing.xxs,
+          marginTop: spacing.xs,
+      } as TextStyle,
+      removeItemButton: {
+          padding: spacing.sm,
+          marginLeft: 'auto',
+          justifyContent: 'center',
+          alignItems: 'center' as FlexAlignType,
+      } as ViewStyle,
+      addItemRow: {
+         justifyContent: 'space-between',
+         alignItems: 'center' as FlexAlignType,
+         minHeight: 44,
+         paddingVertical: spacing.xs,
+         borderBottomWidth: 0,
+         // Inherits rowContainer styles like background, paddingHorizontal
+      } as ViewStyle,
+      addRowIcon: {
+         marginRight: spacing.md,
+      } as ViewStyle, // Typically holds an icon component
+      addRowText: {
+         flex: 1,
+         fontSize: typography.fontSizeM,
+         color: colors.primary,
+         fontWeight: typography.fontWeightMedium as '500',
+      } as TextStyle,
+      imageItemRow: {
+         flexDirection: 'column',
+         alignItems: 'stretch' as FlexAlignType,
+         paddingVertical: spacing.md,
+         // Inherits rowContainer styles like background, paddingHorizontal, border
+      } as ViewStyle,
+      imageItemContent: {
+         marginBottom: spacing.md,
+      } as ViewStyle,
+      imagePreview: {
+          width: '100%',
+          aspectRatio: 16 / 9,
+          borderRadius: borders.radiusSmall,
+          backgroundColor: colors.borderLight,
+          marginBottom: spacing.md,
+      } as ImageStyle,
+      imagePreviewPlaceholder: {
+          width: '100%',
+          aspectRatio: 16 / 9,
+          borderRadius: borders.radiusSmall,
+          backgroundColor: colors.surfaceAlt,
+          borderWidth: borders.widthHairline,
+          borderColor: colors.border,
+          justifyContent: 'center',
+          alignItems: 'center' as FlexAlignType,
+          marginBottom: spacing.md,
+      } as ViewStyle,
+      captionContainer: {
+         // No specific styles needed, used for layout
+      } as ViewStyle,
+      removeImageButton: {
+          alignSelf: 'flex-end' as FlexAlignType,
+          flexDirection: 'row',
+          alignItems: 'center' as FlexAlignType,
+          padding: spacing.sm,
+          borderRadius: borders.radiusMedium,
+          borderWidth: borders.widthThin,
+          borderColor: colors.error,
+      } as ViewStyle,
+      removeButtonText: {
+          color: colors.error,
+          fontSize: typography.fontSizeS,
+          fontWeight: typography.fontWeightMedium as '500',
+          marginLeft: spacing.xs,
+      } as TextStyle,
+      uploadActivityContainer: {
+         flexDirection: 'row',
+         alignItems: 'center' as FlexAlignType,
+         marginLeft: spacing.sm,
+         paddingVertical: spacing.xs,
+      } as ViewStyle,
+      uploadActivityText: {
+         marginLeft: spacing.xs,
+         color: colors.textSecondary,
+         fontSize: typography.fontSizeXS,
+         fontStyle: 'italic',
+      } as TextStyle,
+      button: {
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borders.radiusMedium,
+        backgroundColor: colors.primary,
+        alignItems: 'center' as FlexAlignType,
+        justifyContent: 'center',
+        minHeight: 44,
+      } as ViewStyle,
+      buttonText: {
+        color: colors.textOnPrimary,
+        fontSize: typography.fontSizeM,
+        fontWeight: typography.fontWeightMedium as '500',
+      } as TextStyle,
+      headerButton: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: spacing.xs,
+      } as ViewStyle,
+      headerBackButtonContainer: {
+        flexDirection: 'row',
+        alignItems: 'center' as FlexAlignType,
+        paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md,
+      } as ViewStyle,
+      headerBackTitle: {
+        fontSize: typography.fontSizeM,
+        color: colors.textPrimary,
+        marginLeft: spacing.xs,
+      } as TextStyle,
+    },
+    homeScreen: {
+        safeArea: {
+            flex: 1,
+            backgroundColor: colors.background,
+        } as ViewStyle,
+        scrollContainer: {
+            flexGrow: 1,
+            paddingVertical: spacing.lg,
+        } as ViewStyle,
+        title: {
+            fontSize: typography.fontSizeXL,
+            fontWeight: typography.fontWeightBold as 'bold',
+            color: colors.textPrimary,
+            marginBottom: spacing.xs,
+            textAlign: 'center' as const,
+            lineHeight: typography.lineHeightXL,
+            paddingHorizontal: spacing.lg,
+        } as TextStyle,
+        description: {
+            color: colors.textSecondary,
+            fontSize: typography.fontSizeM,
+            marginBottom: spacing.xl,
+            textAlign: 'center' as const,
+            lineHeight: typography.lineHeightM,
+            paddingHorizontal: spacing.lg,
+        } as TextStyle,
+        sectionContainer: {
+            marginBottom: spacing.xl,
+        } as ViewStyle,
+        sectionHeaderText: {
+            paddingBottom: spacing.xs,
+            marginBottom: spacing.xxs,
+            paddingHorizontal: spacing.lg,
+            color: colors.textSecondary,
+            fontSize: typography.fontSizeS,
+            fontWeight: typography.fontWeightMedium as '500',
+            textTransform: 'uppercase',
+        } as TextStyle,
+        rowContainer: {
+            backgroundColor: colors.surface,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.sm,
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            borderBottomWidth: borders.widthHairline,
+            borderBottomColor: colors.borderLight,
+            minHeight: 48,
+        } as ViewStyle,
+        firstRowInSection: {
+            borderTopWidth: borders.widthHairline,
+            borderTopColor: colors.borderLight,
+        } as ViewStyle,
+        rowDisabled: {
+            opacity: 0.6,
+        } as ViewStyle,
+        rowIconContainer: {
+            marginRight: spacing.md,
+            width: 24,
+            alignItems: 'center' as FlexAlignType,
+        } as ViewStyle,
+        rowLabel: {
+            fontSize: typography.fontSizeM,
+            color: colors.textPrimary,
+            flexGrow: 1,
+            flexShrink: 0,
+        } as TextStyle,
+        rowLabelDisabled: {
+            color: colors.textDisabled,
+        } as TextStyle,
+        rowValueContainer: {
+            flexShrink: 1,
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            marginLeft: spacing.sm,
+        } as ViewStyle,
+        rowValueText: {
+            fontSize: typography.fontSizeM,
+            color: colors.textSecondary,
+            textAlign: 'right' as const,
+            marginRight: spacing.xs,
+        } as TextStyle,
+        rowValueDisabled: {
+            color: colors.textDisabled,
+            fontStyle: 'italic',
+        } as TextStyle,
+        rowChevron: {
+            // Empty - used for positioning icon
+        } as ViewStyle,
+        rowSpinner: {
+            marginLeft: spacing.xs, // Add some space for spinner
+        } as ViewStyle,
+        fetchErrorText: {
+            color: colors.error,
+            fontSize: typography.fontSizeS,
+            textAlign: 'center' as const,
+            paddingVertical: spacing.sm,
+            marginHorizontal: spacing.lg,
+            fontWeight: typography.fontWeightMedium as '500',
+            backgroundColor: colors.errorBg,
+            borderRadius: borders.radiusSmall,
+            marginBottom: spacing.sm,
+            borderWidth: borders.widthThin,
+            borderColor: colors.errorBorder,
+        } as TextStyle,
+        uploadSectionContent: { // Note: This style might be unused now
+            backgroundColor: colors.surface,
+            borderTopWidth: borders.widthHairline,
+            borderTopColor: colors.borderLight,
+            borderBottomWidth: borders.widthHairline,
+            borderBottomColor: colors.borderLight,
+            paddingHorizontal: 0,
+            marginBottom: spacing.xl,
+        } as ViewStyle,
+        buttonBase: {
+            backgroundColor: colors.surface,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.sm,
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            borderBottomWidth: borders.widthHairline,
+            borderBottomColor: colors.borderLight,
+            minHeight: 48,
+            width: '100%',
+            justifyContent: 'space-between',
+        } as ViewStyle,
+        buttonDisabled: {
+            opacity: 0.6,
+        } as ViewStyle,
+        buttonTextBase: {
+            fontSize: typography.fontSizeM,
+            color: colors.textPrimary, // Using a specific color ('#222') in original - adjust if needed
+            flexShrink: 1,
+            marginLeft: spacing.md,
+        } as TextStyle,
+        buttonTextDisabled: {
+            color: colors.textDisabled,
+        } as TextStyle,
+        buttonIconContainer: {
+            width: 24,
+            alignItems: 'center' as FlexAlignType,
+        } as ViewStyle,
+        buttonChevronContainer: {
+            marginLeft: spacing.sm,
+        } as ViewStyle,
+        buttonActivityIndicator: {
+            // Empty - potentially used for styling indicator within chevron container
+        } as ViewStyle,
+        thumbnailContainer: { // Note: This style might be unused now
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            marginTop: spacing.md,
+            padding: spacing.sm,
+            backgroundColor: colors.surfaceAlt,
+            borderRadius: borders.radiusMedium,
+            borderWidth: 1,
+            borderColor: colors.borderLight,
+        } as ViewStyle,
+        thumbnail: { // Note: This style might be unused now
+            width: 60,
+            height: 60,
+            borderRadius: borders.radiusSmall,
+            backgroundColor: colors.borderLight,
+        } as ImageStyle,
+        thumbnailPlaceholder: { // Note: This style might be unused now
+            width: 60,
+            height: 60,
+            borderRadius: borders.radiusSmall,
+            backgroundColor: colors.surfaceAlt,
+            justifyContent: 'center',
+            alignItems: 'center' as FlexAlignType,
+            borderWidth: 1,
+            borderColor: colors.borderLight,
+            padding: spacing.xs,
+        } as ViewStyle,
+        thumbnailPlaceholderText: { // Note: This style might be unused now
+            fontSize: typography.fontSizeXS,
+            color: colors.textSecondary,
+            textAlign: 'center' as const,
+            marginTop: spacing.xxs,
+        } as TextStyle,
+        thumbnailInfoContainer: { // Note: This style might be unused now
+            flex: 1,
+            marginLeft: spacing.md,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center' as FlexAlignType,
+        } as ViewStyle,
+        thumbnailFileName: { // Note: This style might be unused now
+            fontSize: typography.fontSizeS,
+            color: colors.textPrimary,
+            fontWeight: typography.fontWeightMedium as '500',
+            flexShrink: 1, // Allow text to shrink
+            marginRight: spacing.xs, // Space before clear button
+        } as TextStyle,
+        thumbnailClearButton: { // Note: This style might be unused now
+            padding: spacing.xs,
+        } as ViewStyle,
+        resultsContainerBase: {
+            marginTop: 0,
+            marginHorizontal: 0,
+            paddingVertical: spacing.md,
+            paddingHorizontal: spacing.lg,
+            backgroundColor: colors.surface,
+            borderTopWidth: borders.widthHairline,
+            borderTopColor: colors.borderLight,
+            borderBottomWidth: borders.widthHairline,
+            borderBottomColor: colors.borderLight,
+        } as ViewStyle,
+        resultsContainerLoading: {
+            alignItems: 'center' as FlexAlignType,
+        } as ViewStyle,
+        resultsContainerError: {
+            // Base already covers background
+        } as ViewStyle,
+        resultTextBase: {
+            fontSize: typography.fontSizeM,
+            lineHeight: typography.lineHeightM,
+            marginBottom: spacing.sm,
+            textAlign: 'left' as const,
+        } as TextStyle,
+        resultTextLoading: {
+            color: colors.textSecondary,
+            textAlign: 'center' as const,
+            fontWeight: typography.fontWeightNormal as 'normal',
+        } as TextStyle,
+        resultTextError: {
+            color: colors.error,
+            fontWeight: typography.fontWeightNormal as 'normal',
+        } as TextStyle,
+        resultLoadingIndicator: {
+            marginTop: spacing.sm,
+            alignSelf: 'center' as FlexAlignType,
+        } as ViewStyle,
+        modalContainer: { // Note: This style might be unused now
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center' as FlexAlignType,
+            paddingBottom: 100,
+        } as ViewStyle,
+        videoContainer: { // Note: This style might be unused now
+            width: Dimensions.get('window').width * 0.9,
+            height: Dimensions.get('window').height * 0.7,
+            backgroundColor: colors.background,
+            borderRadius: borders.radiusMedium,
+            overflow: 'hidden',
+            marginBottom: spacing.lg,
+        } as ViewStyle,
+        videoPlayer: { // Note: This style might be unused now
+            width: '100%',
+            height: '100%',
+        } as ImageStyle,
+        closeButton: {
+            // Empty - potentially used for modal close button styling
+        } as ViewStyle,
+        generateButton: {
+            backgroundColor: colors.surface,
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.lg,
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'center',
+            marginTop: spacing.xl,
+            marginHorizontal: spacing.lg,
+            minHeight: 44,
+            borderTopWidth: borders.widthHairline,
+            borderBottomWidth: borders.widthHairline,
+            borderTopColor: colors.borderLight,
+            borderBottomColor: colors.borderLight,
+        } as ViewStyle,
+        disabledButton: { // Applied in JSX logic, kept for reference or future use
+            opacity: 0.6,
+        } as ViewStyle,
+        generateButtonText: {
+            fontSize: typography.fontSizeM,
+            color: colors.textPrimary,
+            textAlign: 'center' as const,
+            fontWeight: typography.fontWeightNormal as 'normal',
+        } as TextStyle,
+        instructionsContainer: { // Note: This style might be unused now
+            flexDirection: 'row',
+            backgroundColor: colors.surface,
+            borderRadius: borders.radiusMedium,
+            padding: spacing.md,
+            marginBottom: spacing.lg, // Space before the next section
+            borderWidth: borders.widthThin,
+            borderColor: colors.borderLight,
+        } as ViewStyle,
+        instructionsIcon: { // Note: This style might be unused now
+            marginRight: spacing.sm,
+            marginTop: 1, // Align icon slightly better
+        } as ViewStyle,
+        instructionsTextContainer: { // Note: This style might be unused now
+            flex: 1,
+        } as ViewStyle,
+        instructionsTitle: { // Note: This style might be unused now
+            fontSize: typography.fontSizeS,
+            fontWeight: typography.fontWeightBold as 'bold',
+            color: colors.textPrimary,
+            marginBottom: spacing.xs,
+        } as TextStyle,
+        instructionsText: { // Note: This style might be unused now
+            fontSize: typography.fontSizeS - 1, // Slightly smaller
+            lineHeight: typography.lineHeightS,
+            color: colors.textSecondary,
+            marginBottom: spacing.xs,
+        } as TextStyle,
+        instructionsBold: { // Note: This style might be unused now
+            fontWeight: typography.fontWeightBold as 'bold',
+            color: colors.textPrimary, // Make bold parts stand out more
+        } as TextStyle,
+        headerRow: {
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            padding: spacing.lg,
+        } as ViewStyle,
+        tipsButton: {
+            padding: spacing.sm,
+        } as ViewStyle,
+        modalOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'center',
+            alignItems: 'center' as FlexAlignType,
+        } as ViewStyle,
+        tipsModalContainer: {
+            backgroundColor: colors.surface,
+            padding: spacing.lg,
+            borderRadius: borders.radiusMedium,
+            width: Dimensions.get('window').width * 0.9,
+            maxHeight: Dimensions.get('window').height * 0.9,
+        } as ViewStyle,
+        tipsModalHeader: {
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'space-between',
+            marginBottom: spacing.sm,
+        } as ViewStyle,
+        tipsModalTitle: {
+            fontSize: typography.fontSizeM,
+            fontWeight: typography.fontWeightBold as 'bold',
+            color: colors.textPrimary,
+        } as TextStyle,
+        tipsModalCloseButton: {
+            padding: spacing.sm,
+        } as ViewStyle,
+        tipsList: {
+            marginBottom: spacing.lg,
+        } as ViewStyle,
+        tipRow: {
+            flexDirection: 'row',
+            alignItems: 'center' as FlexAlignType,
+            marginBottom: spacing.xs,
+        } as ViewStyle,
+        tipIcon: {
+            marginRight: spacing.sm,
+        } as ViewStyle,
+        tipText: {
+            flex: 1,
+            // Inherits text styles? Check base Text component or add explicitly
+             fontSize: typography.fontSizeS,
+             color: colors.textSecondary,
+             lineHeight: typography.lineHeightS,
+        } as TextStyle,
+        tipBold: {
+            fontWeight: typography.fontWeightBold as 'bold',
+            color: colors.textPrimary,
+        } as TextStyle,
+        loadingOverlay: {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            justifyContent: 'center',
+            alignItems: 'center' as FlexAlignType,
+            zIndex: 100,
+        } as ViewStyle,
+        loadingText: {
+            marginTop: spacing.md, // Was 16
+            fontSize: 18, // Consider using typography.fontSizeL or M
+            color: colors.textPrimary,
+            fontWeight: 'bold', // Consider using typography.fontWeightBold
+        } as TextStyle,
+        mediaCard: { // Note: This style might be unused now
+            backgroundColor: colors.surface,
+            borderRadius: borders.radiusLarge, // Was 16
+            padding: spacing.sm + spacing.xs, // Was 12
+            marginTop: spacing.md, // Was 16
+            marginBottom: spacing.sm, // Was 8
+            alignItems: 'center' as FlexAlignType,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.08,
+            shadowRadius: 8,
+            elevation: 2,
+        } as ViewStyle,
+        mediaThumbnailWrapper: { // Note: This style might be unused now
+            position: 'relative',
+            width: 120,
+            height: 120,
+            borderRadius: borders.radiusLarge - 4, // Was 12
+            overflow: 'hidden',
+            marginBottom: spacing.sm, // Was 8
+        } as ViewStyle,
+        mediaThumbnail: { // Note: This style might be unused now
+            width: '100%',
+            height: '100%',
+            borderRadius: borders.radiusLarge - 4, // Was 12
+            backgroundColor: colors.borderLight,
+        } as ImageStyle,
+        playIcon: { // Note: This style might be unused now
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            marginLeft: -18,
+            marginTop: -18,
+        } as ViewStyle,
+        removeMediaButton: { // Note: This style might be unused now
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            borderRadius: 14, // Consider borders.radiusPill if fully round
+            padding: 2,
+            zIndex: 2,
+        } as ViewStyle,
+        mediaFileName: { // Note: This style might be unused now
+            fontSize: typography.fontSizeS,
+            color: colors.textPrimary,
+            fontWeight: typography.fontWeightMedium as '500',
+            marginTop: spacing.xxs, // Was 2
+            textAlign: 'center' as const,
+            maxWidth: 120,
+        } as TextStyle,
+        previewModalSafeArea: {
+            flex: 1,
+        } as ViewStyle,
+        previewModalOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            justifyContent: 'center',
+            alignItems: 'center' as FlexAlignType,
+        } as ViewStyle,
+        previewModalContent: {
+            width: '90%',
+            maxWidth: 400,
+            aspectRatio: 9 / 16,
+            backgroundColor: colors.surface, // Was #fff
+            borderRadius: 20, // Consider borders.radiusLarge+4 or specific value
+            overflow: 'hidden',
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+            elevation: 8,
+            position: 'relative',
+        } as ViewStyle,
+        previewVideoPlayer: {
+            width: '100%',
+            height: '100%',
+            borderRadius: 20, // Match previewModalContent
+            backgroundColor: '#000', // Keep black for video background
+        } as ImageStyle,
+        previewModalCloseButton: {
+            position: 'absolute',
+            top: spacing.sm + spacing.xs, // Was 12
+            right: spacing.sm + spacing.xs, // Was 12
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            borderRadius: 20, // Half of width/height
+            width: 40,
+            height: 40,
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'center',
+            zIndex: 10,
+            borderWidth: 2, // Keep explicit?
+            borderColor: '#fff', // Keep explicit white?
+        } as ViewStyle,
+        thumbnailPreviewWrapper: {
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'center',
+            marginTop: spacing.md, // Was 16
+            marginBottom: spacing.sm, // Was 8
+            position: 'relative',
+        } as ViewStyle,
+        thumbnailPreviewContainer: {
+            width: 120,
+            height: 120,
+            borderRadius: borders.radiusLarge - 4, // Was 12
+            overflow: 'hidden',
+            backgroundColor: '#eee', // Consider colors.borderLight or surfaceAlt
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'center',
+            borderWidth: 1, // borders.widthThin
+            borderColor: '#ccc', // Consider colors.border
+        } as ViewStyle,
+        thumbnailPreviewImage: {
+            width: '100%',
+            height: '100%',
+            borderRadius: borders.radiusLarge - 4, // Was 12
+            backgroundColor: '#eee', // Consider colors.borderLight or surfaceAlt
+        } as ImageStyle,
+        thumbnailPlayIcon: {
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            marginLeft: -20, // Half of icon size (40)
+            marginTop: -20, // Half of icon size (40)
+            opacity: 0.8,
+            color: '#222' // Consider colors.textPrimary
+        } as ViewStyle,
+        thumbnailRemoveButton: {
+            position: 'absolute',
+            top: spacing.xs, // Was 4
+            // Original used '25%' right offset, which is hard to maintain.
+            // Positioning relative to the 120x120 wrapper might be better.
+            // Example: right: (Dimensions.get('window').width / 2) - (120 / 2) + (120/2) - (28/2) - 4? // Complex.
+            // Let's keep the percentage for now, but acknowledge it's brittle.
+             right: '25%',
+            backgroundColor: '#222', // Consider colors.textPrimary or a dark grey
+            borderRadius: 14, // Half of width/height
+            width: 28,
+            height: 28,
+            alignItems: 'center' as FlexAlignType,
+            justifyContent: 'center',
+            zIndex: 2,
+            borderWidth: 2, // Keep explicit?
+            borderColor: '#fff', // Keep explicit white?
         } as ViewStyle,
     },
   },

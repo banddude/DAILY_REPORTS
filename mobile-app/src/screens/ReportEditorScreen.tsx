@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useContext, useLayoutEffect } from 'react';
 import {
-  StyleSheet,
   Text,
   View,
   ScrollView,
@@ -14,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, spacing, typography, borders } from '../theme/theme';
+import theme, { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config';
 import { useAuth } from '../context/AuthContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -514,7 +513,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
       if (keyParts.length > 1) {
           keyParts[keyParts.length - 1] = 'report-viewer.html'; // Replace JSON filename with HTML filename
           const viewerKey = keyParts.join('/');
-          // Assuming S3 bucket structure matches config
+          // Construct URL using config values (assuming S3 is used)
           viewerUrl = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${viewerKey}`;
           console.log("Editor: Constructed viewer URL for back button:", viewerUrl);
       } else {
@@ -525,7 +524,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity 
-          style={styles.headerBackButtonContainer}
+          style={theme.screens.reportEditorScreen.headerBackButtonContainer}
           onPress={() => {
             if (viewerUrl) {
                 console.log("Editor: Navigating back to WebViewer with URL:", viewerUrl);
@@ -542,12 +541,12 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
             size={24} 
             color={loading !== false || !viewerUrl ? colors.textDisabled : colors.textPrimary}
           />
-          <Text style={styles.headerBackTitle}>Report View</Text> 
+          <Text style={theme.screens.reportEditorScreen.headerBackTitle}>Report View</Text> 
         </TouchableOpacity>
       ),
       headerRight: () => (
         <TouchableOpacity 
-          style={[styles.headerButton, { marginRight: spacing.xs }]} // Add small right margin
+          style={[theme.screens.reportEditorScreen.headerButton, { marginRight: spacing.xs }]} // Use theme style
           onPress={saveChanges} 
           disabled={loading !== false /* Add check for unchanged data later */} 
         >
@@ -563,7 +562,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
         </TouchableOpacity>
       ),
     });
-  }, [navigation, saveChanges, loading, reportKey]); // Added reportKey dependency
+  }, [navigation, saveChanges, loading, reportKey]); // Re-added reportKey dependency
 
   // --- Render Functions (Adjusted for Row Style) ---
 
@@ -615,18 +614,18 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
     }
 
     return (
-      <View style={styles.metaContainer}>
-        {logoUrl && <Image source={{ uri: logoUrl }} style={styles.logo} resizeMode="contain" />}
-        <Text style={styles.mainTitle}>Edit Daily Report</Text>
-        <Text style={styles.metaInfo}>Date: {date}</Text>
-        <Text style={styles.metaInfo}>Prepared By: {prepared.name || 'N/A'} {prepared.email ? `(${prepared.email})` : ''}</Text>
+      <View style={theme.screens.reportEditorScreen.metaContainer}>
+        {logoUrl && <Image source={{ uri: logoUrl }} style={theme.screens.reportEditorScreen.logo} resizeMode="contain" />}
+        <Text style={theme.screens.reportEditorScreen.mainTitle}>Edit Daily Report</Text>
+        <Text style={theme.screens.reportEditorScreen.metaInfo}>Date: {date}</Text>
+        <Text style={theme.screens.reportEditorScreen.metaInfo}>Prepared By: {prepared.name || 'N/A'} {prepared.email ? `(${prepared.email})` : ''}</Text>
         {company.name && (
-          <View style={styles.companyInfo}>
-            <Text style={styles.companyName}>{company.name}</Text>
+          <View style={theme.screens.reportEditorScreen.companyInfo}>
+            <Text style={theme.screens.reportEditorScreen.companyName}>{company.name}</Text>
             {/* Render the constructed address string */} 
-            {addressString ? <Text style={styles.metaInfo}>{addressString}</Text> : null}
+            {addressString ? <Text style={theme.screens.reportEditorScreen.metaInfo}>{addressString}</Text> : null}
             {/* Render the constructed contact string */} 
-            {contactString ? <Text style={styles.metaInfo}>{contactString}</Text> : null}
+            {contactString ? <Text style={theme.screens.reportEditorScreen.metaInfo}>{contactString}</Text> : null}
           </View>
         )}
       </View>
@@ -649,17 +648,17 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
       <View 
         key={`${listField}-${index}`} 
         style={[
-          styles.rowContainer, // Base row style
-          isFirst && styles.firstRowInSection, // Add top border if first
+          theme.screens.reportEditorScreen.rowContainer, // Base row style
+          isFirst && theme.screens.reportEditorScreen.firstRowInSection, // Add top border if first
           // No bottom border needed if rendered inside a section container?
           // isLast && { borderBottomWidth: 0 } 
         ]}
       >
-        <View style={styles.rowContentContainer}> 
+        <View style={theme.screens.reportEditorScreen.rowContentContainer}> 
           {/* Render specific inputs based on type */}
           {itemType === 'simple' && (
             <TextInput
-              style={styles.rowInput} // Simplified input style
+              style={theme.screens.reportEditorScreen.rowInput} // Simplified input style
               value={String(item)}
               onChangeText={(text) => handleListChange(listField, index, null, text)}
               placeholder={placeholder}
@@ -669,32 +668,32 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
             />
           )}
           {itemType === 'material' && (
-             <View style={styles.rowMultiInputContainer}>
-               <Text style={styles.fieldLabel}>Name:</Text>
-               <TextInput style={styles.rowInput} value={item.materialName || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'materialName', text)} placeholder="Material Name" placeholderTextColor={colors.textSecondary} editable={loading === false} />
-               <Text style={styles.fieldLabel}>Status:</Text>
-               <TextInput style={styles.rowInput} value={item.status || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'status', text)} placeholder="Status (e.g., Delivered, Installed)" placeholderTextColor={colors.textSecondary} editable={loading === false} />
-               <Text style={styles.fieldLabel}>Note:</Text>
-               <TextInput style={styles.rowInput} value={item.note || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'note', text)} placeholder="Optional Note" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline />
+             <View style={theme.screens.reportEditorScreen.rowMultiInputContainer}>
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Name:</Text>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.materialName || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'materialName', text)} placeholder="Material Name" placeholderTextColor={colors.textSecondary} editable={loading === false} />
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Status:</Text>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.status || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'status', text)} placeholder="Status (e.g., Delivered, Installed)" placeholderTextColor={colors.textSecondary} editable={loading === false} />
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Note:</Text>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.note || ''} onChangeText={(text) => handleListChange<MaterialItem>(listField, index, 'note', text)} placeholder="Optional Note" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline />
              </View>
           )}
           {itemType === 'issue' && (
-            <View style={styles.rowMultiInputContainer}>
-               <Text style={styles.fieldLabel}>Description:</Text>
-               <TextInput style={styles.rowInput} value={item.description || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'description', text)} placeholder="Issue Description" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
-               <Text style={styles.fieldLabel}>Status:</Text>
+            <View style={theme.screens.reportEditorScreen.rowMultiInputContainer}>
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Description:</Text>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.description || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'description', text)} placeholder="Issue Description" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Status:</Text>
                {/* TODO: Implement Picker */} 
-               <TextInput style={styles.rowInput} value={item.status || 'Open'} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'status', text)} placeholder="Open / Resolved / Needs Monitoring" placeholderTextColor={colors.textSecondary} editable={loading === false} />
-               <Text style={styles.fieldLabel}>Impact:</Text>
-               <TextInput style={styles.rowInput} value={item.impact || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'impact', text)} placeholder="Impact (Optional)" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
-               <Text style={styles.fieldLabel}>Resolution:</Text>
-               <TextInput style={styles.rowInput} value={item.resolution || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'resolution', text)} placeholder="Resolution (Optional)" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.status || 'Open'} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'status', text)} placeholder="Open / Resolved / Needs Monitoring" placeholderTextColor={colors.textSecondary} editable={loading === false} />
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Impact:</Text>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.impact || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'impact', text)} placeholder="Impact (Optional)" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
+               <Text style={theme.screens.reportEditorScreen.fieldLabel}>Resolution:</Text>
+               <TextInput style={theme.screens.reportEditorScreen.rowInput} value={item.resolution || ''} onChangeText={(text) => handleListChange<IssueItem>(listField, index, 'resolution', text)} placeholder="Resolution (Optional)" placeholderTextColor={colors.textSecondary} editable={loading === false} multiline/>
              </View>
           )}
         </View>
          {/* Remove Button - Positioned absolutely or within the row */}
          <TouchableOpacity
-           style={styles.removeItemButton} // Adjusted style?
+           style={theme.screens.reportEditorScreen.removeItemButton} // Adjusted style?
            onPress={() => removeItemFromList(listField, index)}
            disabled={!!loading}
          >
@@ -708,12 +707,12 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
   const renderAddItemButton = (label: string, listField: keyof ReportData, itemType: 'simple' | 'issue' | 'material') => {
     return (
       <TouchableOpacity
-        style={[styles.rowContainer, styles.addItemRow]} // Style as a tappable row
+        style={[theme.screens.reportEditorScreen.rowContainer, theme.screens.reportEditorScreen.addItemRow]} // Style as a tappable row
         onPress={() => addItemToList(listField, itemType)}
         disabled={!!loading}
       >
-         <Ionicons name="add-circle-outline" size={22} color={colors.primary} style={styles.addRowIcon} />
-         <Text style={styles.addRowText}>Add {label.slice(0,-1)}</Text>
+         <Ionicons name="add-circle-outline" size={22} color={colors.primary} style={theme.screens.reportEditorScreen.addRowIcon} />
+         <Text style={theme.screens.reportEditorScreen.addRowText}>Add {label.slice(0,-1)}</Text>
          <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} />
       </TouchableOpacity>
     );
@@ -729,24 +728,24 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
       <View 
         key={img.fileName || index} 
         style={[ 
-          styles.rowContainer, // Use row style
-          styles.imageItemRow, // Specific padding/style for image row
-          isFirst && styles.firstRowInSection, 
+          theme.screens.reportEditorScreen.rowContainer, // Use row style
+          theme.screens.reportEditorScreen.imageItemRow, // Specific padding/style for image row
+          isFirst && theme.screens.reportEditorScreen.firstRowInSection, 
         ]}
       >
-        <View style={styles.imageItemContent}> 
+        <View style={theme.screens.reportEditorScreen.imageItemContent}> 
             {imageUrl ? (
-                <Image source={{ uri: imageUrl }} style={styles.imagePreview} resizeMode="cover" />
+                <Image source={{ uri: imageUrl }} style={theme.screens.reportEditorScreen.imagePreview} resizeMode="cover" />
             ) : (
-                <View style={styles.imagePreviewPlaceholder}>
+                <View style={theme.screens.reportEditorScreen.imagePreviewPlaceholder}>
                     <Ionicons name="image-outline" size={40} color={colors.border} />
-                    <Text style={styles.placeholderTextSmall}>Preview unavailable</Text>
+                    <Text style={theme.screens.reportEditorScreen.placeholderTextSmall}>Preview unavailable</Text>
                 </View>
             )}
-            <View style={styles.captionContainer}>
-                <Text style={styles.fieldLabel}>Caption:</Text>
+            <View style={theme.screens.reportEditorScreen.captionContainer}>
+                <Text style={theme.screens.reportEditorScreen.fieldLabel}>Caption:</Text>
                 <TextInput
-                    style={styles.rowInput} // Use row input style
+                    style={theme.screens.reportEditorScreen.rowInput} // Use row input style
                     value={img.caption || ''}
                     onChangeText={(text) => handleCaptionChange(index, text)}
                     placeholder="Enter caption..."
@@ -757,7 +756,7 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
             </View>
         </View>
          <TouchableOpacity
-             style={styles.removeImageButton} // Specific style for image remove
+             style={theme.screens.reportEditorScreen.removeImageButton} // Specific style for image remove
              onPress={() => handleRemoveImage(img.fileName)}
              disabled={!!loading}
          >
@@ -771,12 +770,12 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
   const renderUploadImageButton = () => {
     return (
       <TouchableOpacity
-        style={[styles.rowContainer, styles.addItemRow]} // Style as tappable row
+        style={[theme.screens.reportEditorScreen.rowContainer, theme.screens.reportEditorScreen.addItemRow]} // Style as tappable row
         onPress={pickImage}
         disabled={!!loading}
       >
-         <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} style={styles.addRowIcon}/>
-         <Text style={styles.addRowText}>Choose & Upload Image</Text>
+         <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} style={theme.screens.reportEditorScreen.addRowIcon}/>
+         <Text style={theme.screens.reportEditorScreen.addRowText}>Choose & Upload Image</Text>
          {loading === 'uploading' ? (
              <ActivityIndicator size="small" color={colors.textSecondary} />
          ) : (
@@ -790,10 +789,10 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
 
   if (loading === 'initial') {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#007aff" />
-          <Text style={styles.loadingText}>Loading Report...</Text>
+      <SafeAreaView style={theme.screens.reportEditorScreen.safeArea}>
+        <View style={theme.screens.reportEditorScreen.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={theme.screens.reportEditorScreen.loadingText}>Loading Report...</Text>
         </View>
       </SafeAreaView>
     );
@@ -801,11 +800,11 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
 
   if (error && !reportData) { // Show fatal error if data couldn't load at all
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error}</Text>
-           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.button}>
-              <Text style={styles.buttonText}>Go Back</Text>
+      <SafeAreaView style={theme.screens.reportEditorScreen.safeArea}>
+        <View style={theme.screens.reportEditorScreen.centered}>
+          <Text style={theme.screens.reportEditorScreen.errorText}>{error}</Text>
+           <TouchableOpacity onPress={() => navigation.goBack()} style={theme.screens.reportEditorScreen.button}>
+              <Text style={theme.screens.reportEditorScreen.buttonText}>Go Back</Text>
            </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -814,22 +813,28 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
 
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={theme.screens.reportEditorScreen.safeArea} edges={['left', 'right', 'bottom']}>
+      <ScrollView style={theme.screens.reportEditorScreen.container} keyboardShouldPersistTaps="handled">
          {renderMetadata()}
 
          {/* Status Messages */} 
           {statusMessage && (
-             <View style={styles.statusContainer}> 
-               <Text style={[styles.statusText, statusMessage.type === 'success' ? styles.statusSuccess : styles.statusError]}>
+             <View style={theme.screens.reportEditorScreen.statusContainer}> 
+               <Text style={[
+                 theme.screens.reportEditorScreen.statusText, 
+                 statusMessage.type === 'success' ? theme.screens.reportEditorScreen.statusSuccess : theme.screens.reportEditorScreen.statusError
+               ]}>
                  {statusMessage.message}
                </Text>
              </View>
           )}
           {error && !statusMessage && 
-            <View style={styles.statusContainer}>
+            <View style={theme.screens.reportEditorScreen.statusContainer}>
               {/* Ensure error text gets base styles too */}
-              <Text style={[styles.statusText, styles.statusError]}>{error}</Text>
+              <Text style={[
+                theme.screens.reportEditorScreen.statusText, 
+                theme.screens.reportEditorScreen.statusError
+              ]}>{error}</Text>
             </View> 
           }
 
@@ -837,11 +842,11 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
          {editedData ? (
              <>
                {/* Narrative Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Narrative</Text>
-                 <View style={[styles.rowContainer, styles.firstRowInSection]}> 
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Narrative</Text>
+                 <View style={[theme.screens.reportEditorScreen.rowContainer, theme.screens.reportEditorScreen.firstRowInSection]}> 
                     <TextInput
-                      style={styles.rowInput} // Use row input style
+                      style={theme.screens.reportEditorScreen.rowInput} // Use row input style
                       value={editedData.narrative || ''}
                       onChangeText={(text) => handleTextChange('narrative', text)}
                       placeholder="Enter narrative..."
@@ -853,8 +858,8 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
 
                {/* Work Completed Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Work Completed</Text>
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Work Completed</Text>
                  <>
                    {(editedData.workCompleted || []).map((item, index, arr) => 
                       renderListItem('workCompleted', item, index, arr.length, 'simple', 'Describe work completed...')
@@ -864,8 +869,8 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
 
                {/* Issues Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Issues</Text>
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Issues</Text>
                  <>
                    {(editedData.issues || []).map((item, index, arr) => 
                      renderListItem('issues', item, index, arr.length, 'issue', 'Describe issue...')
@@ -875,8 +880,8 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
 
                {/* Materials Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Materials</Text>
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Materials</Text>
                  <>
                    {(editedData.materials || []).map((item, index, arr) => 
                       renderListItem('materials', item, index, arr.length, 'material', 'Material name...')
@@ -886,11 +891,11 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
 
                {/* Safety Observations Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Safety Observations</Text>
-                 <View style={[styles.rowContainer, styles.firstRowInSection]}> 
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Safety Observations</Text>
+                 <View style={[theme.screens.reportEditorScreen.rowContainer, theme.screens.reportEditorScreen.firstRowInSection]}> 
                     <TextInput
-                      style={styles.rowInput}
+                      style={theme.screens.reportEditorScreen.rowInput}
                       value={editedData.safetyObservations || ''}
                       onChangeText={(text) => handleTextChange('safetyObservations', text)}
                       placeholder="Enter safety observations..."
@@ -902,8 +907,8 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
 
                {/* Next Steps Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Next Steps</Text>
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Next Steps</Text>
                  <>
                    {(editedData.nextSteps || []).map((item, index, arr) => 
                      renderListItem('nextSteps', item, index, arr.length, 'simple', 'Describe next step...')
@@ -913,8 +918,8 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
 
                {/* Images Section */} 
-               <View style={styles.sectionContainer}>
-                 <Text style={styles.sectionHeader}>Images</Text>
+               <View style={theme.screens.reportEditorScreen.sectionContainer}>
+                 <Text style={theme.screens.reportEditorScreen.sectionHeader}>Images</Text>
                  <>
                    {(editedData.images || []).map((item, index, arr) => 
                      renderImageItem(item, index, arr.length)
@@ -924,284 +929,11 @@ export default function ReportEditorScreen({ route, navigation }: NavigationProp
                </View>
              </>
          ) : (
-             !error && <View style={styles.sectionContainer}><Text style={styles.placeholderText}>Report data not available.</Text></View> 
+             !error && <View style={theme.screens.reportEditorScreen.sectionContainer}><Text style={theme.screens.reportEditorScreen.placeholderText}>Report data not available.</Text></View> 
          )}
 
          <View style={{ height: 60 }} /> {/* Extra bottom padding */} 
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-
-// --- Styles --- (Row-based Refactor)
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-    // No outer padding, sections handle it?
-  },
-  centered: { // For loading/error states
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    marginTop: spacing.sm,
-    fontSize: typography.fontSizeM,
-    color: colors.textSecondary,
-  },
-  errorText: { 
-    color: colors.error,
-    fontSize: typography.fontSizeM,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    fontWeight: typography.fontWeightBold as '600',
-  },
-  placeholderText: { // Used when lists are empty
-      fontSize: typography.fontSizeS,
-      color: colors.textSecondary,
-      fontStyle: 'italic',
-      textAlign: 'center', 
-      paddingVertical: spacing.lg, // Add padding if it's the only thing shown
-  },
-   placeholderTextSmall: { // Used inside image placeholder
-      fontSize: typography.fontSizeXS,
-      color: colors.textSecondary,
-      fontStyle: 'italic',
-      textAlign: 'center',
-      marginTop: spacing.xs,
-   },
-  metaContainer: { // Container for top metadata
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md, 
-  },
-  logo: {
-    maxHeight: 50, // Slightly smaller logo
-    width: '50%',
-    marginBottom: spacing.md,
-  },
-  mainTitle: {
-    fontSize: typography.fontSizeXL,
-    fontWeight: typography.fontWeightBold as '600',
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-    textAlign: 'center',
-  },
-  metaInfo: {
-    fontSize: typography.fontSizeS,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-    lineHeight: typography.lineHeightS,
-  },
-  companyInfo: {
-    marginTop: spacing.md,
-  },
-  companyName: {
-      fontWeight: typography.fontWeightMedium as '500',
-      fontSize: typography.fontSizeS,
-      color: colors.textPrimary,
-      textAlign: 'center',
-      marginBottom: spacing.xs,
-  },
-  statusContainer: {
-     marginHorizontal: spacing.lg,
-     marginBottom: spacing.md, // Space below status
-  },
-  statusText: { // Base style for status messages (success/error)
-      textAlign: 'center',
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.sm,
-      borderRadius: borders.radiusSmall, // Smaller radius
-      fontWeight: typography.fontWeightMedium as '500',
-      fontSize: typography.fontSizeXS,
-      overflow: 'hidden',
-      borderWidth: borders.widthThin,
-  },
-  statusSuccess: {
-      backgroundColor: colors.successBg,
-      color: colors.successText,
-      borderColor: colors.successBorder,
-  },
-  statusError: {
-      backgroundColor: colors.errorBg,
-      color: colors.error,
-      borderColor: colors.errorBorder,
-  },
-  sectionContainer: { // Wrapper for a logical section (Header + Rows)
-      marginBottom: spacing.xl, // Space between sections
-  },
-  sectionHeader: { // Style for the header text of each section
-      paddingBottom: spacing.xs,
-      marginBottom: spacing.xxs,
-      paddingHorizontal: spacing.lg,
-      color: colors.textSecondary,
-      fontSize: typography.fontSizeS,
-      fontWeight: typography.fontWeightMedium as '500',
-      textTransform: 'uppercase',
-  },
-  rowContainer: { // Base style for a row containing inputs or text
-      backgroundColor: colors.surface,
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      flexDirection: 'row',
-      alignItems: 'flex-start', // Align items to top for multiline text
-      borderBottomWidth: borders.widthHairline,
-      borderBottomColor: colors.borderLight,
-      minHeight: 48, 
-  },
-  firstRowInSection: { // Style applied to the first row in a section
-      borderTopWidth: borders.widthHairline,
-      borderTopColor: colors.borderLight,
-  },
-  rowContentContainer: { // Holds the main content (inputs) within a row
-     flex: 1, // Take available space
-     marginRight: spacing.sm, // Space before remove button
-  },
-  rowInput: { // Style for TextInput within a row
-      fontSize: typography.fontSizeM,
-      color: colors.textPrimary,
-      paddingVertical: Platform.OS === 'ios' ? 6 : 4, // Minimal vertical padding
-      paddingHorizontal: 0, // No horizontal padding, handled by rowContainer
-      // Remove background/border, handled by rowContainer
-      // backgroundColor: colors.surface, 
-      // borderWidth: borders.widthThin, 
-      // borderColor: colors.borderLight, 
-      // borderRadius: borders.radiusMedium, 
-      textAlignVertical: 'top',
-  },
-  rowMultiInputContainer: { // Container for multiple labeled inputs within one row (e.g., Material/Issue)
-     // No specific style needed, just structure
-  },
-  fieldLabel: { // Label for fields WITHIN a row (e.g., Issue Description)
-      fontSize: typography.fontSizeXS,
-      fontWeight: typography.fontWeightMedium as '500',
-      color: colors.textSecondary, 
-      marginBottom: spacing.xxs, // Less space for sub-labels
-      marginTop: spacing.xs, // Add some top margin if not the first label
-  },
-  removeItemButton: { // Button to remove an item from a list (e.g., Issue)
-      padding: spacing.sm, // Tap area
-      // Position absolutely or adjust layout
-      // position: 'absolute', 
-      // top: spacing.sm,
-      // right: spacing.xs, 
-      marginLeft: 'auto', // Push to the right if in row direction
-      justifyContent: 'center',
-      alignItems: 'center',
-  },
-  addItemRow: { // Style for the tappable row used to add items
-     justifyContent: 'space-between',
-     alignItems: 'center', // Center items vertically for add row
-     minHeight: 44, // Slightly smaller min height
-     paddingVertical: spacing.xs, // Less vertical padding
-     borderBottomWidth: 0, // No bottom border typically on add row
-  },
-  addRowIcon: {
-     marginRight: spacing.md,
-  },
-  addRowText: {
-     flex: 1,
-     fontSize: typography.fontSizeM,
-     color: colors.primary, 
-     fontWeight: typography.fontWeightMedium as '500',
-  },
-  imageItemRow: { // Specific styles for image item rows
-     flexDirection: 'column', // Stack image, caption, button vertically
-     alignItems: 'stretch', // Stretch items horizontally
-     paddingVertical: spacing.md, // More vertical padding
-  },
-  imageItemContent: {
-     // Holds image and caption
-     marginBottom: spacing.md, // Space before remove button
-  },
-  imagePreview: {
-      width: '100%',
-      aspectRatio: 16 / 9,
-      borderRadius: borders.radiusSmall,
-      backgroundColor: colors.borderLight,
-      marginBottom: spacing.md, // Space between preview and caption
-  },
-  imagePreviewPlaceholder: {
-      width: '100%',
-      aspectRatio: 16 / 9,
-      borderRadius: borders.radiusSmall,
-      backgroundColor: colors.surfaceAlt,
-      borderWidth: borders.widthHairline,
-      borderColor: colors.border,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: spacing.md,
-  },
-  captionContainer: {
-     // Container for caption label + input
-  },
-  // captionInput uses rowInput style
-  removeImageButton: { // Button specifically for removing an image
-      alignSelf: 'flex-end', // Align button to the right
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: spacing.sm,
-      // Use error colors
-      // backgroundColor: colors.errorBg,
-      borderRadius: borders.radiusMedium,
-      borderWidth: borders.widthThin,
-      borderColor: colors.error,
-  },
-  removeButtonText: { // Text for remove image button
-      color: colors.error,
-      fontSize: typography.fontSizeS,
-      fontWeight: typography.fontWeightMedium as '500',
-      marginLeft: spacing.xs,
-  },
-  // uploadContainer removed as upload button is rendered via renderUploadImageButton
-  uploadActivityContainer: { // Style for upload spinner + text
-     flexDirection: 'row',
-     alignItems: 'center',
-     marginLeft: spacing.sm,
-     paddingVertical: spacing.xs,
-  },
-  uploadActivityText: {
-     marginLeft: spacing.xs,
-     color: colors.textSecondary,
-     fontSize: typography.fontSizeXS,
-     fontStyle: 'italic',
-  },
-  // Uncomment base button styles needed for error state button
-  button: { 
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borders.radiusMedium,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44, 
-  },
-  buttonText: {
-    color: colors.textOnPrimary,
-    fontSize: typography.fontSizeM,
-    fontWeight: typography.fontWeightMedium as '500',
-  },
-  headerButton: { // Style for header icon buttons
-      paddingHorizontal: spacing.sm, // Reduce horizontal padding slightly
-      paddingVertical: spacing.xs, 
-  },
-  headerBackButtonContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center',
-    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, 
-  },
-  headerBackTitle: {
-    fontSize: typography.fontSizeM,
-    color: colors.textPrimary, 
-    marginLeft: spacing.xs, 
-  }
-}); 
+} 
