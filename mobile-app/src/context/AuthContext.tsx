@@ -10,6 +10,8 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 // Import AuthSession itself for makeRedirectUri
 import * as AuthSession from 'expo-auth-session'; 
+// Re-import Linking
+import * as Linking from 'expo-linking';
 
 // Recommended for Expo Go compatibility
 WebBrowser.maybeCompleteAuthSession();
@@ -49,6 +51,7 @@ interface AuthContextProps {
   // userToken: string | null; // REMOVED userToken state
   isAuthenticated: boolean;
   loading: boolean;
+  isPasswordRecovery: boolean;
   // Renamed login -> signInWithPassword
   signInWithPassword: (email: string, password: string) => Promise<void>;
   // Added signUp and signInWithGoogle
@@ -64,6 +67,7 @@ export const AuthProvider: React.FC<PropsWithChildren<{}>> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null); // Add session state
   // const [userToken, setUserToken] = useState<string | null>(null); // REMOVED userToken state
   const [loading, setLoading] = useState<boolean>(true); // Start loading true
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false); // Added state
 
   // --- Google Auth Request Hook ---
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
@@ -116,38 +120,158 @@ export const AuthProvider: React.FC<PropsWithChildren<{}>> = ({ children }) => {
     }
   }, [response]); // Run when the Google auth response changes
 
+  // --- Restore Effect to Check Initial URL for Recovery ---
+  useEffect(() => {
+    let isMounted = true; // Prevent state update on unmounted component
+    
+    // Helper function to process URL fragment
+    const processRecoveryFragment = async (url: string | null) => {
+      if (!url) return false;
+      const fragment = url.split('#')[1];
+      if (fragment) {
+        const params = new URLSearchParams(fragment);
+        const type = params.get('type');
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (type === 'recovery' && accessToken && refreshToken) {
+          console.log("[AuthContext Recovery Check] Detected recovery fragment with tokens.");
+          // Manually set the session using tokens from URL
+          try {
+             console.log("[AuthContext Recovery Check] Setting session manually...");
+             const { error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+             });
+             if (sessionError) {
+                console.error("[AuthContext Recovery Check] Error setting session manually:", sessionError);
+                return false; // Indicate failure
+             } else {
+                console.log("[AuthContext Recovery Check] Session set manually. Setting recovery state.");
+                if (isMounted) {
+                   setIsPasswordRecovery(true);
+                   // Setting loading false here because we have established the recovery session
+                   setLoading(false); 
+                }
+                return true; // Indicate success
+             }
+          } catch (e) {
+             console.error("[AuthContext Recovery Check] Exception setting session manually:", e);
+             return false; // Indicate failure
+          }
+        }
+      }
+      return false; // Indicate no recovery fragment found or processed
+    };
+
+    const checkInitialUrl = async () => {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+        if (isMounted && initialUrl) {
+          console.log("[AuthContext InitialUrl Check] Initial URL:", initialUrl);
+          await processRecoveryFragment(initialUrl);
+        }
+      } catch (error) {
+          console.error("[AuthContext InitialUrl Check] Error getting initial URL:", error);
+      }
+    };
+    checkInitialUrl();
+
+    // Listen for subsequent URL events 
+    const urlSubscription = Linking.addEventListener('url', ({ url }) => {
+       if (isMounted) {
+          console.log("[AuthContext Linking Listener] Received URL:", url);
+          processRecoveryFragment(url); // Process subsequent URLs too
+       }
+    });
+
+    return () => {
+      isMounted = false;
+      urlSubscription.remove();
+    };
+  }, []); // Run once on mount
+
   // --- Main Auth State Listener (Supabase) ---
   useEffect(() => {
-    setLoading(true);
+    // Start loading unless recovery state was already set by Linking check
+    setLoading(current => !isPasswordRecovery); 
+    
+    // Check initial session state (runs alongside initial URL check)
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      console.log('[AuthContext Effect] Initial session fetched:', initialSession ? 'Exists' : 'Null');
-      setSession(initialSession);
-      setUser(initialSession?.user ?? null);
-      setLoading(false);
+      console.log('[AuthContext getSession] Initial session fetched:', initialSession ? 'Exists' : 'Null');
+      // Only set initial state if NOT already set to recovery by the Linking check
+      // AND if a valid session exists (don't overwrite recovery state with null)
+      if (!isPasswordRecovery && initialSession) { 
+          setSession(initialSession);
+          setUser(initialSession?.user ?? null);
+          setLoading(false); 
+      } else if (!isPasswordRecovery && !initialSession) {
+          // If not recovery and no session, stop loading
+          setLoading(false);
+      }
+      // If isPasswordRecovery is true, loading was likely stopped by the Linking effect
     }).catch(error => {
-       console.error("[AuthContext Effect] Error getting initial session:", error);
-       setLoading(false);
+       console.error("[AuthContext getSession] Error getting initial session:", error);
+       setLoading(false); // Stop loading on error regardless
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         console.log(`[AuthContext Listener] Auth event: ${_event}`, newSession ? 'Session updated' : 'No session');
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        setLoading(false); // <<< Listener now reliably sets loading false
+        
+        switch (_event) {
+          // PASSWORD_RECOVERY might still fire, but session should already be set by Linking hook
+          case 'PASSWORD_RECOVERY': 
+            console.log("[AuthContext Listener] PASSWORD_RECOVERY event received. State should already be set.");
+            if (!isPasswordRecovery) {
+                 // This case handles if the Linking check somehow missed it
+                 console.warn("[AuthContext Listener] Setting recovery state from listener as fallback.");
+                 setIsPasswordRecovery(true);
+                 setSession(newSession);
+                 setUser(newSession?.user ?? null);
+            }
+            break;
+          case 'SIGNED_IN':
+          case 'USER_UPDATED':
+            console.log("[AuthContext Listener] SIGNED_IN/USER_UPDATED event. Clearing recovery state.");
+            setIsPasswordRecovery(false); 
+            setSession(newSession);
+            setUser(newSession?.user ?? null);
+            break;
+          case 'SIGNED_OUT':
+             console.log("[AuthContext Listener] SIGNED_OUT event. Clearing recovery state.");
+            setIsPasswordRecovery(false);
+            setSession(null);
+            setUser(null);
+            break;
+          case 'TOKEN_REFRESHED':
+             if (!isPasswordRecovery) {
+                 console.log("[AuthContext Listener] TOKEN_REFRESHED.");
+                 setSession(newSession);
+                 setUser(newSession?.user ?? null);
+             }
+            break;
+          default:
+             console.log(`[AuthContext Listener] Unhandled/Ignored event type: ${_event}`);
+        }
+
+        // Only set loading false if not entering recovery via this listener itself
+        // (as the Linking hook might have already set it false)
+        if (_event !== 'PASSWORD_RECOVERY' || !isPasswordRecovery) {
+             setLoading(false);
+        }
       }
     );
 
     return () => {
       if (authListener?.subscription) {
-         console.log('[AuthContext Cleanup] Unsubscribing from auth state changes.');
          authListener.subscription.unsubscribe();
       }
     };
-  }, []); // Runs once on mount
+  }, [isPasswordRecovery]); 
 
   // Derive isAuthenticated from session presence
-  const isAuthenticated = !!session?.access_token; // Use session presence
+  const isAuthenticated = !!session?.access_token && !isPasswordRecovery; // Add !isPasswordRecovery check
 
   // --- Sign Up (Email/Password) ---
   const handleSignUp = async (email: string, password: string) => {
@@ -222,7 +346,8 @@ export const AuthProvider: React.FC<PropsWithChildren<{}>> = ({ children }) => {
     session,
     // userToken, // Removed
     isAuthenticated,
-    loading: loading || !request, 
+    loading: loading || !request,
+    isPasswordRecovery, 
     signInWithPassword: handleSignInWithPassword,
     signUp: handleSignUp,
     signInWithGoogle: handleSignInWithGoogle,

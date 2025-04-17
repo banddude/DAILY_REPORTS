@@ -185,6 +185,15 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
+          {/* Forgot Password Link */}
+           <TouchableOpacity 
+             style={styles.forgotPasswordLinkContainer} 
+             onPress={() => navigation.navigate('ResetPassword')}
+             disabled={isProcessing}
+           >
+             <Text style={styles.forgotPasswordLinkText}>Forgot Password?</Text>
+           </TouchableOpacity>
+
           <TouchableOpacity
             style={theme.screens.loginScreen.signUpLinkContainer}
             onPress={() => navigation.navigate('SignUp')}
@@ -240,5 +249,15 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  // Style for Forgot Password link (similar to SignUp link)
+  forgotPasswordLinkContainer: {
+    marginTop: 20, // Add space above the link
+    alignItems: 'center',
+  },
+  forgotPasswordLinkText: {
+    color: colors.primary, // Use primary color for the link
+    fontSize: 14,
+    fontWeight: '500',
   },
 }); 

@@ -26,6 +26,8 @@ import EditAddressScreen from '../screens/EditAddressScreen';
 import EditLogoScreen from '../screens/EditLogoScreen';
 import ProjectReportsScreen from '../screens/ProjectReportsScreen';
 import EditChatModelScreen from '../screens/EditChatModelScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import UpdatePasswordScreen from '../screens/UpdatePasswordScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
 
 // --- Define Param Lists ---
@@ -34,6 +36,7 @@ import { colors, spacing, typography, borders } from '../theme/theme';
 export type AuthStackParamList = {
   Login: undefined; // No params expected
   SignUp: undefined; // No params expected
+  ResetPassword: undefined; // Add ResetPassword screen
 };
 
 // Params for screens in the Home stack (inside the main tabs)
@@ -81,6 +84,7 @@ export type MainTabsParamList = {
 // Define screen prop types based on param lists (optional but good practice)
 export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 export type SignUpScreenProps = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
+export type ResetPasswordScreenProps = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 export type HomeScreenProps = NativeStackScreenProps<HomeStackParamList, 'HomeBase'>;
 export type BrowseScreenProps = NativeStackScreenProps<BrowseStackParamList, 'BrowseBase'>;
 export type WebViewerScreenProps = NativeStackScreenProps<BrowseStackParamList, 'WebViewer'>;
@@ -116,12 +120,13 @@ const BrowseNavStack = createNativeStackNavigator<BrowseStackParamList>();
 const ProfileNavStack = createNativeStackNavigator<ProfileStackParamList>(); // Create Profile stack navigator
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
-// --- Auth Stack (Login/Signup) ---
+// --- Auth Stack (Login/Signup/Reset) ---
 function AuthStack() {
   return (
     <AuthNavStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthNavStack.Screen name="Login" component={LoginScreen} />
       <AuthNavStack.Screen name="SignUp" component={SignUpScreen} />
+      <AuthNavStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
     </AuthNavStack.Navigator>
   );
 }
@@ -323,9 +328,9 @@ function MainTabs() {
   );
 }
 
-// --- Root Stack (Handles Auth vs Main App and Modals) ---
+// --- Root Stack (Handles Auth vs Main App vs Password Recovery) ---
 function RootStackContainer() {
-  const { session, isAuthenticated, loading } = useAuth();
+  const { session, isAuthenticated, loading, isPasswordRecovery } = useAuth();
 
   if (loading) {
     // Show a loading spinner or splash screen while checking token
@@ -336,21 +341,22 @@ function RootStackContainer() {
     );
   }
 
+  // Conditionally render UpdatePasswordScreen if in recovery mode
+  if (isPasswordRecovery) {
+     console.log("AppNavigator: Rendering UpdatePasswordScreen directly.");
+     return <UpdatePasswordScreen />;
+  }
+
+  // Otherwise, render Auth or Main App based on authentication
   return (
     <RootStack.Navigator
        screenOptions={{
-          headerShown: false // Generally hide header for root, let inner stacks manage
+          headerShown: false 
        }}
     >
       {isAuthenticated ? (
-        // User is signed in, show main app with tabs
-        <>
-            <RootStack.Screen name="MainAppTabs" component={MainTabs} />
-            {/* Define Modal/Top-Level Screens accessible from anywhere when logged in */}
-             
-        </>
+        <RootStack.Screen name="MainAppTabs" component={MainTabs} />
       ) : (
-        // User is not signed in, show auth flow
         <RootStack.Screen name="Auth" component={AuthStack} />
       )}
     </RootStack.Navigator>
