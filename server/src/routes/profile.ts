@@ -142,65 +142,49 @@ router.post('/upload-logo',
             return; 
         }
 
-        // Handle React Native mock file if necessary
-        if (!req.file && req.body && req.body.logo && typeof req.body.logo === 'object') {
-            console.log('>>> Found logo as object in body, React Native format detected');
-            try {
-                const mockImageBuffer = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b]);
-                req.file = {
-                    fieldname: 'logo',
-                    originalname: req.body.logo.name || 'logo.jpg',
-                    mimetype: req.body.logo.type || 'image/jpeg',
-                    size: mockImageBuffer.length,
-                    buffer: mockImageBuffer,
-                    encoding: '7bit',
-                    filename: `${Date.now()}-${req.body.logo.name || 'logo.jpg'}`,
-                } as Express.Multer.File;
-                console.log(`>>> Created mock file from React Native data: ${req.file.originalname}`);
-            } catch (error) {
-                console.error('>>> Error processing React Native file object:', error);
-            }
+        // The imageUploadMiddleware (using multer-s3) should have already uploaded the file.
+        // We need to check req.file for the details provided by multer-s3.
+        
+        // Extend the Request type for clarity, assuming Express.Multer.File might be extended by multer-s3
+        interface RequestWithMulterS3File extends Request {
+            file?: Express.Multer.File & {
+                bucket?: string;
+                key?: string;
+                location?: string; // S3 URL
+                // other multer-s3 properties...
+            };
         }
 
-        if (!req.file) {
-            res.status(400).json({ error: 'No logo file uploaded.' });
+        const s3File = (req as RequestWithMulterS3File).file;
+
+        if (!s3File || !s3File.key || !s3File.location) {
+            console.error(`User ${userId}: Logo upload failed - multer-s3 did not provide file details (key/location) in req.file.`);
+            if (s3File) {
+                console.error('>>> req.file details:', JSON.stringify(s3File, null, 2));
+            }
+            res.status(400).json({ error: 'Logo file upload failed or file details are missing.' });
             return;
         }
 
-        console.log(`User ${userId} uploading new logo to S3 with mimetype ${req.file.mimetype}`);
-        const fileExtension = path.extname(req.file.originalname) || '.png'; 
-        const logoS3Key = `users/${userId}/logo${fileExtension}`; 
-
-        const putObjectParams = {
-            Bucket: s3Bucket,
-            Key: logoS3Key,
-            Body: Readable.from(req.file.buffer),
-            ContentType: req.file.mimetype,
-            ContentLength: req.file.size
-        };
-
-        let logoS3Url = '';
-
+        const logoS3Key = s3File.key;
+        const logoS3Url = s3File.location;
+        
+        console.log(`User ${userId}: Logo uploaded by multer-s3. Key: ${logoS3Key}, URL: ${logoS3Url}`);
+        
         try {
-            // 1. Upload logo to S3
-            const putLogoCommand = new PutObjectCommand(putObjectParams);
-            await s3Client.send(putLogoCommand);
-            console.log(`User ${userId}: Successfully uploaded new logo to S3: ${logoS3Key}`);
-            
-            const region = await s3Client.config.region() || process.env.AWS_REGION || 'us-west-2';
-            logoS3Url = `https://${s3Bucket}.s3.${region}.amazonaws.com/${logoS3Key}`;
-            console.log(`User ${userId}: Logo S3 URL: ${logoS3Url}`);
-
             // 2. Update the logo filename/URL in the Supabase profiles table
+            //    Use the key provided by multer-s3
+            console.log(`User ${userId}: Updating profile table with logo S3 key: ${logoS3Key}`);
             const { error: updateError } = await supabase
                 .from('profiles')
                 .update({ 
-                    config_logo_filename: logoS3Key, 
+                    config_logo_filename: logoS3Key, // Store the S3 key 
                  })
                 .eq('id', userId);
 
             if (updateError) {
                 console.error(`User ${userId}: Failed to update profile table with new logo info:`, updateError);
+                // Consider if we should delete the S3 object if the DB update fails?
                 res.status(500).json({ error: `Logo uploaded, but failed to update profile record: ${updateError.message}` });
                 return;
             }
@@ -208,13 +192,14 @@ router.post('/upload-logo',
             console.log(`User ${userId}: Successfully updated profile record with logo info.`);
             res.status(200).json({ 
                 message: "Logo uploaded and profile updated successfully.", 
-                logoUrl: logoS3Url, 
+                logoUrl: logoS3Url, // Return the URL from multer-s3 
                 s3Key: logoS3Key
             });
 
         } catch (error: any) {
-            console.error(`User ${userId}: Error during logo upload process:`, error);
-            res.status(500).json({ error: `Failed during logo upload process: ${error.message}` });
+            console.error(`User ${userId}: Error during logo database update process:`, error);
+            // Consider if we should delete the S3 object if the DB update fails?
+            res.status(500).json({ error: `Failed during logo database update process: ${error.message}` });
         }
     }
 );

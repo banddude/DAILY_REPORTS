@@ -26,7 +26,7 @@ import { Picker } from '@react-native-picker/picker';
 import theme, { colors, spacing, typography, borders } from '../theme/theme';
 import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config';
 import { useAuth } from '../context/AuthContext';
-import { fetchApi } from './fetchApiHelper';
+import { fetchApi } from '../utils/fetchApiHelper';
 import SelectionModal from '../components/SelectionModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Ionicons } from '@expo/vector-icons';
@@ -222,36 +222,54 @@ const HomeScreen: React.FC = () => {
 
   // Effect to generate thumbnail when selectedFile changes
   useEffect(() => {
-    const generateThumbnail = async () => {
-      if (selectedFile?.uri) {
-        setIsGeneratingThumbnail(true);
-        setThumbnailUri(null);
-        try {
-          console.log(`Generating thumbnail for: ${selectedFile.uri}`);
-          const { uri } = await VideoThumbnails.getThumbnailAsync(
-            selectedFile.uri,
-            {
-              time: 1000, // Generate thumbnail around the 1-second mark
-              quality: 0.5 // Adjust quality if needed
-            }
-          );
-          console.log(`Thumbnail generated: ${uri}`);
-          setThumbnailUri(uri);
-        } catch (e) {
-          console.warn('Could not generate thumbnail:', e);
-          setThumbnailUri(null);
-        } finally {
-          setIsGeneratingThumbnail(false);
+    // Define the async function to generate the thumbnail
+    const generateThumbnail = async (uri: string) => {
+      setIsGeneratingThumbnail(true);
+      setThumbnailUri(null); // Clear previous thumbnail immediately
+      try {
+        console.log(`Generating thumbnail for: ${uri}`);
+        const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(
+          uri,
+          {
+            time: 1000, // Generate thumbnail around the 1-second mark
+            quality: 0.5 // Adjust quality if needed
+          }
+        );
+        console.log(`Thumbnail generated: ${thumbUri}`);
+        // Check if the selected file is still the same one we started generating for
+        // This prevents updating state if the user selected a different file quickly
+        if (selectedFile?.uri === uri) { 
+            setThumbnailUri(thumbUri);
         }
-      } else {
-        setThumbnailUri(null);
-        setIsGeneratingThumbnail(false);
+      } catch (e) {
+        console.warn(`Could not generate thumbnail for ${uri}:`, e);
+        // Only clear thumbnail if the failed URI is the currently selected one
+        if (selectedFile?.uri === uri) { 
+            setThumbnailUri(null);
+        }
+      } finally {
+        // Only stop loading indicator if the processed URI is the currently selected one
+        if (selectedFile?.uri === uri) { 
+            setIsGeneratingThumbnail(false);
+        }
       }
     };
 
-    generateThumbnail();
+    if (selectedFile?.uri) {
+        // --- Execute generateThumbnail asynchronously --- 
+        // Start the generation but don't wait for it here.
+        // Set the loading state immediately.
+        setIsGeneratingThumbnail(true);
+        setThumbnailUri(null); // Clear previous/stale thumbnail
+        generateThumbnail(selectedFile.uri); // Fire-and-forget style
+        // ---------------------------------------------
+    } else {
+      // If no file is selected, clear thumbnail and loading state
+      setThumbnailUri(null);
+      setIsGeneratingThumbnail(false);
+    }
 
-    // Optional: Cleanup function if thumbnail URI needs revoking (rarely needed for file URIs)
+    // Optional: Cleanup function (rarely needed for file URIs)
     // return () => {
     //   if (thumbnailUri) { /* Revoke logic */ }
     // };
@@ -496,13 +514,11 @@ const HomeScreen: React.FC = () => {
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: 'videos',
           allowsEditing: false, // Editing usually not needed for video reports
-          quality: 0.8,
         });
       } else { // source === 'library'
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: 'videos',
           allowsEditing: false,
-          quality: 0.8,
         });
       }
 
@@ -554,7 +570,7 @@ const HomeScreen: React.FC = () => {
       console.log('[pickDocumentFile] Calling DocumentPicker.getDocumentAsync...');
       const result = await DocumentPicker.getDocumentAsync({
         type: 'video/*', // Only allow video selection
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: false,
       });
 
       console.log('[pickDocumentFile] DocumentPicker Result: ', JSON.stringify(result, null, 2));
@@ -995,22 +1011,40 @@ const HomeScreen: React.FC = () => {
                     {selectedFile ? 'Change Media' : 'Choose Media'}
                   </Text>
                   <View style={theme.screens.homeScreen.buttonChevronContainer}>
-                    {isFileProcessing ? <ActivityIndicator size="small" color="#888" /> : <Ionicons name="chevron-forward" size={22} color="#888" />} 
+                    {isFileProcessing ? <ActivityIndicator size="small" color="#888" /> : <Ionicons name="chevron-forward" size={22} color="#888" />}
                   </View>
                 </TouchableOpacity>
 
-                {/* Only show the thumbnail, no filename, with play icon and X button */}
-                {selectedFile && !isGeneratingThumbnail && (
+                {/* Show preview area as soon as a file is selected */}
+                {selectedFile && (
                   <View style={theme.screens.homeScreen.thumbnailPreviewWrapper}>
-                    <TouchableOpacity onPress={() => setIsPreviewModalVisible(true)}>
-                      <View style={theme.screens.homeScreen.thumbnailPreviewContainer}>
-                        <Image source={{ uri: thumbnailUri || '' }} style={theme.screens.homeScreen.thumbnailPreviewImage} />
-                        <Ionicons name="play-circle" size={40} color="#222" style={theme.screens.homeScreen.thumbnailPlayIcon} />
+                    {/* Show loading indicator OR the thumbnail+play button */}
+                    {isGeneratingThumbnail ? (
+                      <View style={[theme.screens.homeScreen.thumbnailPreviewContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+                        {/* Keep container size consistent and center loader */}
+                        <ActivityIndicator size="large" color={colors.primary} />
                       </View>
-                    </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={() => setIsPreviewModalVisible(true)} disabled={!thumbnailUri} /* Disable if thumbnail failed */>
+                        <View style={theme.screens.homeScreen.thumbnailPreviewContainer}>
+                          {/* Display thumbnail if URI exists, otherwise maybe a placeholder */}
+                          {thumbnailUri ? (
+                            <Image source={{ uri: thumbnailUri }} style={theme.screens.homeScreen.thumbnailPreviewImage} />
+                          ) : (
+                            // Optional: Placeholder for failed thumbnail generation
+                            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surfaceAlt }}>
+                              <Ionicons name="alert-circle-outline" size={40} color={colors.textSecondary} />
+                            </View>
+                          )}
+                          {/* Only show play icon if thumbnail exists */}
+                          {thumbnailUri && <Ionicons name="play-circle" size={40} color="#222" style={theme.screens.homeScreen.thumbnailPlayIcon} />}
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    {/* Keep the remove button visible regardless of thumbnail state */}
                     <TouchableOpacity
                       style={theme.screens.homeScreen.thumbnailRemoveButton}
-                      onPress={() => { setSelectedFile(null); setThumbnailUri(null); }}
+                      onPress={() => { setSelectedFile(null); setThumbnailUri(null); setResult({ message: '', type: null, data: null }); }} // Also clear result on remove
                       accessibilityLabel="Remove selected media"
                     >
                       <Ionicons name="close" size={24} color="#fff" />
@@ -1092,7 +1126,13 @@ const HomeScreen: React.FC = () => {
           </SafeAreaView>
         </Modal>
 
-        {/* Confirmation Modal for Deletion */} 
+        {isGeneratingReport && (
+          <View style={theme.screens.homeScreen.loadingOverlay} pointerEvents="auto">
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={theme.screens.homeScreen.loadingText}>Generating report…</Text>
+          </View>
+        )}
+
         {itemToDelete && (
           <ConfirmationModal
             isVisible={isConfirmDeleteVisible}
@@ -1104,13 +1144,6 @@ const HomeScreen: React.FC = () => {
             onCancel={handleDeleteCancel}
             isDestructive={true}
           />
-        )}
-
-        {isGeneratingReport && (
-          <View style={theme.screens.homeScreen.loadingOverlay} pointerEvents="auto">
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={theme.screens.homeScreen.loadingText}>Generating report…</Text>
-          </View>
         )}
     </SafeAreaView>
   );

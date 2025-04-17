@@ -90,7 +90,317 @@ export const borders = {
   widthMedium: 2,
 };
 
-// Combine into a single theme object (optional but convenient)
+// --- Text Fragments Base Definitions ---
+// These are defined separately so they can be referenced within commonStyles
+const baseText: TextStyle = {
+  fontSize: typography.fontSizeM,
+  fontWeight: typography.fontWeightNormal as '400',
+  lineHeight: typography.lineHeightM,
+  color: colors.textPrimary,
+};
+const secondaryTextBase: TextStyle = {
+  fontSize: typography.fontSizeM,
+  fontWeight: typography.fontWeightNormal as '400',
+  lineHeight: typography.lineHeightM,
+  color: colors.textSecondary,
+};
+const smallSecondaryText: TextStyle = {
+  fontSize: typography.fontSizeS,
+  fontWeight: typography.fontWeightNormal as '400',
+  lineHeight: typography.lineHeightS,
+  color: colors.textSecondary,
+};
+const labelBase: TextStyle = {
+  fontSize: typography.fontSizeS,
+  fontWeight: typography.fontWeightMedium as '500',
+  lineHeight: typography.lineHeightS,
+  color: colors.textSecondary,
+};
+const titleXL: TextStyle = {
+  fontSize: typography.fontSizeXL,
+  fontWeight: typography.fontWeightBold as '600',
+  lineHeight: typography.lineHeightXL,
+  color: colors.textPrimary,
+};
+const titleL: TextStyle = {
+  fontSize: typography.fontSizeL,
+  fontWeight: typography.fontWeightBold as '600',
+  lineHeight: typography.lineHeightL,
+  color: colors.textPrimary,
+};
+const titleM: TextStyle = {
+  fontSize: typography.fontSizeM,
+  fontWeight: typography.fontWeightBold as '600',
+  lineHeight: typography.lineHeightM,
+  color: colors.textPrimary,
+};
+const errorTextBase: TextStyle = {
+  color: colors.error,
+  textAlign: 'center',
+  fontSize: typography.fontSizeS, // Common base size
+  lineHeight: typography.lineHeightS,
+};
+const successTextBase: TextStyle = {
+  color: colors.success,
+  textAlign: 'center',
+  fontSize: typography.fontSizeS, // Common base size
+  lineHeight: typography.lineHeightS,
+};
+const linkTextBase: TextStyle = {
+    fontSize: typography.fontSizeS,
+    color: colors.primary,
+    textDecorationLine: 'underline',
+};
+const buttonTextBase: TextStyle = {
+    fontSize: typography.fontSizeM,
+    fontWeight: typography.fontWeightMedium as '500',
+    lineHeight: typography.lineHeightM,
+    textAlign: 'center',
+};
+
+// --- Common Style Fragments ---
+// Base styles used across multiple screens
+const commonStyles = {
+  // Layout & Containers
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  } as ViewStyle,
+  container: {
+    flex: 1,
+    padding: spacing.lg,
+  } as ViewStyle,
+  keyboardAvoidingView: {
+    flex: 1,
+  } as ViewStyle,
+  scrollViewContentPadding: {
+    padding: spacing.lg,
+  } as ViewStyle,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center' as FlexAlignType,
+  } as ViewStyle,
+  centeredContainer: { // Used in ReportEditorScreen.centered & common status containers
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center' as FlexAlignType,
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+  } as ViewStyle,
+
+  // Text Fragments (References to constants defined above)
+  baseText,
+  secondaryTextBase,
+  smallSecondaryText,
+  labelBase,
+  titleXL,
+  titleL,
+  titleM,
+  errorTextBase,
+  successTextBase,
+  linkTextBase,
+  buttonTextBase,
+
+  // Form Elements
+  formLabel: {
+    ...labelBase,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+  } as TextStyle,
+  formTextInput: {
+    ...baseText,
+    paddingVertical: spacing.md, // Override line height via padding
+    backgroundColor: colors.surface,
+    borderRadius: borders.radiusMedium,
+    paddingHorizontal: spacing.md,
+    borderWidth: borders.widthThin,
+    borderColor: colors.borderLight,
+  } as TextStyle,
+  formFieldContainer: {
+    marginBottom: spacing.md,
+  } as ViewStyle,
+
+  // List Elements
+  listRowContainer: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center' as FlexAlignType,
+    borderBottomWidth: borders.widthHairline,
+    borderBottomColor: colors.borderLight,
+    minHeight: 44,
+  } as ViewStyle,
+  firstRowInSection: {
+    borderTopWidth: borders.widthHairline,
+    borderTopColor: colors.borderLight,
+  } as ViewStyle,
+  listSectionHeader: {
+    ...labelBase,
+    paddingBottom: spacing.xs,
+    marginBottom: spacing.md,
+    textTransform: 'uppercase',
+  } as TextStyle,
+  iconContainer24: {
+    marginRight: spacing.md,
+    width: 24,
+    height: 24,
+    alignItems: 'center' as FlexAlignType,
+    justifyContent: 'center',
+  } as ViewStyle,
+  listValueContainer: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center' as FlexAlignType,
+    marginLeft: spacing.sm,
+  } as ViewStyle,
+  listValueText: {
+    ...secondaryTextBase,
+    textAlign: 'right',
+  } as TextStyle,
+  listDisclosureIcon: {
+    marginLeft: spacing.xs,
+  } as ViewStyle,
+
+  // Header Elements
+  headerBackButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center' as FlexAlignType,
+    paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md,
+  } as ViewStyle,
+  headerBackTitle: {
+    ...baseText,
+    marginLeft: spacing.xs,
+  } as TextStyle,
+};
+
+// --- Screen-Specific Common Style Objects ---
+
+// For simple form screens (e.g., Edit Name, Edit Phone)
+const basicFormScreenStyles = {
+    safeArea: commonStyles.safeArea,
+    container: commonStyles.container,
+    loadingContainer: commonStyles.loadingContainer,
+    errorText: { // Use base error text
+      ...commonStyles.errorTextBase,
+      marginBottom: spacing.md,
+    } as TextStyle,
+    label: commonStyles.formLabel,
+    textInput: commonStyles.formTextInput,
+};
+
+// For form screens with larger text areas (e.g., Edit Schema, Edit Prompt)
+const textAreaFormScreenStyles = {
+    safeArea: commonStyles.safeArea,
+    keyboardAvoidingView: commonStyles.keyboardAvoidingView,
+    scrollViewContent: commonStyles.scrollViewContentPadding,
+    loadingContainer: {
+        ...commonStyles.loadingContainer,
+        padding: spacing.lg,
+    } as ViewStyle,
+    errorText: { // Use base error text
+        ...commonStyles.errorTextBase,
+        marginBottom: spacing.md,
+    } as TextStyle,
+    fieldContainer: {
+      marginBottom: spacing.xl,
+    } as ViewStyle,
+    label: commonStyles.formLabel,
+};
+
+// For basic list screens (e.g., Browse, Project Reports)
+const basicListScreenStyles = {
+    safeArea: commonStyles.safeArea,
+    statusContainer: {
+        ...commonStyles.centeredContainer,
+        padding: spacing.xl,
+    } as ViewStyle,
+    errorText: {
+        ...commonStyles.errorTextBase,
+        fontWeight: typography.fontWeightMedium as '500',
+        fontSize: typography.fontSizeM,
+    } as TextStyle,
+    emptyText: {
+        ...commonStyles.secondaryTextBase,
+        textAlign: 'center',
+        fontStyle: 'italic',
+    } as TextStyle,
+    rowContainer: {
+        ...commonStyles.listRowContainer,
+        minHeight: 48,
+    } as ViewStyle,
+    firstRow: commonStyles.firstRowInSection,
+    iconContainer: commonStyles.iconContainer24,
+    rowText: {
+        ...commonStyles.baseText,
+        flex: 1,
+    } as TextStyle,
+    disclosureIcon: {
+        marginLeft: spacing.sm,
+    } as ViewStyle,
+};
+
+// For Marketing Card sections (Login, Sign Up)
+const marketingCardStyles = {
+    marketingCard: {
+        backgroundColor: colors.surfaceAlt || '#f7f7f9',
+        padding: spacing.lg,
+        borderRadius: borders.radiusLarge,
+        marginBottom: spacing.md,
+        maxWidth: 420,
+        alignSelf: 'center' as FlexAlignType,
+        width: '100%',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        shadowColor: colors.textPrimary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.07,
+        shadowRadius: 8,
+        elevation: 2,
+    } as ViewStyle,
+    marketingHeadline: {
+        ...commonStyles.titleL,
+        textAlign: 'center',
+    } as TextStyle,
+    marketingSubheadline: {
+        ...commonStyles.smallSecondaryText,
+        textAlign: 'center',
+        marginBottom: spacing.lg,
+    } as TextStyle,
+    marketingWorkflowRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end' as FlexAlignType,
+        justifyContent: 'center',
+        marginBottom: spacing.lg,
+        flexWrap: 'wrap',
+        width: '100%',
+    } as ViewStyle,
+    workflowStep: {
+        alignItems: 'center' as FlexAlignType,
+        justifyContent: 'flex-end',
+        minWidth: 80,
+        flex: 1,
+        maxWidth: 120,
+    } as ViewStyle,
+    workflowIcon: {
+        marginBottom: spacing.xxs,
+    } as ViewStyle,
+    workflowLabel: {
+        ...commonStyles.baseText,
+        fontSize: typography.fontSizeS,
+        lineHeight: typography.lineHeightS,
+        textAlign: 'center',
+        minHeight: 36,
+    } as TextStyle,
+    workflowArrow: {
+        marginHorizontal: spacing.xs,
+        alignSelf: 'center' as FlexAlignType,
+    } as ViewStyle,
+};
+
+
+// Combine into a single theme object
 const theme = {
   colors,
   spacing,
@@ -98,10 +408,7 @@ const theme = {
   borders,
   screens: {
     editLogoScreen: {
-      safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-      } as ViewStyle,
+      safeArea: commonStyles.safeArea,
       contentContainer: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.lg,
@@ -109,61 +416,27 @@ const theme = {
       section: {
         marginBottom: spacing.lg,
       } as ViewStyle,
-      sectionHeader: {
-        paddingBottom: spacing.xs,
-        marginBottom: spacing.md,
-        color: colors.textSecondary,
-        fontSize: typography.fontSizeS,
-        fontWeight: typography.fontWeightMedium as '500',
-        textTransform: 'uppercase',
-      } as TextStyle,
-      rowContainer: {
-        backgroundColor: colors.surface,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.sm,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
-        borderBottomWidth: borders.widthHairline,
-        borderBottomColor: colors.borderLight,
-        minHeight: 44,
-      } as ViewStyle,
-      firstRowInSection: {
-        borderTopWidth: borders.widthHairline,
-        borderTopColor: colors.borderLight,
-      } as ViewStyle,
-      iconContainer: {
-        marginRight: spacing.md,
-        width: 24,
-        height: 24,
-        alignItems: 'center' as FlexAlignType,
-        justifyContent: 'center',
-      } as ViewStyle,
+      sectionHeader: commonStyles.listSectionHeader,
+      rowContainer: commonStyles.listRowContainer,
+      firstRowInSection: commonStyles.firstRowInSection,
+      iconContainer: commonStyles.iconContainer24,
       iconImage: {
         width: 24,
         height: 24,
         borderRadius: borders.radiusSmall,
       } as ImageStyle,
       rowLabel: {
+        ...commonStyles.baseText,
         flex: 1,
       } as TextStyle,
-      valueContainer: {
-        flexShrink: 1,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
-        marginLeft: spacing.sm,
-      } as ViewStyle,
-      valueText: {
-        fontSize: typography.fontSizeM,
-        color: colors.textSecondary,
-        textAlign: 'right',
-      } as TextStyle,
+      valueContainer: commonStyles.listValueContainer,
+      valueText: commonStyles.listValueText,
       linkValueText: {
+        ...commonStyles.listValueText,
         color: colors.primary,
         textDecorationLine: 'underline',
       } as TextStyle,
-      disclosureIcon: {
-         marginLeft: spacing.xs,
-      } as ViewStyle,
+      disclosureIcon: commonStyles.listDisclosureIcon,
       statusMessageContainer: {
         marginTop: spacing.md,
         paddingHorizontal: spacing.lg,
@@ -172,16 +445,16 @@ const theme = {
         alignItems: 'center' as FlexAlignType,
       } as ViewStyle,
       errorText: {
-        color: colors.error,
-        textAlign: 'center',
+        ...commonStyles.errorTextBase,
         fontWeight: typography.fontWeightBold as '600',
         fontSize: typography.fontSizeM,
+        marginBottom: 0,
       } as TextStyle,
       successText: {
-        color: colors.success,
-        textAlign: 'center',
+        ...commonStyles.successTextBase,
         fontWeight: typography.fontWeightBold as '600',
         fontSize: typography.fontSizeM,
+        marginBottom: 0,
       } as TextStyle,
       logo: {
         width: '80%',
@@ -191,271 +464,51 @@ const theme = {
         alignSelf: 'center' as FlexAlignType,
       } as ImageStyle,
       buttonRow: {
-        backgroundColor: colors.surface,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.sm,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
-        borderBottomWidth: borders.widthHairline,
-        borderBottomColor: colors.borderLight,
-        borderTopWidth: borders.widthHairline,
-        borderTopColor: colors.borderLight,
-        minHeight: 44,
+        ...commonStyles.listRowContainer,
+        ...commonStyles.firstRowInSection,
       } as ViewStyle,
       buttonRowText: {
-        color: colors.textSecondary,
-        fontSize: typography.fontSizeM,
+        ...commonStyles.secondaryTextBase,
         fontWeight: typography.fontWeightMedium as '500',
         marginLeft: spacing.sm,
         flex: 1,
+        textAlign: 'left',
       } as TextStyle,
-      buttonIconContainer: {
-          marginRight: spacing.md,
-          width: 24,
-          height: 24,
-          alignItems: 'center' as FlexAlignType,
-          justifyContent: 'center',
-      } as ViewStyle,
+      buttonIconContainer: commonStyles.iconContainer24,
     },
     editNameScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
-        container: {
-            flex: 1,
-            padding: spacing.lg,
-        } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType,
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
-            marginBottom: spacing.md,
-        } as TextStyle,
-        label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-            textTransform: 'uppercase',
-        } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
-        } as TextStyle,
+        ...basicFormScreenStyles,
     },
     editChatModelScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
-        container: {
-            flex: 1,
-            padding: spacing.lg,
-        } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType,
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
-            marginBottom: spacing.md,
-        } as TextStyle,
-        label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-            textTransform: 'uppercase',
-        } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
-        } as TextStyle,
+        ...basicFormScreenStyles,
     },
     editPhoneScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
-        container: {
-            flex: 1,
-            padding: spacing.lg,
-        } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType,
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
-            marginBottom: spacing.md,
-        } as TextStyle,
-        label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-            textTransform: 'uppercase',
-        } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
-        } as TextStyle,
+        ...basicFormScreenStyles,
     },
     editCompanyNameScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
-        container: {
-            flex: 1,
-            padding: spacing.lg,
-        } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType,
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
-            marginBottom: spacing.md,
-        } as TextStyle,
-        label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-            textTransform: 'uppercase',
-        } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
-        } as TextStyle,
+        ...basicFormScreenStyles,
     },
     editCompanyPhoneScreen: {
-        safeArea:{
-            flex:1,
-            backgroundColor:colors.background
-        } as ViewStyle,
-        container:{
-            flex:1,
-            padding:spacing.lg
-        } as ViewStyle,
-        loadingContainer:{
-            flex:1,
-            justifyContent:'center',
-            alignItems:'center' as FlexAlignType
-        } as ViewStyle,
-        errorText:{
-            color:colors.error,
-            textAlign:'center',
-            marginBottom:spacing.md
-        } as TextStyle,
-        label:{
-            fontSize:typography.fontSizeS,
-            fontWeight:typography.fontWeightMedium as '500',
-            color:colors.textSecondary,
-            marginBottom:spacing.sm,
-            textTransform:'uppercase'
-        } as TextStyle,
-        textInput:{
-            backgroundColor:colors.surface,
-            borderRadius:borders.radiusMedium,
-            paddingHorizontal:spacing.md,
-            paddingVertical:spacing.md,
-            fontSize:typography.fontSizeM,
-            color:colors.textPrimary,
-            borderWidth:borders.widthThin,
-            borderColor:colors.borderLight
-        } as TextStyle
+        ...basicFormScreenStyles,
     },
     editReportSchemaScreen: {
-      safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-      } as ViewStyle,
-      keyboardAvoidingView: {
-          flex: 1,
-      } as ViewStyle,
-      scrollViewContent: {
-        padding: spacing.lg,
-      } as ViewStyle,
-      loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center' as FlexAlignType,
-        padding: spacing.lg,
-      } as ViewStyle,
-      errorText: {
-        color: colors.error,
-        textAlign: 'center',
-        marginBottom: spacing.md,
-      } as TextStyle,
-      fieldContainer: {
-        marginBottom: spacing.xl,
-      } as ViewStyle,
-      label: {
-        fontSize: typography.fontSizeS,
-        fontWeight: typography.fontWeightMedium as '500',
-        color: colors.textSecondary,
-        marginBottom: spacing.sm,
-        textTransform: 'uppercase',
-      } as TextStyle,
+      ...textAreaFormScreenStyles,
       textInput: {
-        backgroundColor: colors.surface,
-        borderRadius: borders.radiusMedium,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.md,
-        fontSize: typography.fontSizeM,
+        ...commonStyles.formTextInput,
         fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-        color: colors.textPrimary,
-        borderWidth: borders.widthThin,
-        borderColor: colors.borderLight,
         minHeight: 300,
         textAlignVertical: 'top',
       } as TextStyle,
       jsonErrorText: {
-          color: colors.error,
+          ...commonStyles.errorTextBase,
+          textAlign: 'left',
           marginTop: spacing.sm,
           fontSize: typography.fontSizeXS,
       } as TextStyle,
       imagePreviewContainer: {
           alignItems: 'center' as FlexAlignType,
           marginVertical: spacing.lg,
-          borderWidth: 1,
+          borderWidth: borders.widthThin,
           borderColor: colors.borderLight,
           borderRadius: borders.radiusMedium,
           padding: spacing.md,
@@ -484,52 +537,15 @@ const theme = {
           alignItems: 'center' as FlexAlignType,
       } as ViewStyle,
       imageButtonText: {
-          color: colors.background,
+          ...commonStyles.buttonTextBase,
+          color: colors.textOnPrimary,
           marginLeft: spacing.sm,
-          fontWeight: typography.fontWeightMedium as '500',
       } as TextStyle,
     },
     editSystemPromptScreen: {
-      safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-      } as ViewStyle,
-      keyboardAvoidingView: {
-          flex: 1,
-      } as ViewStyle,
-      scrollViewContent: {
-        padding: spacing.lg,
-      } as ViewStyle,
-      loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center' as FlexAlignType,
-        padding: spacing.lg,
-      } as ViewStyle,
-      errorText: {
-        color: colors.error,
-        textAlign: 'center',
-        marginBottom: spacing.md,
-      } as TextStyle,
-      fieldContainer: {
-        marginBottom: spacing.xl,
-      } as ViewStyle,
-      label: {
-        fontSize: typography.fontSizeS,
-        fontWeight: typography.fontWeightMedium as '500',
-        color: colors.textSecondary,
-        marginBottom: spacing.sm,
-        textTransform: 'uppercase',
-      } as TextStyle,
+      ...textAreaFormScreenStyles,
       textInput: {
-        backgroundColor: colors.surface,
-        borderRadius: borders.radiusMedium,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.md,
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
-        borderWidth: borders.widthThin,
-        borderColor: colors.borderLight,
+        ...commonStyles.formTextInput,
         minHeight: 200,
         textAlignVertical: 'top',
       } as TextStyle,
@@ -546,150 +562,58 @@ const theme = {
         marginBottom: spacing.xl,
       } as ViewStyle,
       toggleLabel: {
-          fontSize: typography.fontSizeM,
-          color: colors.textPrimary,
+          ...commonStyles.baseText,
       } as TextStyle,
     },
     editCompanyWebsiteScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
-        container: {
-            flex: 1,
-            padding: spacing.lg,
-        } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType,
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
-            marginBottom: spacing.md,
-        } as TextStyle,
-        label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-            textTransform: 'uppercase',
-        } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
-        } as TextStyle,
+        ...basicFormScreenStyles,
     },
     editAddressScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background
-        } as ViewStyle,
-        keyboardAvoidingView: {
-            flex: 1
-        } as ViewStyle,
-        scrollViewContent: {
-            padding: spacing.lg
-        } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
-            marginBottom: spacing.md
+        safeArea: commonStyles.safeArea,
+        keyboardAvoidingView: commonStyles.keyboardAvoidingView,
+        scrollViewContent: commonStyles.scrollViewContentPadding,
+        loadingContainer: commonStyles.loadingContainer,
+        errorText: { // Use base error text
+            ...commonStyles.errorTextBase,
+            marginBottom: spacing.md,
         } as TextStyle,
-        fieldContainer: {
-            marginBottom: spacing.md
-        } as ViewStyle,
+        fieldContainer: commonStyles.formFieldContainer,
         label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
+            ...commonStyles.formLabel,
             marginBottom: spacing.xs,
-            textTransform: 'uppercase'
         } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight
-        } as TextStyle,
+        textInput: commonStyles.formTextInput,
     },
     editEmailScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
-        container: {
-            flex: 1,
-            padding: spacing.lg,
-        } as ViewStyle,
+        safeArea: commonStyles.safeArea,
+        container: commonStyles.container,
         containerContent: {
             flexGrow: 1,
             justifyContent: 'center',
         } as ViewStyle,
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center' as FlexAlignType,
-        } as ViewStyle,
-        errorText: {
-            color: colors.error,
-            textAlign: 'center',
+        loadingContainer: commonStyles.loadingContainer,
+        errorText: { // Use base error text
+            ...commonStyles.errorTextBase,
             marginBottom: spacing.md,
         } as TextStyle,
-        label: {
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-            textTransform: 'uppercase',
-        } as TextStyle,
-        textInput: {
-            backgroundColor: colors.surface,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
-        } as TextStyle,
-        disabledTextInput: {
+        label: commonStyles.formLabel,
+        textInput: commonStyles.formTextInput,
+        disabledTextInput: { // Specific style
+            ...commonStyles.formTextInput,
             backgroundColor: colors.surfaceAlt,
-            borderRadius: borders.radiusMedium,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.md,
-            fontSize: typography.fontSizeM,
             color: colors.textSecondary,
-            borderWidth: borders.widthThin,
-            borderColor: colors.borderLight,
         } as TextStyle,
-        supportText: {
+        supportText: { // Specific style
+            ...commonStyles.smallSecondaryText,
+            fontSize: typography.fontSizeXS,
+            lineHeight: typography.lineHeightXS,
             marginTop: spacing.md,
             textAlign: 'center',
-            color: colors.textSecondary,
-            fontSize: typography.fontSizeXS,
         } as TextStyle,
     },
     signUpScreen: {
       safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
+        ...commonStyles.safeArea,
         paddingTop: spacing.xl,
         paddingHorizontal: spacing.lg,
       } as ViewStyle,
@@ -699,103 +623,37 @@ const theme = {
         paddingVertical: 24,
       } as ViewStyle,
       title: {
-        fontSize: typography.fontSizeXL,
-        fontWeight: typography.fontWeightBold as 'bold',
-        lineHeight: typography.lineHeightXL,
-        color: colors.textPrimary,
+        ...commonStyles.titleXL,
         marginBottom: spacing.xl,
         textAlign: 'center',
       } as TextStyle,
       input: {
-        borderColor: colors.borderLight,
-        borderWidth: borders.widthThin,
-        borderRadius: borders.radiusMedium,
-        marginBottom: spacing.md,
-        paddingHorizontal: spacing.lg,
+        ...commonStyles.formTextInput,
         paddingVertical: spacing.sm,
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
-        backgroundColor: colors.surface,
-      } as TextStyle,
-      marketingCard: {
-        backgroundColor: colors.surfaceAlt || '#f7f7f9',
-        padding: spacing.lg,
-        borderRadius: borders.radiusLarge,
         marginBottom: spacing.md,
-        maxWidth: 420,
-        alignSelf: 'center' as FlexAlignType,
-        width: '100%',
-        borderWidth: 1,
-        borderColor: colors.borderLight,
-        shadowColor: colors.textPrimary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.07,
-        shadowRadius: 8,
-        elevation: 2,
-      } as ViewStyle,
+      } as TextStyle,
+      ...marketingCardStyles,
       marketingHeadline: {
-        fontSize: typography.fontSizeL,
-        fontWeight: typography.fontWeightBold as 'bold',
-        color: colors.textPrimary,
-        textAlign: 'center',
-        marginBottom: spacing.xs,
+          ...marketingCardStyles.marketingHeadline,
+          marginBottom: spacing.xs,
       } as TextStyle,
-      marketingSubheadline: {
-        fontSize: typography.fontSizeS,
-        color: colors.textSecondary,
-        textAlign: 'center',
-        marginBottom: spacing.lg,
-      } as TextStyle,
-      marketingWorkflowRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-end' as FlexAlignType,
-        justifyContent: 'center',
-        marginBottom: spacing.lg,
-        flexWrap: 'wrap',
-        width: '100%',
-      } as ViewStyle,
-      workflowStep: {
-        alignItems: 'center' as FlexAlignType,
-        justifyContent: 'flex-end',
-        minWidth: 80,
-        flex: 1,
-        maxWidth: 120,
-      } as ViewStyle,
-      workflowIcon: {
-        marginBottom: spacing.xxs,
-      } as ViewStyle,
       workflowLabel: {
-        fontSize: typography.fontSizeS,
-        color: colors.textPrimary,
-        textAlign: 'center',
-        minHeight: 36,
-        display: 'flex',
-        alignItems: 'center' as FlexAlignType,
-        justifyContent: 'center',
+          ...marketingCardStyles.workflowLabel,
+          display: 'flex',
+          alignItems: 'center' as FlexAlignType,
+          justifyContent: 'center',
       } as TextStyle,
-      workflowArrow: {
-        marginHorizontal: spacing.xs,
-        alignSelf: 'center' as FlexAlignType,
-      } as ViewStyle,
       button: {
-        backgroundColor: colors.surface,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
+        ...commonStyles.listRowContainer,
         justifyContent: 'center',
         marginTop: 0,
         borderTopWidth: borders.widthHairline,
-        borderBottomWidth: borders.widthHairline,
         borderTopColor: colors.borderLight,
-        borderBottomColor: colors.borderLight,
-        minHeight: 44,
       } as ViewStyle,
       buttonText: {
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
-        textAlign: 'center',
+        ...commonStyles.buttonTextBase,
         fontWeight: typography.fontWeightNormal as 'normal',
+        color: colors.textPrimary,
         flex: 0,
       } as TextStyle,
       loginLinkContainer: {
@@ -803,54 +661,38 @@ const theme = {
         alignItems: 'center' as FlexAlignType,
       } as ViewStyle,
       loginLinkText: {
-        color: colors.primary,
-        fontSize: typography.fontSizeS,
-        textDecorationLine: 'underline',
+        ...commonStyles.linkTextBase,
       } as TextStyle,
     },
     profileScreen: {
-        safeArea: {
-          flex: 1,
-          backgroundColor: colors.background,
-        } as ViewStyle,
-        keyboardAvoidingView: {
-            flex: 1,
-        } as ViewStyle,
+        safeArea: commonStyles.safeArea,
+        keyboardAvoidingView: commonStyles.keyboardAvoidingView,
         scrollViewContent: {
-          // No vertical padding here anymore
         } as ViewStyle,
         contentContainer: {
           paddingHorizontal: spacing.lg,
           paddingBottom: spacing.md,
         } as ViewStyle,
         loadingContainer: {
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center' as FlexAlignType,
-          padding: spacing.lg,
-          backgroundColor: colors.background,
+            ...commonStyles.loadingContainer,
+            padding: spacing.lg,
+            backgroundColor: colors.background,
         } as ViewStyle,
         errorTextContainer: {
-           flex: 1,
-           justifyContent: 'center',
-           alignItems: 'center' as FlexAlignType,
-           padding: spacing.lg,
-           backgroundColor: colors.background,
+           ...commonStyles.centeredContainer,
          } as ViewStyle,
         errorText: {
-          color: colors.error,
-          textAlign: 'center',
+          ...commonStyles.errorTextBase,
           fontWeight: typography.fontWeightBold as '600',
           fontSize: typography.fontSizeM,
         } as TextStyle,
-        statusMessageContainer: { // For save status
+        statusMessageContainer: {
             paddingHorizontal: spacing.lg,
             marginBottom: spacing.md,
             marginTop: spacing.xs,
         } as ViewStyle,
-        successText: { // For save status
-            color: colors.success,
-            textAlign: 'center',
+        successText: {
+            ...commonStyles.successTextBase,
             fontWeight: typography.fontWeightBold as '600',
             fontSize: typography.fontSizeXS,
         } as TextStyle,
@@ -858,76 +700,43 @@ const theme = {
           marginBottom: spacing.md,
         } as ViewStyle,
         sectionHeader: {
-          paddingBottom: spacing.xs,
+          ...commonStyles.listSectionHeader,
           marginBottom: spacing.xxs,
-          color: colors.textSecondary,
-          fontSize: typography.fontSizeS,
-          fontWeight: typography.fontWeightMedium as '500',
-          textTransform: 'uppercase',
         } as TextStyle,
-        rowContainer: {
-          backgroundColor: colors.surface,
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.sm,
-          flexDirection: 'row',
-          alignItems: 'center' as FlexAlignType,
-          borderBottomWidth: borders.widthHairline,
-          borderBottomColor: colors.borderLight,
-          minHeight: 44,
-        } as ViewStyle,
-        firstRowInSection: {
-          borderTopWidth: borders.widthHairline,
-          borderTopColor: colors.borderLight,
-        } as ViewStyle,
+        rowContainer: commonStyles.listRowContainer,
+        firstRowInSection: commonStyles.firstRowInSection,
         iconContainer: {
-          marginRight: spacing.md,
-          width: 24,
-          alignItems: 'center' as FlexAlignType,
+            ...commonStyles.iconContainer24,
+            justifyContent: undefined,
         } as ViewStyle,
         label: {
+          ...commonStyles.baseText,
           flex: 1,
-          fontSize: typography.fontSizeM,
-          color: colors.textPrimary,
         } as TextStyle,
-        valueContainer: {
-          flexShrink: 1,
-          flexDirection: 'row',
-          alignItems: 'center' as FlexAlignType,
-          marginLeft: spacing.sm,
-        } as ViewStyle,
-        valueText: {
-          fontSize: typography.fontSizeM,
-          color: colors.textSecondary,
-          textAlign: 'right',
-        } as TextStyle,
+        valueContainer: commonStyles.listValueContainer,
+        valueText: commonStyles.listValueText,
         linkValueText: {
+          ...commonStyles.listValueText,
           color: colors.primary,
           textDecorationLine: 'underline',
         } as TextStyle,
-        disclosureIcon: {
-           marginLeft: spacing.xs,
-        } as TextStyle, // Icon is typically text-based
+        disclosureIcon: commonStyles.listDisclosureIcon,
         fieldContainer: {
-            marginBottom: spacing.md,
+            ...commonStyles.formFieldContainer,
             backgroundColor: colors.surface,
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.xs,
             borderBottomWidth: borders.widthHairline,
             borderBottomColor: colors.borderLight,
         } as ViewStyle,
-        firstFieldInSection: {
-            borderTopWidth: borders.widthHairline,
-            borderTopColor: colors.borderLight,
-        } as ViewStyle,
+        firstFieldInSection: commonStyles.firstRowInSection,
         fieldLabel: {
-            fontSize: typography.fontSizeS,
-            color: colors.textSecondary,
+            ...commonStyles.labelBase,
             marginBottom: spacing.xs,
             paddingTop: spacing.sm,
         } as TextStyle,
         textInput: {
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
+            ...commonStyles.baseText,
             paddingVertical: Platform.OS === 'ios' ? 8 : 6,
         } as TextStyle,
         saveButtonContainer: {
@@ -941,91 +750,62 @@ const theme = {
             borderTopColor: colors.borderLight,
             borderTopWidth: borders.widthHairline,
         } as ViewStyle,
-        rowLabel: {
+        rowLabel: { // Duplicated? Same as 'label' above
+          ...commonStyles.baseText,
           flex: 1,
-        } as TextStyle, // This seems duplicated, ensure it's correct
+        } as TextStyle,
         iconImage: {
           width: 24,
           height: 24,
           borderRadius: borders.radiusSmall,
         } as ImageStyle,
         logoutButtonContainer: {
-            backgroundColor: colors.surface,
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.sm,
-            flexDirection: 'row',
-            alignItems: 'center' as FlexAlignType,
+            ...commonStyles.listRowContainer,
+            ...commonStyles.firstRowInSection,
             justifyContent: 'center',
-            borderBottomWidth: borders.widthHairline,
-            borderBottomColor: colors.borderLight,
-            borderTopWidth: borders.widthHairline,
-            borderTopColor: colors.borderLight,
-            minHeight: 44,
         } as ViewStyle,
         logoutButtonText: {
+            ...commonStyles.buttonTextBase,
             fontSize: typography.fontSizeM,
+            fontWeight: typography.fontWeightNormal as '400',
             color: colors.error,
-            textAlign: 'center',
         } as TextStyle,
     },
-    loginScreen: { // Added styles for LoginScreen
-      safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-      } as ViewStyle,
-      keyboardAwareScrollViewContent: { // Specific for KeyboardAwareScrollView
+    loginScreen: {
+      safeArea: commonStyles.safeArea,
+      keyboardAwareScrollViewContent: {
         flexGrow: 1,
         justifyContent: 'center',
         paddingVertical: 24,
       } as ViewStyle,
       title: {
-        fontSize: typography.fontSizeL,
+        ...commonStyles.titleL,
         fontWeight: typography.fontWeightMedium as '500',
-        lineHeight: typography.lineHeightL,
-        color: colors.textPrimary,
         textAlign: 'center',
         marginTop: spacing.sm,
         marginBottom: spacing.md,
       } as TextStyle,
       input: {
-        fontSize: typography.fontSizeM,
+        ...commonStyles.formTextInput,
         fontWeight: typography.fontWeightNormal as 'normal',
-        lineHeight: typography.lineHeightM,
-        backgroundColor: colors.surface,
-        paddingHorizontal: spacing.lg,
         paddingVertical: spacing.sm,
-        borderRadius: borders.radiusMedium,
         marginBottom: spacing.md,
-        borderWidth: borders.widthThin,
-        borderColor: colors.borderLight,
-        color: colors.textPrimary,
       } as TextStyle,
       button: {
-        backgroundColor: colors.surface,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
+        ...commonStyles.listRowContainer,
         justifyContent: 'center',
         marginTop: 0,
         borderTopWidth: borders.widthHairline,
-        borderBottomWidth: borders.widthHairline,
         borderTopColor: colors.borderLight,
-        borderBottomColor: colors.borderLight,
-        minHeight: 44,
       } as ViewStyle,
       buttonText: {
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
-        textAlign: 'center',
+        ...commonStyles.buttonTextBase,
         fontWeight: typography.fontWeightNormal as 'normal',
+        color: colors.textPrimary,
         flex: 0,
       } as TextStyle,
       errorText: {
-        color: colors.error,
-        fontSize: typography.fontSizeS,
-        lineHeight: typography.lineHeightS,
-        textAlign: 'center',
+        ...commonStyles.errorTextBase,
         marginBottom: spacing.md,
       } as TextStyle,
       signUpLinkContainer: {
@@ -1033,68 +813,13 @@ const theme = {
         alignItems: 'center' as FlexAlignType,
       } as ViewStyle,
       signUpLinkText: {
-        fontSize: typography.fontSizeS,
-        color: colors.primary,
-        textDecorationLine: 'underline',
+        ...commonStyles.linkTextBase,
       } as TextStyle,
-      // Marketing Card Styles
-      marketingCard: {
-        backgroundColor: colors.surfaceAlt || '#f7f7f9',
-        padding: spacing.lg,
-        borderRadius: borders.radiusLarge,
-        marginBottom: spacing.md,
-        maxWidth: 420,
-        alignSelf: 'center' as FlexAlignType,
-        width: '100%',
-        borderWidth: 1,
-        borderColor: colors.borderLight,
-        shadowColor: colors.textPrimary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.07,
-        shadowRadius: 8,
-        elevation: 2,
-      } as ViewStyle,
+      ...marketingCardStyles,
       marketingHeadline: {
-        fontSize: typography.fontSizeL,
-        fontWeight: typography.fontWeightBold as 'bold',
-        color: colors.textPrimary,
-        textAlign: 'center',
-        marginBottom: spacing.sm,
+          ...marketingCardStyles.marketingHeadline,
+          marginBottom: spacing.sm,
       } as TextStyle,
-      marketingSubheadline: {
-        fontSize: typography.fontSizeS,
-        color: colors.textSecondary,
-        textAlign: 'center',
-        marginBottom: spacing.lg,
-      } as TextStyle,
-      marketingWorkflowRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-end' as FlexAlignType,
-        justifyContent: 'center',
-        marginBottom: spacing.lg,
-        flexWrap: 'wrap',
-        width: '100%',
-      } as ViewStyle,
-      workflowStep: {
-        alignItems: 'center' as FlexAlignType,
-        justifyContent: 'flex-end',
-        minWidth: 80,
-        flex: 1,
-        maxWidth: 120,
-      } as ViewStyle,
-      workflowIcon: {
-        marginBottom: spacing.xxs,
-      } as ViewStyle, // Icon specific style
-      workflowLabel: {
-        fontSize: typography.fontSizeS,
-        color: colors.textPrimary,
-        textAlign: 'center',
-        minHeight: 36, // Ensure space for text wrapping
-      } as TextStyle,
-      workflowArrow: {
-        marginHorizontal: spacing.xs,
-        alignSelf: 'center' as FlexAlignType,
-      } as ViewStyle,
       marketingDivider: {
         height: borders.widthThin,
         backgroundColor: colors.borderLight,
@@ -1110,86 +835,24 @@ const theme = {
       } as ViewStyle,
       marketingFeatureIcon: {
         marginRight: spacing.sm,
-        width: 20, // Give icon consistent width
+        width: 20,
       } as ViewStyle,
       marketingFeatureText: {
-        fontSize: typography.fontSizeS,
-        color: colors.textSecondary,
-        flex: 1, // Allow text to wrap
+        ...commonStyles.smallSecondaryText,
+        flex: 1,
       } as TextStyle,
       marketingCTA: {
-          fontSize: typography.fontSizeS,
-          color: colors.textSecondary,
+          ...commonStyles.smallSecondaryText,
           textAlign: 'center',
           marginTop: spacing.sm,
           fontStyle: 'italic',
       } as TextStyle,
     },
-    browseScreen: { // Added styles for BrowseScreen
-      safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-      } as ViewStyle,
-      statusContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center' as FlexAlignType,
-        padding: spacing.xl,
-      } as ViewStyle,
-      errorText: {
-        color: colors.error,
-        textAlign: 'center',
-        fontWeight: typography.fontWeightMedium as '500',
-        fontSize: typography.fontSizeM,
-      } as TextStyle,
-      emptyText: {
-        color: colors.textSecondary,
-        textAlign: 'center',
-        fontSize: typography.fontSizeM,
-        fontStyle: 'italic',
-      } as TextStyle,
-      rowContainer: {
-        backgroundColor: colors.surface,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
-        borderBottomWidth: borders.widthHairline,
-        borderBottomColor: colors.borderLight,
-        minHeight: 48,
-      } as ViewStyle,
-      firstRow: {
-        borderTopWidth: borders.widthHairline,
-        borderTopColor: colors.borderLight,
-      } as ViewStyle,
-      iconContainer: {
-        marginRight: spacing.md,
-        width: 24,
-        height: 24,
-        alignItems: 'center' as FlexAlignType,
-        justifyContent: 'center',
-      } as ViewStyle,
-      rowText: {
-        flex: 1,
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
-      } as TextStyle,
-      loadingIconContainer: {
-        marginLeft: 'auto',
-        paddingLeft: spacing.sm,
-      } as ViewStyle,
-      disclosureIcon: {
-        marginLeft: spacing.sm,
-      } as ViewStyle, // Typically holds an icon component
+    browseScreen: {
+      ...basicListScreenStyles,
       projectRowContainer: {
-        paddingLeft: spacing.lg + spacing.md + 24, // Indent past customer icon+margin
-        backgroundColor: colors.surface, // Keep consistent row background
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
-        borderBottomWidth: borders.widthHairline,
-        borderBottomColor: colors.borderLight,
+        ...commonStyles.listRowContainer,
+        paddingLeft: spacing.lg + spacing.md + 24,
         minHeight: 48,
       } as ViewStyle,
       searchContainer: {
@@ -1201,81 +864,26 @@ const theme = {
         borderBottomColor: colors.borderLight,
       } as ViewStyle,
       searchInput: {
+        ...commonStyles.baseText,
+        paddingVertical: spacing.sm,
         backgroundColor: colors.surfaceAlt,
         borderRadius: borders.radiusMedium,
         paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
       } as TextStyle,
+      loadingIconContainer: {
+        marginLeft: 'auto',
+        paddingLeft: spacing.sm,
+      } as ViewStyle,
     },
     projectReportsScreen: {
-        safeArea: {
-          flex: 1,
-          backgroundColor: colors.background,
-        } as ViewStyle,
-        statusContainer: {
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center' as FlexAlignType,
-          padding: spacing.xl,
-        } as ViewStyle,
-        errorText: {
-          color: colors.error,
-          textAlign: 'center',
-          fontWeight: typography.fontWeightMedium as '500',
-          fontSize: typography.fontSizeM,
-        } as TextStyle,
-        emptyText: {
-          color: colors.textSecondary,
-          textAlign: 'center',
-          fontSize: typography.fontSizeM,
-          fontStyle: 'italic',
-        } as TextStyle,
-        rowContainer: {
-          backgroundColor: colors.surface,
-          paddingVertical: spacing.sm,
-          paddingHorizontal: spacing.lg,
-          flexDirection: 'row',
-          alignItems: 'center' as FlexAlignType,
-          borderBottomWidth: borders.widthHairline,
-          borderBottomColor: colors.borderLight,
-          minHeight: 48,
-        } as ViewStyle,
-        firstRow: {
-          borderTopWidth: borders.widthHairline,
-          borderTopColor: colors.borderLight,
-        } as ViewStyle,
-        iconContainer: {
-          marginRight: spacing.md,
-          width: 24,
-          height: 24,
-          alignItems: 'center' as FlexAlignType,
-          justifyContent: 'center',
-        } as ViewStyle,
-        rowText: {
-          flex: 1,
-          fontSize: typography.fontSizeM,
-          color: colors.textPrimary,
-        } as TextStyle,
-        disclosureIcon: {
-          marginLeft: spacing.sm,
-        } as TextStyle, // Icon is text-based
+        ...basicListScreenStyles,
         headerButton: {
           padding: spacing.md,
         } as ViewStyle,
-        headerBackButtonContainer: { 
-          flexDirection: 'row', 
-          alignItems: 'center' as FlexAlignType,
-          paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md, 
-        } as ViewStyle,
-        headerBackTitle: {
-          fontSize: typography.fontSizeM,
-          color: colors.textPrimary, 
-          marginLeft: spacing.xs, 
-        } as TextStyle,
+        headerBackButtonContainer: commonStyles.headerBackButtonContainer,
+        headerBackTitle: commonStyles.headerBackTitle,
     },
-    webViewerScreen: { // Added styles for WebViewerScreen
+    webViewerScreen: {
         container: {
             flex: 1,
             backgroundColor: colors.background,
@@ -1284,7 +892,6 @@ const theme = {
             marginTop: 0,
         } as ViewStyle,
         loadingContainer: {
-            // Use StyleSheet.absoluteFillObject properties directly or copy them
             position: 'absolute',
             left: 0,
             right: 0,
@@ -1295,9 +902,8 @@ const theme = {
             backgroundColor: colors.background,
         } as ViewStyle,
         errorText: {
-            color: colors.error,
+            ...commonStyles.errorTextBase,
             padding: 20,
-            textAlign: 'center',
         } as TextStyle,
         headerButton: {
             padding: spacing.xs,
@@ -1306,60 +912,39 @@ const theme = {
             flexDirection: 'row',
             alignItems: 'center' as FlexAlignType,
         } as ViewStyle,
-        headerBackButtonContainer: { 
-            flexDirection: 'row', 
-            alignItems: 'center' as FlexAlignType,
-            paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md,
-        } as ViewStyle,
-        headerBackTitle: {
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            marginLeft: spacing.xs,
-        } as TextStyle,
-        // Note: Added a webview style that was previously inline
-        webview: {
+        headerBackButtonContainer: commonStyles.headerBackButtonContainer,
+        headerBackTitle: commonStyles.headerBackTitle,
+        webview: { // Specific style
             flex: 1,
             paddingTop: 0,
             marginTop: 0,
         } as ViewStyle,
     },
-    reportEditorScreen: {
-      safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-      } as ViewStyle,
+    reportEditorScreen: { // Very specific screen, minimal reuse
+      safeArea: commonStyles.safeArea,
       container: {
         flex: 1,
       } as ViewStyle,
-      centered: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center' as FlexAlignType,
-        padding: spacing.lg,
-        backgroundColor: colors.background,
-      } as ViewStyle,
+      centered: commonStyles.centeredContainer,
       loadingText: {
+        ...commonStyles.secondaryTextBase,
         marginTop: spacing.sm,
-        fontSize: typography.fontSizeM,
-        color: colors.textSecondary,
       } as TextStyle,
       errorText: {
-        color: colors.error,
+        ...commonStyles.errorTextBase,
         fontSize: typography.fontSizeM,
-        textAlign: 'center',
-        marginBottom: spacing.md,
         fontWeight: typography.fontWeightBold as '600',
       } as TextStyle,
       placeholderText: {
-          fontSize: typography.fontSizeS,
-          color: colors.textSecondary,
+          ...commonStyles.smallSecondaryText,
           fontStyle: 'italic',
           textAlign: 'center',
           paddingVertical: spacing.lg,
       } as TextStyle,
       placeholderTextSmall: {
+          ...commonStyles.smallSecondaryText,
           fontSize: typography.fontSizeXS,
-          color: colors.textSecondary,
+          lineHeight: typography.lineHeightXS,
           fontStyle: 'italic',
           textAlign: 'center',
           marginTop: spacing.xs,
@@ -1376,25 +961,20 @@ const theme = {
         marginBottom: spacing.md,
       } as ImageStyle,
       mainTitle: {
-        fontSize: typography.fontSizeXL,
-        fontWeight: typography.fontWeightBold as '600',
-        color: colors.textPrimary,
+        ...commonStyles.titleXL,
         marginBottom: spacing.md,
         textAlign: 'center',
       } as TextStyle,
       metaInfo: {
-        fontSize: typography.fontSizeS,
-        color: colors.textSecondary,
+        ...commonStyles.smallSecondaryText,
         textAlign: 'center',
         marginBottom: spacing.xs,
-        lineHeight: typography.lineHeightS,
       } as TextStyle,
       companyInfo: {
         marginTop: spacing.md,
       } as ViewStyle,
       companyName: {
-          fontWeight: typography.fontWeightMedium as '500',
-          fontSize: typography.fontSizeS,
+          ...commonStyles.labelBase,
           color: colors.textPrimary,
           textAlign: 'center',
           marginBottom: spacing.xs,
@@ -1403,22 +983,43 @@ const theme = {
          marginHorizontal: spacing.lg,
          marginBottom: spacing.md,
       } as ViewStyle,
-      statusText: {
+      statusText: { // Base for success/error status text
           textAlign: 'center',
           paddingVertical: spacing.sm,
           paddingHorizontal: spacing.sm,
           borderRadius: borders.radiusSmall,
           fontWeight: typography.fontWeightMedium as '500',
           fontSize: typography.fontSizeXS,
+          lineHeight: typography.lineHeightXS,
           overflow: 'hidden',
           borderWidth: borders.widthThin,
       } as TextStyle,
-      statusSuccess: {
+      statusSuccess: { // Define base properties directly instead of spreading
+          textAlign: 'center',
+          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.sm,
+          borderRadius: borders.radiusSmall,
+          fontWeight: typography.fontWeightMedium as '500',
+          fontSize: typography.fontSizeXS,
+          lineHeight: typography.lineHeightXS,
+          overflow: 'hidden',
+          borderWidth: borders.widthThin,
+          // Specific success colors
           backgroundColor: colors.successBg,
           color: colors.successText,
           borderColor: colors.successBorder,
       } as TextStyle,
-      statusError: {
+      statusError: { // Define base properties directly instead of spreading
+          textAlign: 'center',
+          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.sm,
+          borderRadius: borders.radiusSmall,
+          fontWeight: typography.fontWeightMedium as '500',
+          fontSize: typography.fontSizeXS,
+          lineHeight: typography.lineHeightXS,
+          overflow: 'hidden',
+          borderWidth: borders.widthThin,
+          // Specific error colors
           backgroundColor: colors.errorBg,
           color: colors.error,
           borderColor: colors.errorBorder,
@@ -1427,46 +1028,32 @@ const theme = {
           marginBottom: spacing.xl,
       } as ViewStyle,
       sectionHeader: {
-          paddingBottom: spacing.xs,
-          marginBottom: spacing.xxs,
+          ...commonStyles.listSectionHeader,
           paddingHorizontal: spacing.lg,
-          color: colors.textSecondary,
-          fontSize: typography.fontSizeS,
-          fontWeight: typography.fontWeightMedium as '500',
-          textTransform: 'uppercase',
+          marginBottom: spacing.xxs,
       } as TextStyle,
       rowContainer: {
-          backgroundColor: colors.surface,
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.sm,
-          flexDirection: 'row',
+          ...commonStyles.listRowContainer,
           alignItems: 'flex-start' as FlexAlignType,
-          borderBottomWidth: borders.widthHairline,
-          borderBottomColor: colors.borderLight,
           minHeight: 48,
       } as ViewStyle,
-      firstRowInSection: {
-          borderTopWidth: borders.widthHairline,
-          borderTopColor: colors.borderLight,
-      } as ViewStyle,
+      firstRowInSection: commonStyles.firstRowInSection,
       rowContentContainer: {
          flex: 1,
          marginRight: spacing.sm,
       } as ViewStyle,
       rowInput: {
-          fontSize: typography.fontSizeM,
-          color: colors.textPrimary,
+          ...commonStyles.baseText,
           paddingVertical: Platform.OS === 'ios' ? 6 : 4,
           paddingHorizontal: 0,
           textAlignVertical: 'top',
       } as TextStyle,
       rowMultiInputContainer: {
-         // No specific styles, used for layout
       } as ViewStyle,
       fieldLabel: {
+          ...commonStyles.labelBase,
           fontSize: typography.fontSizeXS,
-          fontWeight: typography.fontWeightMedium as '500',
-          color: colors.textSecondary,
+          lineHeight: typography.lineHeightXS,
           marginBottom: spacing.xxs,
           marginTop: spacing.xs,
       } as TextStyle,
@@ -1477,27 +1064,26 @@ const theme = {
           alignItems: 'center' as FlexAlignType,
       } as ViewStyle,
       addItemRow: {
+         ...commonStyles.listRowContainer,
          justifyContent: 'space-between',
-         alignItems: 'center' as FlexAlignType,
          minHeight: 44,
          paddingVertical: spacing.xs,
          borderBottomWidth: 0,
-         // Inherits rowContainer styles like background, paddingHorizontal
       } as ViewStyle,
       addRowIcon: {
          marginRight: spacing.md,
-      } as ViewStyle, // Typically holds an icon component
+      } as ViewStyle,
       addRowText: {
-         flex: 1,
-         fontSize: typography.fontSizeM,
+         ...commonStyles.buttonTextBase,
          color: colors.primary,
-         fontWeight: typography.fontWeightMedium as '500',
+         textAlign: 'left',
+         flex: 1,
       } as TextStyle,
       imageItemRow: {
+         ...commonStyles.listRowContainer,
          flexDirection: 'column',
          alignItems: 'stretch' as FlexAlignType,
          paddingVertical: spacing.md,
-         // Inherits rowContainer styles like background, paddingHorizontal, border
       } as ViewStyle,
       imageItemContent: {
          marginBottom: spacing.md,
@@ -1521,7 +1107,6 @@ const theme = {
           marginBottom: spacing.md,
       } as ViewStyle,
       captionContainer: {
-         // No specific styles needed, used for layout
       } as ViewStyle,
       removeImageButton: {
           alignSelf: 'flex-end' as FlexAlignType,
@@ -1533,9 +1118,9 @@ const theme = {
           borderColor: colors.error,
       } as ViewStyle,
       removeButtonText: {
-          color: colors.error,
+          ...commonStyles.buttonTextBase,
           fontSize: typography.fontSizeS,
-          fontWeight: typography.fontWeightMedium as '500',
+          color: colors.error,
           marginLeft: spacing.xs,
       } as TextStyle,
       uploadActivityContainer: {
@@ -1545,12 +1130,13 @@ const theme = {
          paddingVertical: spacing.xs,
       } as ViewStyle,
       uploadActivityText: {
-         marginLeft: spacing.xs,
-         color: colors.textSecondary,
-         fontSize: typography.fontSizeXS,
-         fontStyle: 'italic',
+          ...commonStyles.smallSecondaryText,
+          fontSize: typography.fontSizeXS,
+          lineHeight: typography.lineHeightXS,
+          marginLeft: spacing.xs,
+          fontStyle: 'italic',
       } as TextStyle,
-      button: {
+      button: { // Main action button
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
         borderRadius: borders.radiusMedium,
@@ -1559,121 +1145,84 @@ const theme = {
         justifyContent: 'center',
         minHeight: 44,
       } as ViewStyle,
-      buttonText: {
+      buttonText: { // Main action button text
+        ...commonStyles.buttonTextBase,
         color: colors.textOnPrimary,
-        fontSize: typography.fontSizeM,
-        fontWeight: typography.fontWeightMedium as '500',
       } as TextStyle,
       headerButton: {
           paddingHorizontal: spacing.sm,
           paddingVertical: spacing.xs,
       } as ViewStyle,
-      headerBackButtonContainer: {
-        flexDirection: 'row',
-        alignItems: 'center' as FlexAlignType,
-        paddingLeft: Platform.OS === 'ios' ? spacing.sm : spacing.md,
-      } as ViewStyle,
-      headerBackTitle: {
-        fontSize: typography.fontSizeM,
-        color: colors.textPrimary,
-        marginLeft: spacing.xs,
-      } as TextStyle,
+      headerBackButtonContainer: commonStyles.headerBackButtonContainer,
+      headerBackTitle: commonStyles.headerBackTitle,
     },
     homeScreen: {
-        safeArea: {
-            flex: 1,
-            backgroundColor: colors.background,
-        } as ViewStyle,
+        safeArea: commonStyles.safeArea,
         scrollContainer: {
             flexGrow: 1,
             paddingVertical: spacing.lg,
         } as ViewStyle,
         title: {
-            fontSize: typography.fontSizeXL,
-            fontWeight: typography.fontWeightBold as 'bold',
-            color: colors.textPrimary,
+            ...commonStyles.titleXL,
             marginBottom: spacing.xs,
             textAlign: 'center' as const,
-            lineHeight: typography.lineHeightXL,
             paddingHorizontal: spacing.lg,
         } as TextStyle,
         description: {
-            color: colors.textSecondary,
-            fontSize: typography.fontSizeM,
+            ...commonStyles.secondaryTextBase,
             marginBottom: spacing.xl,
             textAlign: 'center' as const,
-            lineHeight: typography.lineHeightM,
             paddingHorizontal: spacing.lg,
         } as TextStyle,
         sectionContainer: {
             marginBottom: spacing.xl,
         } as ViewStyle,
         sectionHeaderText: {
+            ...commonStyles.labelBase,
             paddingBottom: spacing.xs,
             marginBottom: spacing.xxs,
             paddingHorizontal: spacing.lg,
-            color: colors.textSecondary,
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightMedium as '500',
             textTransform: 'uppercase',
         } as TextStyle,
         rowContainer: {
-            backgroundColor: colors.surface,
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.sm,
-            flexDirection: 'row',
-            alignItems: 'center' as FlexAlignType,
-            borderBottomWidth: borders.widthHairline,
-            borderBottomColor: colors.borderLight,
+            ...commonStyles.listRowContainer,
             minHeight: 48,
         } as ViewStyle,
-        firstRowInSection: {
-            borderTopWidth: borders.widthHairline,
-            borderTopColor: colors.borderLight,
-        } as ViewStyle,
+        firstRowInSection: commonStyles.firstRowInSection,
         rowDisabled: {
             opacity: 0.6,
         } as ViewStyle,
         rowIconContainer: {
-            marginRight: spacing.md,
-            width: 24,
-            alignItems: 'center' as FlexAlignType,
+            ...commonStyles.iconContainer24,
+            justifyContent: undefined,
         } as ViewStyle,
         rowLabel: {
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
+            ...commonStyles.baseText,
             flexGrow: 1,
             flexShrink: 0,
         } as TextStyle,
         rowLabelDisabled: {
+            ...commonStyles.baseText,
             color: colors.textDisabled,
         } as TextStyle,
-        rowValueContainer: {
-            flexShrink: 1,
-            flexDirection: 'row',
-            alignItems: 'center' as FlexAlignType,
-            marginLeft: spacing.sm,
-        } as ViewStyle,
+        rowValueContainer: commonStyles.listValueContainer,
         rowValueText: {
-            fontSize: typography.fontSizeM,
-            color: colors.textSecondary,
+            ...commonStyles.listValueText,
             textAlign: 'right' as const,
             marginRight: spacing.xs,
         } as TextStyle,
         rowValueDisabled: {
+            ...commonStyles.listValueText,
             color: colors.textDisabled,
             fontStyle: 'italic',
         } as TextStyle,
         rowChevron: {
-            // Empty - used for positioning icon
         } as ViewStyle,
         rowSpinner: {
-            marginLeft: spacing.xs, // Add some space for spinner
+            marginLeft: spacing.xs,
         } as ViewStyle,
         fetchErrorText: {
-            color: colors.error,
-            fontSize: typography.fontSizeS,
-            textAlign: 'center' as const,
+            ...commonStyles.errorTextBase,
             paddingVertical: spacing.sm,
             marginHorizontal: spacing.lg,
             fontWeight: typography.fontWeightMedium as '500',
@@ -1683,7 +1232,7 @@ const theme = {
             borderWidth: borders.widthThin,
             borderColor: colors.errorBorder,
         } as TextStyle,
-        uploadSectionContent: { // Note: This style might be unused now
+        uploadSectionContent: {
             backgroundColor: colors.surface,
             borderTopWidth: borders.widthHairline,
             borderTopColor: colors.borderLight,
@@ -1693,13 +1242,7 @@ const theme = {
             marginBottom: spacing.xl,
         } as ViewStyle,
         buttonBase: {
-            backgroundColor: colors.surface,
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.sm,
-            flexDirection: 'row',
-            alignItems: 'center' as FlexAlignType,
-            borderBottomWidth: borders.widthHairline,
-            borderBottomColor: colors.borderLight,
+            ...commonStyles.listRowContainer,
             minHeight: 48,
             width: '100%',
             justifyContent: 'space-between',
@@ -1708,72 +1251,74 @@ const theme = {
             opacity: 0.6,
         } as ViewStyle,
         buttonTextBase: {
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary, // Using a specific color ('#222') in original - adjust if needed
+            ...commonStyles.baseText,
             flexShrink: 1,
             marginLeft: spacing.md,
+            textAlign: 'left',
         } as TextStyle,
         buttonTextDisabled: {
+            ...commonStyles.baseText,
             color: colors.textDisabled,
         } as TextStyle,
         buttonIconContainer: {
-            width: 24,
-            alignItems: 'center' as FlexAlignType,
+            ...commonStyles.iconContainer24,
+            justifyContent: undefined,
         } as ViewStyle,
         buttonChevronContainer: {
             marginLeft: spacing.sm,
         } as ViewStyle,
         buttonActivityIndicator: {
-            // Empty - potentially used for styling indicator within chevron container
         } as ViewStyle,
-        thumbnailContainer: { // Note: This style might be unused now
+        thumbnailContainer: {
             flexDirection: 'row',
             alignItems: 'center' as FlexAlignType,
             marginTop: spacing.md,
             padding: spacing.sm,
             backgroundColor: colors.surfaceAlt,
             borderRadius: borders.radiusMedium,
-            borderWidth: 1,
+            borderWidth: borders.widthThin,
             borderColor: colors.borderLight,
         } as ViewStyle,
-        thumbnail: { // Note: This style might be unused now
+        thumbnail: {
             width: 60,
             height: 60,
             borderRadius: borders.radiusSmall,
             backgroundColor: colors.borderLight,
         } as ImageStyle,
-        thumbnailPlaceholder: { // Note: This style might be unused now
+        thumbnailPlaceholder: {
             width: 60,
             height: 60,
             borderRadius: borders.radiusSmall,
             backgroundColor: colors.surfaceAlt,
             justifyContent: 'center',
             alignItems: 'center' as FlexAlignType,
-            borderWidth: 1,
+            borderWidth: borders.widthThin,
             borderColor: colors.borderLight,
             padding: spacing.xs,
         } as ViewStyle,
-        thumbnailPlaceholderText: { // Note: This style might be unused now
+        thumbnailPlaceholderText: {
+            ...commonStyles.smallSecondaryText,
             fontSize: typography.fontSizeXS,
-            color: colors.textSecondary,
+            lineHeight: typography.lineHeightXS,
             textAlign: 'center' as const,
             marginTop: spacing.xxs,
         } as TextStyle,
-        thumbnailInfoContainer: { // Note: This style might be unused now
+        thumbnailInfoContainer: {
             flex: 1,
             marginLeft: spacing.md,
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center' as FlexAlignType,
         } as ViewStyle,
-        thumbnailFileName: { // Note: This style might be unused now
+        thumbnailFileName: {
+            ...commonStyles.labelBase,
             fontSize: typography.fontSizeS,
             color: colors.textPrimary,
-            fontWeight: typography.fontWeightMedium as '500',
-            flexShrink: 1, // Allow text to shrink
-            marginRight: spacing.xs, // Space before clear button
+            lineHeight: typography.lineHeightS,
+            flexShrink: 1,
+            marginRight: spacing.xs,
         } as TextStyle,
-        thumbnailClearButton: { // Note: This style might be unused now
+        thumbnailClearButton: {
             padding: spacing.xs,
         } as ViewStyle,
         resultsContainerBase: {
@@ -1791,34 +1336,31 @@ const theme = {
             alignItems: 'center' as FlexAlignType,
         } as ViewStyle,
         resultsContainerError: {
-            // Base already covers background
         } as ViewStyle,
         resultTextBase: {
-            fontSize: typography.fontSizeM,
-            lineHeight: typography.lineHeightM,
+            ...commonStyles.baseText,
             marginBottom: spacing.sm,
             textAlign: 'left' as const,
         } as TextStyle,
         resultTextLoading: {
-            color: colors.textSecondary,
+            ...commonStyles.secondaryTextBase,
             textAlign: 'center' as const,
-            fontWeight: typography.fontWeightNormal as 'normal',
         } as TextStyle,
         resultTextError: {
+            ...commonStyles.baseText,
             color: colors.error,
-            fontWeight: typography.fontWeightNormal as 'normal',
         } as TextStyle,
         resultLoadingIndicator: {
             marginTop: spacing.sm,
             alignSelf: 'center' as FlexAlignType,
         } as ViewStyle,
-        modalContainer: { // Note: This style might be unused now
+        modalContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center' as FlexAlignType,
             paddingBottom: 100,
         } as ViewStyle,
-        videoContainer: { // Note: This style might be unused now
+        videoContainer: {
             width: Dimensions.get('window').width * 0.9,
             height: Dimensions.get('window').height * 0.7,
             backgroundColor: colors.background,
@@ -1826,12 +1368,11 @@ const theme = {
             overflow: 'hidden',
             marginBottom: spacing.lg,
         } as ViewStyle,
-        videoPlayer: { // Note: This style might be unused now
+        videoPlayer: {
             width: '100%',
             height: '100%',
         } as ImageStyle,
         closeButton: {
-            // Empty - potentially used for modal close button styling
         } as ViewStyle,
         generateButton: {
             backgroundColor: colors.surface,
@@ -1848,46 +1389,43 @@ const theme = {
             borderTopColor: colors.borderLight,
             borderBottomColor: colors.borderLight,
         } as ViewStyle,
-        disabledButton: { // Applied in JSX logic, kept for reference or future use
+        disabledButton: {
             opacity: 0.6,
         } as ViewStyle,
         generateButtonText: {
-            fontSize: typography.fontSizeM,
-            color: colors.textPrimary,
-            textAlign: 'center' as const,
+            ...commonStyles.buttonTextBase,
             fontWeight: typography.fontWeightNormal as 'normal',
+            color: colors.textPrimary,
         } as TextStyle,
-        instructionsContainer: { // Note: This style might be unused now
+        instructionsContainer: {
             flexDirection: 'row',
             backgroundColor: colors.surface,
             borderRadius: borders.radiusMedium,
             padding: spacing.md,
-            marginBottom: spacing.lg, // Space before the next section
+            marginBottom: spacing.lg,
             borderWidth: borders.widthThin,
             borderColor: colors.borderLight,
         } as ViewStyle,
-        instructionsIcon: { // Note: This style might be unused now
+        instructionsIcon: {
             marginRight: spacing.sm,
-            marginTop: 1, // Align icon slightly better
+            marginTop: 1,
         } as ViewStyle,
-        instructionsTextContainer: { // Note: This style might be unused now
+        instructionsTextContainer: {
             flex: 1,
         } as ViewStyle,
-        instructionsTitle: { // Note: This style might be unused now
-            fontSize: typography.fontSizeS,
-            fontWeight: typography.fontWeightBold as 'bold',
+        instructionsTitle: {
+            ...commonStyles.labelBase,
             color: colors.textPrimary,
             marginBottom: spacing.xs,
         } as TextStyle,
-        instructionsText: { // Note: This style might be unused now
-            fontSize: typography.fontSizeS - 1, // Slightly smaller
-            lineHeight: typography.lineHeightS,
-            color: colors.textSecondary,
+        instructionsText: {
+            ...commonStyles.smallSecondaryText,
+            fontSize: typography.fontSizeS - 1,
             marginBottom: spacing.xs,
         } as TextStyle,
-        instructionsBold: { // Note: This style might be unused now
+        instructionsBold: {
             fontWeight: typography.fontWeightBold as 'bold',
-            color: colors.textPrimary, // Make bold parts stand out more
+            color: colors.textPrimary,
         } as TextStyle,
         headerRow: {
             flexDirection: 'row',
@@ -1917,9 +1455,7 @@ const theme = {
             marginBottom: spacing.sm,
         } as ViewStyle,
         tipsModalTitle: {
-            fontSize: typography.fontSizeM,
-            fontWeight: typography.fontWeightBold as 'bold',
-            color: colors.textPrimary,
+            ...commonStyles.titleM,
         } as TextStyle,
         tipsModalCloseButton: {
             padding: spacing.sm,
@@ -1936,11 +1472,8 @@ const theme = {
             marginRight: spacing.sm,
         } as ViewStyle,
         tipText: {
-            flex: 1,
-            // Inherits text styles? Check base Text component or add explicitly
-             fontSize: typography.fontSizeS,
-             color: colors.textSecondary,
-             lineHeight: typography.lineHeightS,
+            ...commonStyles.smallSecondaryText,
+             flex: 1,
         } as TextStyle,
         tipBold: {
             fontWeight: typography.fontWeightBold as 'bold',
@@ -1958,17 +1491,17 @@ const theme = {
             zIndex: 100,
         } as ViewStyle,
         loadingText: {
-            marginTop: spacing.md, // Was 16
-            fontSize: 18, // Consider using typography.fontSizeL or M
+            marginTop: spacing.md,
+            fontSize: 18,
             color: colors.textPrimary,
-            fontWeight: 'bold', // Consider using typography.fontWeightBold
+            fontWeight: 'bold',
         } as TextStyle,
-        mediaCard: { // Note: This style might be unused now
+        mediaCard: {
             backgroundColor: colors.surface,
-            borderRadius: borders.radiusLarge, // Was 16
-            padding: spacing.sm + spacing.xs, // Was 12
-            marginTop: spacing.md, // Was 16
-            marginBottom: spacing.sm, // Was 8
+            borderRadius: borders.radiusLarge,
+            padding: spacing.sm + spacing.xs,
+            marginTop: spacing.md,
+            marginBottom: spacing.sm,
             alignItems: 'center' as FlexAlignType,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
@@ -1976,41 +1509,40 @@ const theme = {
             shadowRadius: 8,
             elevation: 2,
         } as ViewStyle,
-        mediaThumbnailWrapper: { // Note: This style might be unused now
+        mediaThumbnailWrapper: {
             position: 'relative',
             width: 120,
             height: 120,
-            borderRadius: borders.radiusLarge - 4, // Was 12
+            borderRadius: borders.radiusLarge - 4,
             overflow: 'hidden',
-            marginBottom: spacing.sm, // Was 8
+            marginBottom: spacing.sm,
         } as ViewStyle,
-        mediaThumbnail: { // Note: This style might be unused now
+        mediaThumbnail: {
             width: '100%',
             height: '100%',
-            borderRadius: borders.radiusLarge - 4, // Was 12
+            borderRadius: borders.radiusLarge - 4,
             backgroundColor: colors.borderLight,
         } as ImageStyle,
-        playIcon: { // Note: This style might be unused now
+        playIcon: {
             position: 'absolute',
             top: '50%',
             left: '50%',
             marginLeft: -18,
             marginTop: -18,
         } as ViewStyle,
-        removeMediaButton: { // Note: This style might be unused now
+        removeMediaButton: {
             position: 'absolute',
             top: 6,
             right: 6,
             backgroundColor: 'rgba(0,0,0,0.3)',
-            borderRadius: 14, // Consider borders.radiusPill if fully round
+            borderRadius: 14,
             padding: 2,
             zIndex: 2,
         } as ViewStyle,
-        mediaFileName: { // Note: This style might be unused now
-            fontSize: typography.fontSizeS,
+        mediaFileName: {
+            ...commonStyles.labelBase,
             color: colors.textPrimary,
-            fontWeight: typography.fontWeightMedium as '500',
-            marginTop: spacing.xxs, // Was 2
+            marginTop: spacing.xxs,
             textAlign: 'center' as const,
             maxWidth: 120,
         } as TextStyle,
@@ -2027,8 +1559,8 @@ const theme = {
             width: '90%',
             maxWidth: 400,
             aspectRatio: 9 / 16,
-            backgroundColor: colors.surface, // Was #fff
-            borderRadius: 20, // Consider borders.radiusLarge+4 or specific value
+            backgroundColor: colors.surface,
+            borderRadius: 20,
             overflow: 'hidden',
             alignItems: 'center' as FlexAlignType,
             justifyContent: 'center',
@@ -2042,73 +1574,69 @@ const theme = {
         previewVideoPlayer: {
             width: '100%',
             height: '100%',
-            borderRadius: 20, // Match previewModalContent
-            backgroundColor: '#000', // Keep black for video background
+            borderRadius: 20,
+            backgroundColor: '#000',
         } as ImageStyle,
         previewModalCloseButton: {
             position: 'absolute',
-            top: spacing.sm + spacing.xs, // Was 12
-            right: spacing.sm + spacing.xs, // Was 12
+            top: spacing.sm + spacing.xs,
+            right: spacing.sm + spacing.xs,
             backgroundColor: 'rgba(0,0,0,0.7)',
-            borderRadius: 20, // Half of width/height
+            borderRadius: 20,
             width: 40,
             height: 40,
             alignItems: 'center' as FlexAlignType,
             justifyContent: 'center',
             zIndex: 10,
-            borderWidth: 2, // Keep explicit?
-            borderColor: '#fff', // Keep explicit white?
+            borderWidth: 2,
+            borderColor: '#fff',
         } as ViewStyle,
         thumbnailPreviewWrapper: {
             alignItems: 'center' as FlexAlignType,
             justifyContent: 'center',
-            marginTop: spacing.md, // Was 16
-            marginBottom: spacing.sm, // Was 8
+            marginTop: spacing.md,
+            marginBottom: spacing.sm,
             position: 'relative',
         } as ViewStyle,
         thumbnailPreviewContainer: {
             width: 120,
             height: 120,
-            borderRadius: borders.radiusLarge - 4, // Was 12
+            borderRadius: borders.radiusLarge - 4,
             overflow: 'hidden',
-            backgroundColor: '#eee', // Consider colors.borderLight or surfaceAlt
+            backgroundColor: '#eee',
             alignItems: 'center' as FlexAlignType,
             justifyContent: 'center',
-            borderWidth: 1, // borders.widthThin
-            borderColor: '#ccc', // Consider colors.border
+            borderWidth: borders.widthThin,
+            borderColor: '#ccc',
         } as ViewStyle,
         thumbnailPreviewImage: {
             width: '100%',
             height: '100%',
-            borderRadius: borders.radiusLarge - 4, // Was 12
-            backgroundColor: '#eee', // Consider colors.borderLight or surfaceAlt
+            borderRadius: borders.radiusLarge - 4,
+            backgroundColor: '#eee',
         } as ImageStyle,
         thumbnailPlayIcon: {
             position: 'absolute',
             top: '50%',
             left: '50%',
-            marginLeft: -20, // Half of icon size (40)
-            marginTop: -20, // Half of icon size (40)
+            marginLeft: -20,
+            marginTop: -20,
             opacity: 0.8,
-            color: '#222' // Consider colors.textPrimary
+            color: '#222'
         } as ViewStyle,
         thumbnailRemoveButton: {
             position: 'absolute',
-            top: spacing.xs, // Was 4
-            // Original used '25%' right offset, which is hard to maintain.
-            // Positioning relative to the 120x120 wrapper might be better.
-            // Example: right: (Dimensions.get('window').width / 2) - (120 / 2) + (120/2) - (28/2) - 4? // Complex.
-            // Let's keep the percentage for now, but acknowledge it's brittle.
+            top: spacing.xs,
              right: '25%',
-            backgroundColor: '#222', // Consider colors.textPrimary or a dark grey
-            borderRadius: 14, // Half of width/height
+            backgroundColor: '#222',
+            borderRadius: 14,
             width: 28,
             height: 28,
             alignItems: 'center' as FlexAlignType,
             justifyContent: 'center',
             zIndex: 2,
-            borderWidth: 2, // Keep explicit?
-            borderColor: '#fff', // Keep explicit white?
+            borderWidth: 2,
+            borderColor: '#fff',
         } as ViewStyle,
     },
   },

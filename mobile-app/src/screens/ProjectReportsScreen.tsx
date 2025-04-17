@@ -18,7 +18,7 @@ import { CommonActions } from '@react-navigation/native';
 import theme, { colors } from '../theme/theme'; // Import theme and colors
 import { API_BASE_URL, S3_BUCKET_NAME, AWS_REGION } from '../config'; // Import S3 constants
 import { useAuth } from '../context/AuthContext';
-import { fetchApi } from './fetchApiHelper';
+import { fetchApi } from '../utils/fetchApiHelper';
 import { BrowseStackParamList } from '../navigation/AppNavigator'; // Import ParamList for navigation types
 
 // Type for the route parameters expected by this screen

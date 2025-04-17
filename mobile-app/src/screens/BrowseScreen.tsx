@@ -16,7 +16,7 @@ import { BrowseStackParamList } from '../navigation/AppNavigator';
 import theme, { colors } from '../theme/theme';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
-import { fetchApi } from './fetchApiHelper';
+import { fetchApi } from '../utils/fetchApiHelper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // --- Data Structure Types ---
