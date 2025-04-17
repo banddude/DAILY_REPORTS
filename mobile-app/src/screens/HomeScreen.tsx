@@ -16,6 +16,8 @@ import {
   Button,
   AlertButton,
   StyleSheet,
+  Animated,
+  Pressable,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,7 +31,10 @@ import { useAuth } from '../context/AuthContext';
 import { fetchApi } from '../utils/fetchApiHelper';
 import SelectionModal from '../components/SelectionModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import TipsModal from '../components/TipsModal';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from '@react-navigation/elements';
 
 // Restore constant
 const ADD_NEW_CUSTOMER_OPTION = "Add New Customer...";
@@ -77,8 +82,8 @@ const HomeScreen: React.FC = () => {
   const [isFetchingProjects, setIsFetchingProjects] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // State for modal
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  // State for Selection modal
+  const [isSelectionModalVisible, setIsSelectionModalVisible] = useState(false);
   const [modalConfig, setModalConfig] = useState<{
       title: string;
       data: string[];
@@ -92,7 +97,20 @@ const HomeScreen: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<{ type: 'customer' | 'project', name: string } | null>(null);
 
   // State for tips modal
-  const [showTipsModal, setShowTipsModal] = useState(false);
+  const [isTipsModalVisible, setIsTipsModalVisible] = useState(false);
+
+  // State for Selection modal mounting/unmounting (for animation)
+  const [isSelectionModalMounted, setIsSelectionModalMounted] = useState(false);
+  const selectionModalAnimation = useRef(new Animated.Value(0)).current;
+
+  // State and animation for Tips modal
+  const [isTipsModalMounted, setIsTipsModalMounted] = useState(false);
+  const tipsModalAnimation = useRef(new Animated.Value(0)).current;
+
+  // Get screen dimensions, safe area insets, and navigation header height
+  const insets = useSafeAreaInsets();
+  const { height: screenHeight } = Dimensions.get('window');
+  const navigationHeaderHeight = useHeaderHeight();
 
   // Log token value on every render - Use session
   console.log(`HomeScreen Render: Session is ${session ? 'present' : 'null'}. isAuthenticated: ${isAuthenticated}`);
@@ -303,6 +321,46 @@ const HomeScreen: React.FC = () => {
 
   }, [isPreviewModalVisible]);
 
+  // --- Selection Modal Animation Effect --- 
+  useEffect(() => {
+    if (isSelectionModalVisible) {
+      setIsSelectionModalMounted(true);
+      Animated.timing(selectionModalAnimation, {
+        toValue: 1,
+        duration: 250, 
+        useNativeDriver: true, 
+      }).start();
+    } else {
+      Animated.timing(selectionModalAnimation, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsSelectionModalMounted(false);
+      });
+    }
+  }, [isSelectionModalVisible, selectionModalAnimation]);
+
+  // --- Tips Modal Animation Effect --- 
+  useEffect(() => {
+    if (isTipsModalVisible) {
+      setIsTipsModalMounted(true);
+      Animated.timing(tipsModalAnimation, {
+        toValue: 1,
+        duration: 250, 
+        useNativeDriver: true, 
+      }).start();
+    } else {
+      Animated.timing(tipsModalAnimation, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsTipsModalMounted(false);
+      });
+    }
+  }, [isTipsModalVisible, tipsModalAnimation]);
+
   // Modal handlers
   const openCustomerModal = () => {
     setModalConfig({
@@ -331,7 +389,7 @@ const HomeScreen: React.FC = () => {
             closeModal(); 
         },
     });
-    setIsModalVisible(true);
+    setIsSelectionModalVisible(true);
   };
 
   const openProjectModal = () => {
@@ -362,11 +420,11 @@ const HomeScreen: React.FC = () => {
             closeModal(); 
         },
     });
-    setIsModalVisible(true);
+    setIsSelectionModalVisible(true);
   };
 
   const closeModal = () => {
-    setIsModalVisible(false);
+    setIsSelectionModalVisible(false);
     setModalConfig(null);
   };
 
@@ -896,16 +954,26 @@ const HomeScreen: React.FC = () => {
   // Debug log for button state
   console.log('Button disabled:', !selectedFile, !selectedCustomer, selectedCustomer === ADD_NEW_CUSTOMER_OPTION, !selectedProject, selectedProject === ADD_NEW_PROJECT_OPTION, isGeneratingReport);
 
+  // Calculate max height for the SelectionModal using navigation header height
+  const bottomPaddingEstimate = spacing.xxl * 2; // Estimate space needed for button + result area
+  const maxModalHeight = screenHeight - navigationHeaderHeight - insets.bottom - bottomPaddingEstimate;
+
   return (
-    <SafeAreaView style={theme.screens.homeScreen.safeArea}>
+    <SafeAreaView style={[theme.screens.homeScreen.safeArea, styles.flexContainer]}> 
+       {/* REMOVED Header Section measurement View */}
+       {/* The title/description are now just regular elements within the ScrollView */}
+       
+       {/* Scrollable Content Area - Now contains the title/description */}
        <ScrollView
          contentContainerStyle={theme.screens.homeScreen.scrollContainer}
          keyboardShouldPersistTaps="handled"
          showsVerticalScrollIndicator={false}
+         style={styles.scrollViewFlex} 
        >
-            <View style={theme.screens.homeScreen.headerRow}>
+            {/* Moved title/description inside ScrollView */}
+            <View style={theme.screens.homeScreen.headerRow}> 
               <Text style={theme.screens.homeScreen.title}>Daily Report Generator</Text>
-              <TouchableOpacity onPress={() => setShowTipsModal(true)} style={theme.screens.homeScreen.tipsButton} accessibilityLabel="How to Get the Best Report">
+              <TouchableOpacity onPress={() => setIsTipsModalVisible(true)} style={theme.screens.homeScreen.tipsButton} accessibilityLabel="How to Get the Best Report">
                 <Ionicons name="help-circle-outline" size={28} color={colors.primary} />
               </TouchableOpacity>
             </View>
@@ -913,42 +981,7 @@ const HomeScreen: React.FC = () => {
                 Select customer & project, then upload or record a video walkthrough to generate a report.
             </Text>
 
-            {/* --- Tips Modal --- */}
-            <Modal
-              visible={showTipsModal}
-              animationType="slide"
-              transparent
-              onRequestClose={() => setShowTipsModal(false)}
-            >
-              <View style={theme.screens.homeScreen.modalOverlay}>
-                <View style={theme.screens.homeScreen.tipsModalContainer}>
-                  <View style={theme.screens.homeScreen.tipsModalHeader}>
-                    <Text style={theme.screens.homeScreen.tipsModalTitle}>How to Get the Best Report</Text>
-                    <TouchableOpacity onPress={() => setShowTipsModal(false)} style={theme.screens.homeScreen.tipsModalCloseButton} accessibilityLabel="Close Tips">
-                      <Ionicons name="close" size={28} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={theme.screens.homeScreen.tipsList}>
-                    <View style={theme.screens.homeScreen.tipRow}>
-                      <Ionicons name="mic-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
-                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Speak Clearly:</Text> Enunciate near your device's mic. The AI transcribes exactly what it hears.</Text>
-                    </View>
-                    <View style={theme.screens.homeScreen.tipRow}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
-                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Verbalize Everything:</Text> Mention details, observations, measurements, and even the desired tone or sections for your report (e.g., "In the summary, mention that the framing is complete."). The AI uses your words to write the report.</Text>
-                    </View>
-                    <View style={theme.screens.homeScreen.tipRow}>
-                      <Ionicons name="camera-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
-                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Steady Camera for Images:</Text> The AI selects images based on your speech timestamps. When describing something you want a picture of, <Text style={theme.screens.homeScreen.tipBold}>hold the camera steady on the subject for a few seconds while speaking about it.</Text></Text>
-                    </View>
-                    <View style={theme.screens.homeScreen.tipRow}>
-                      <Ionicons name="sunny-outline" size={22} color={colors.primary} style={theme.screens.homeScreen.tipIcon} />
-                      <Text style={theme.screens.homeScreen.tipText}><Text style={theme.screens.homeScreen.tipBold}>Good Lighting & Minimal Noise:</Text> Ensure the environment is well-lit and reasonably quiet for best results.</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </Modal>
+            {/* --- Tips Modal (REMOVED OLD INLINE DEFINITION) --- */}
             {/* ------------------- */}
 
             <View style={theme.screens.homeScreen.sectionContainer}>
@@ -1072,19 +1105,83 @@ const HomeScreen: React.FC = () => {
             {renderResultArea()}
         </ScrollView>
 
-        {modalConfig && (
-            <SelectionModal
-                isVisible={isModalVisible}
-                title={modalConfig.title}
-                data={modalConfig.data}
-                currentSelection={modalConfig.currentSelection}
-                onSelect={modalConfig.onSelect}
-                onClose={closeModal}
-                isLoading={modalConfig.isLoading}
-            />
-        )}
+       {/* --- Absolutely Positioned, Centered, Animated Selection Modal --- */} 
+       {isSelectionModalMounted && modalConfig && (
+         <Animated.View 
+           style={[
+             styles.modalAbsoluteContainer, 
+             { opacity: selectionModalAnimation } 
+           ]}
+         >
+           <Pressable
+               style={styles.modalBackgroundPressable} 
+               onPress={closeModal} 
+           />
+           <Animated.View
+             style={[
+               styles.modalContentWrapper, 
+               {
+                 transform: [ 
+                   {
+                     scale: selectionModalAnimation.interpolate({
+                       inputRange: [0, 1],
+                       outputRange: [0.85, 1], 
+                     }),
+                   },
+                 ],
+               }
+             ]}
+           >
+             <SelectionModal
+                 isVisible={isSelectionModalVisible}
+                 title={modalConfig.title}
+                 data={modalConfig.data}
+                 currentSelection={modalConfig.currentSelection}
+                 onSelect={modalConfig.onSelect}
+                 onClose={closeModal}
+                 isLoading={modalConfig.isLoading}
+             />
+            </Animated.View>
+         </Animated.View>
+       )}
 
-        <Modal
+      {/* --- Absolutely Positioned, Centered, Animated Tips Modal --- */} 
+      {isTipsModalMounted && ( // Conditionally render based on mount state
+         <Animated.View 
+           style={[
+             styles.modalAbsoluteContainer, 
+             { opacity: tipsModalAnimation } // Use tips animation value
+           ]}
+         >
+           <Pressable
+               style={styles.modalBackgroundPressable} 
+               onPress={() => setIsTipsModalVisible(false)} // Close tips modal
+           />
+           <Animated.View
+             style={[
+               styles.modalContentWrapper, // Use the same wrapper style for consistency
+               {
+                 transform: [ 
+                   {
+                     scale: tipsModalAnimation.interpolate({ // Use tips animation value
+                       inputRange: [0, 1],
+                       outputRange: [0.85, 1], 
+                     }),
+                   },
+                 ],
+               }
+             ]}
+           >
+             <TipsModal
+                 isVisible={isTipsModalVisible}
+                 onClose={() => setIsTipsModalVisible(false)}
+             />
+            </Animated.View>
+         </Animated.View>
+       )}
+
+       {/* --- Other Modals (Standard Modals - Unchanged) --- */} 
+        <Modal // Preview Modal
           visible={isPreviewModalVisible}
           transparent={true}
           animationType="fade"
@@ -1148,5 +1245,44 @@ const HomeScreen: React.FC = () => {
     </SafeAreaView>
   );
 }
+
+// --- Add StyleSheet definitions at the end --- 
+const styles = StyleSheet.create({
+  flexContainer: {
+    flex: 1, // Ensure SafeAreaView takes full screen height
+  },
+  scrollViewFlex: {
+    flex: 1, // Allows ScrollView to take remaining space
+  },
+  modalAbsoluteContainer: {
+    position: 'absolute',
+    top: 0, 
+    left: 0,
+    right: 0,
+    bottom: 0, 
+    justifyContent: 'center', // Center children vertically
+    alignItems: 'center', // Center children horizontally
+    // Background color moved to the Pressable background
+    zIndex: 20, 
+    // pointerEvents: 'box-none', // Let touches go through to children
+  },
+  modalBackgroundPressable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', // Overlay background
+  },
+  modalContentWrapper: {
+    width: '90%', // Modal width relative to screen
+    maxHeight: '75%', // Modal max height relative to screen
+    backgroundColor: colors.background, // Need a background for the modal itself
+    borderRadius: borders.radiusLarge, // Apply rounding here now
+    overflow: 'hidden', // Ensure children (like list) respect the border radius
+    // pointerEvents: 'auto', // Catch touches within the modal area
+  },
+  // REMOVED modalOverlayInline as it's replaced by modalBackgroundPressable
+});
 
 export default HomeScreen; 

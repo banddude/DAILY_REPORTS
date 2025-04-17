@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Modal,
   View,
   Text,
   StyleSheet,
@@ -50,8 +49,11 @@ const styles = StyleSheet.create({
       backgroundColor: colors.background, // Background for the modal content area
       borderTopLeftRadius: borders.radiusLarge, // Rounded top corners
       borderTopRightRadius: borders.radiusLarge,
-      maxHeight: deviceHeight * 0.75, // Limit height to 75% of screen
-      paddingBottom: Platform.OS === 'ios' ? 0 : spacing.md, // Adjust padding for safe area view behavior
+      borderBottomLeftRadius: borders.radiusLarge, // Rounded bottom corners
+      borderBottomRightRadius: borders.radiusLarge, // Rounded bottom corners
+      // maxHeight was removed in previous step, controlled by parent now
+      // Ensure paddingBottom is sufficient, especially on Android if not using edges['bottom']
+      paddingBottom: Platform.OS === 'ios' ? 0 : spacing.md, 
   },
   modalContent: {
     // Content inside SafeAreaView, height adjusts
@@ -202,7 +204,8 @@ const SelectionModal: React.FC<SelectionModalProps> = ({
     );
   }, [data, searchQuery]);
 
-  // Reset search when modal closes or data changes
+  // Reset search when modal becomes hidden or data changes
+  // Parent controls visibility now, but reset logic is still useful
   useEffect(() => {
     if (!isVisible) {
       setSearchQuery('');
@@ -229,10 +232,9 @@ const SelectionModal: React.FC<SelectionModalProps> = ({
       }
       console.log(`Saving new item from modal: ${nameToSave}`);
       onSelect(nameToSave); // Call the main onSelect handler with the new name
-      // Reset state and potentially close (HomeScreen's onSelect closes it)
+      // Reset state. Parent (HomeScreen) handles closing via its onSelect.
       setIsAdding(false);
       setNewItemName('');
-      // onClose(); // Let HomeScreen handle closing via its onSelect -> closeModal flow
   };
 
   // Render item in the list
@@ -279,79 +281,83 @@ const SelectionModal: React.FC<SelectionModalProps> = ({
       </View>
   );
 
+  // No longer return Modal, return the content directly
+  // If not visible, return null (or parent handles this)
+  if (!isVisible) {
+    return null;
+  }
+
   return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isVisible}
-      onRequestClose={onClose} // For Android back button
+    // Removed Modal wrapper
+    // Use KeyboardAvoidingView to handle keyboard overlap
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      // Style might need adjustment depending on placement in HomeScreen
+      // Removing flex: 1 and justifyContent: 'flex-end' as it's now inline
+      // style={styles.keyboardAvoidingContainer} 
+      style={{ width: '100%' }} // Take full width within its container
     >
-      {/* Wrap the entire interactive area in KeyboardAvoidingView */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardAvoidingContainer} // Use a style that allows flex positioning
+      {/* Removed semi-transparent overlay TouchableOpacity */}
+
+      {/* Actual Modal Content Area - Keep SafeAreaView for bottom padding */}
+      {/* Edges adjusted - top is handled by parent, keep bottom for home indicator */}
+      <SafeAreaView 
+        style={styles.safeAreaContainer} // REMOVED maxHeight style application here
+        edges={['bottom']}
       >
-        {/* Semi-transparent overlay */}
-        <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={onClose} // Close when tapping overlay
-        />
+        <View style={styles.modalContent}>
+            {/* Header with Title and Close Button */}
+            <View style={styles.headerContainer}>
+                <Text style={styles.titleText}>{title}</Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                    <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+                </TouchableOpacity>
+            </View>
 
-        {/* Actual Modal Content Area */}
-        <SafeAreaView style={styles.safeAreaContainer} edges={['bottom', 'left', 'right']}>
-          <View style={styles.modalContent}>
-              {/* Header with Title and Close Button */}
-              <View style={styles.headerContainer}>
-                  <Text style={styles.titleText}>{title}</Text>
-                  <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                      <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
-                  </TouchableOpacity>
-              </View>
-
-              {/* Loading Indicator or List */}
-              {isLoading ? (
-                  <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="large" color={colors.primary} />
-                  </View>
-              ) : isAdding ? (
-                  // Inline Add View
-                  <View style={styles.addViewContainer}>
-                       <TextInput
-                          style={styles.inlineInput}
-                          placeholder={`Enter new ${title.replace('Select ', '').toLowerCase()} name`}
-                          placeholderTextColor={colors.textSecondary}
-                          value={newItemName}
-                          onChangeText={setNewItemName}
-                          autoFocus={true}
-                          autoCapitalize="words"
-                          returnKeyType="done"
-                          onSubmitEditing={handleSaveNewItem}
-                       />
-                       <View style={styles.addButtonsContainer}>
-                           <TouchableOpacity onPress={() => { setIsAdding(false); setNewItemName(''); }} style={styles.cancelButton}>
-                               <Text style={styles.inlineButtonText}>Cancel</Text>
-                           </TouchableOpacity>
-                           <TouchableOpacity onPress={handleSaveNewItem} style={[styles.inlineButton, styles.saveButton]}>
-                               <Text style={[styles.inlineButtonText, styles.saveButtonText]}>Save</Text>
-                           </TouchableOpacity>
-                       </View>
-                  </View>
-              ) : (
-                  <FlatList
-                      ListHeaderComponent={ListHeaderComponent}
-                      data={filteredData}
-                      renderItem={renderItem}
-                      keyExtractor={(item, index) => `${item}-${index}`}
-                      ListEmptyComponent={ListEmptyComponent}
-                      keyboardShouldPersistTaps="handled"
-                      style={styles.listContainer}
-                  />
-              )}
-          </View>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
-    </Modal>
+            {/* Loading Indicator or List/Add View */}
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+            ) : isAdding ? (
+                // Inline Add View
+                <View style={styles.addViewContainer}>
+                     <TextInput
+                        style={styles.inlineInput}
+                        placeholder={`Enter new ${title.replace('Select ', '').toLowerCase()} name`}
+                        placeholderTextColor={colors.textSecondary}
+                        value={newItemName}
+                        onChangeText={setNewItemName}
+                        autoFocus={true}
+                        autoCapitalize="words"
+                        returnKeyType="done"
+                        onSubmitEditing={handleSaveNewItem}
+                     />
+                     <View style={styles.addButtonsContainer}>
+                         <TouchableOpacity onPress={() => { setIsAdding(false); setNewItemName(''); }} style={styles.cancelButton}>
+                             <Text style={styles.inlineButtonText}>Cancel</Text>
+                         </TouchableOpacity>
+                         <TouchableOpacity onPress={handleSaveNewItem} style={[styles.inlineButton, styles.saveButton]}>
+                             <Text style={[styles.inlineButtonText, styles.saveButtonText]}>Save</Text>
+                         </TouchableOpacity>
+                     </View>
+                </View>
+            ) : (
+                <FlatList
+                    ListHeaderComponent={ListHeaderComponent}
+                    data={filteredData}
+                    renderItem={renderItem}
+                    keyExtractor={(item, index) => `${item}-${index}`}
+                    ListEmptyComponent={ListEmptyComponent}
+                    keyboardShouldPersistTaps="handled"
+                    style={styles.listContainer}
+                    // Consider adding initialNumToRender or other FlatList optimizations if lists get very long
+                />
+            )}
+        </View>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
+    // Removed closing </Modal>
   );
 };
 
