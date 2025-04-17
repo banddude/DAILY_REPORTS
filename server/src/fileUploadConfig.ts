@@ -23,54 +23,49 @@ const generateS3Key = (req: Request, file: Express.Multer.File, cb: (error: any,
     const customer = req.body.customer || 'UnknownCustomer';
     const project = req.body.project || 'UnknownProject';
     
-    // Default path - might need adjustment if other upload types exist
     let finalKey = ''; 
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); // Keep suffix for filename uniqueness if needed
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); 
 
     if (file.fieldname === 'video') {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const reportFolderName = `report_${timestamp}`; // Consistent folder name
-        const extension = path.extname(file.originalname); // Get extension
-        // Construct the key for the original video within the report folder
+        const reportFolderName = `report_${timestamp}`; 
+        const extension = path.extname(file.originalname); 
         finalKey = `users/${userId}/${customer}/${project}/${reportFolderName}/original_video${extension}`;
-        // Optionally add suffix if multiple videos could be uploaded simultaneously for the *exact* same report:
-        // finalKey = `users/${userId}/${customer}/${project}/${reportFolderName}/original_video-${uniqueSuffix}${extension}`;
     } else if (file.fieldname === 'reportImage') {
         const reportKey = req.query.key ? decodeURIComponent(req.query.key as string) : null;
-        const imgKey = req.query.imgKey as string; // imgKey is the original filename from the report json
+        const imgKey = req.query.imgKey as string; 
         if (!reportKey || !imgKey) {
-            // Fallback or error - Need a reliable way to get context for images
-            // Log an error, but maybe let it proceed to a default path? Or reject?
             console.error('CRITICAL: Missing reportKey or imgKey for reportImage upload. Cannot determine correct S3 path.');
-             // Rejecting the upload is safer than putting it in a random location
              return cb(new Error('Missing necessary context (reportKey or imgKey) to save report image.'));
         } else {
-             // Construct a path based on the report's structure, ensuring it's within the user's space
-             // Report key: users/{userId}/Customer/Project/report_ts/daily_report.json
              const reportPathParts = reportKey.split('/'); 
              if (reportPathParts.length >= 5 && reportPathParts[0] === 'users' && reportPathParts[1] === userId) {
-                 const reportBaseKey = reportPathParts.slice(0, 5).join('/'); // users/userId/cust/proj/reportFolder
-                 const imageFileName = path.basename(imgKey); // Use the filename provided in the query
-                 finalKey = `${reportBaseKey}/extracted_frames/${imageFileName}`; // Use the specific filename
+                 const reportBaseKey = reportPathParts.slice(0, 5).join('/'); 
+                 const imageFileName = path.basename(imgKey); 
+                 finalKey = `${reportBaseKey}/extracted_frames/${imageFileName}`; 
              } else {
                  console.error(`Could not parse reportKey '${reportKey}' for image path.`);
                  return cb(new Error('Invalid reportKey format for image path construction.'));
              }
         }
     } else if (file.fieldname === 'logo') {
-        // Handle logo uploads (assuming they go to a profile/config area)
         const extension = path.extname(file.originalname);
-        // Overwrite previous logos with a consistent name
         finalKey = `users/${userId}/profile/config/logo${extension}`; 
     } else {
-         // Handle unexpected field names
-         console.warn(`Unexpected file fieldname: ${file.fieldname}. Uploading to default location.`);
-         const extension = path.extname(file.originalname);
-         finalKey = `users/${userId}/uploads/unexpected-${file.fieldname}-${uniqueSuffix}${extension}`;
+         // Reject uploads with unexpected field names instead of using a fallback
+         console.error(`Rejected upload: Unexpected file fieldname: ${file.fieldname}`);
+         return cb(new Error(`Unsupported file fieldname: ${file.fieldname}`));
     }
 
-    console.log(`Generated S3 key: ${finalKey}`);
-    cb(null, finalKey);
+    // Only proceed if a key was successfully generated
+    if (finalKey) { 
+        console.log(`Generated S3 key: ${finalKey}`);
+        cb(null, finalKey);
+    } else {
+        // This should theoretically not be reached if all paths return or set finalKey
+        console.error(`Failed to generate S3 key for fieldname: ${file.fieldname}`);
+        cb(new Error('Internal error generating S3 key.'));
+    }
 };
 
 const s3Storage = multerS3({
