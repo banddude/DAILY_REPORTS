@@ -8,23 +8,22 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import theme, { colors } from '../theme/theme';
-import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
-  const { login } = useAuth();
+  const { signInWithPassword, signInWithGoogle, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Ref for password input
   const passwordInputRef = useRef<TextInput>(null);
 
   const handleLoginAttempt = async () => {
@@ -37,17 +36,30 @@ export default function LoginScreen() {
     setError(null);
 
     try {
-        console.log(`LoginScreen: Attempting login for ${email}`);
-        await login(email, password);
-        console.log(`LoginScreen: Context login function succeeded for ${email}`);
-        
+        console.log(`LoginScreen: Attempting password login for ${email}`);
+        await signInWithPassword(email, password);
+        console.log(`LoginScreen: Context signInWithPassword succeeded for ${email}`);
     } catch (err: any) {
-      console.error('LoginScreen Error:', err.message);
-      setError(err.message || 'An error occurred during login.');
+      console.error('LoginScreen Password Error:', err.message);
+      setError(err.message || 'Invalid email or password.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    try {
+      console.log('LoginScreen: Attempting Google Sign In...');
+      await signInWithGoogle();
+      console.log('LoginScreen: Google Sign In initiated.');
+    } catch (err: any) {
+      console.error('LoginScreen Google Error:', err.message);
+      setError(err.message || 'Could not initiate Google Sign In.');
+    }
+  };
+
+  const isProcessing = authLoading || isLoading;
 
   return (
     <SafeAreaView style={theme.screens.loginScreen.safeArea}>
@@ -122,6 +134,7 @@ export default function LoginScreen() {
           returnKeyType="next"
           onSubmitEditing={() => passwordInputRef.current?.focus()}
           blurOnSubmit={false}
+          editable={!isProcessing}
         />
 
         <TextInput
@@ -134,24 +147,48 @@ export default function LoginScreen() {
           placeholderTextColor={colors.textSecondary}
           returnKeyType="go"
           onSubmitEditing={handleLoginAttempt}
+          editable={!isProcessing}
         />
 
-        {/* Button and Sign Up link in a View for spacing */}
-        <View>
-          <TouchableOpacity 
-            style={theme.screens.loginScreen.button}
+        {/* Button Container */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[theme.screens.loginScreen.button, isProcessing && styles.disabledButton]}
             onPress={handleLoginAttempt}
-            disabled={isLoading}
+            disabled={isProcessing}
           >
             {isLoading ? (
               <ActivityIndicator color={colors.primary} />
             ) : (
-              <Text style={theme.screens.loginScreen.buttonText}>Login</Text>
+              <Text style={theme.screens.loginScreen.buttonText}>Login with Email</Text>
             )}
           </TouchableOpacity>
-          <TouchableOpacity 
+
+          <View style={styles.dividerContainer}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.googleButton, isProcessing && styles.disabledButton]}
+            onPress={handleGoogleSignIn}
+            disabled={isProcessing}
+          >
+            {authLoading && !isLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color={colors.textPrimary} style={styles.googleIcon}/>
+                <Text style={styles.googleButtonText}>Sign In with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={theme.screens.loginScreen.signUpLinkContainer}
             onPress={() => navigation.navigate('SignUp')}
+            disabled={isProcessing}
           >
             <Text style={theme.screens.loginScreen.signUpLinkText}>Don't have an account? Sign Up</Text>
           </TouchableOpacity>
@@ -159,4 +196,49 @@ export default function LoginScreen() {
       </KeyboardAwareScrollView>
     </SafeAreaView>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  buttonContainer: {
+    width: '100%',
+    marginTop: 10,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.borderLight,
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+    paddingVertical: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 15,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+}); 

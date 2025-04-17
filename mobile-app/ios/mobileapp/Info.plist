@@ -27,6 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>com.shaffercon.reports</string>
           <string>com.banddude.mobileapp</string>
         </array>
       </dict>

@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   Platform,
   SafeAreaView,
+  StyleSheet,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 import theme, { colors } from '../theme/theme';
-import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -25,80 +25,56 @@ export default function SignUpScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { signUp, signInWithGoogle, loading: authLoading } = useAuth();
+  const [localLoading, setLocalLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSignUp = async () => {
+  const handleEmailSignUp = async () => {
+    setError(null);
     if (password !== confirmPassword) {
-      Alert.alert("Password Mismatch", "The passwords entered do not match.");
+      setError("Passwords do not match.");
       return;
     }
-
     if (password.length < 6) {
-        Alert.alert("Password Too Short", "Password must be at least 6 characters long.");
+        setError("Password must be at least 6 characters long.");
         return;
     }
 
-    setLoading(true);
+    setLocalLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      console.log('SignUpScreen: Attempting email sign up...');
+      await signUp(email, password);
+      console.log('SignUpScreen: Email sign up initiated.');
+      Alert.alert(
+        "Check Your Email",
+        "Sign up initiated! Please check your email for a confirmation link to complete registration.",
+        [{ text: "OK", onPress: () => navigation.navigate('Login') }]
+      );
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
 
-      if (response.ok) {
-        const data = await response.json();
-        if (response.status === 201) {
-          console.log('Signup successful, attempting auto-login...');
-          try {
-            await login(email, password);
-            console.log('Auto-login successful after signup.');
-          } catch (loginError: any) {
-            console.error("Auto-login Error after signup:", loginError);
-            Alert.alert(
-              'Account Created, Login Failed',
-              `Your account was created, but auto-login failed: ${loginError.message}. Please try logging in manually.`,
-              [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
-            );
-          }
-        } else {
-          console.warn('Unexpected success status from signup:', response.status);
-          Alert.alert('Sign Up Info', data.message || 'Account created, but received unexpected status.');
-          navigation.navigate('Login'); 
-        }
-      } else {
-        let errorMessage = 'An unknown error occurred during sign up.';
-        let errorStatus = response.status;
-        
-        try {
-          const errorText = await response.text();
-          
-          try {
-            const errorData = JSON.parse(errorText); 
-            errorMessage = errorData.message || errorText || errorMessage;
-          } catch (jsonParseError) {
-            errorMessage = errorText || errorMessage;
-          }
-        } catch (readError) {
-            console.error("Failed to read error response body", readError);
-        }
-
-        if (errorStatus === 409) {
-          Alert.alert('Sign Up Error', errorMessage || 'This email address is already registered.');
-        } else {
-          Alert.alert('Sign Up Error', `Error ${errorStatus}: ${errorMessage}`);
-        }
-      }
-    } catch (error: any) {
-      console.error("Signup Fetch/Network Error:", error);
-      Alert.alert('Sign Up Error', error.message || 'Could not connect to the server. Please try again.');
+    } catch (err: any) {
+      console.error("SignUpScreen Email Error:", err.message);
+      setError(err.message || 'An error occurred during sign up.');
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
+
+  const handleGoogleSignUp = async () => {
+    setError(null);
+    try {
+      console.log('SignUpScreen: Attempting Google Sign Up...');
+      await signInWithGoogle();
+      console.log('SignUpScreen: Google Sign Up initiated.');
+    } catch (err: any) {
+      console.error('SignUpScreen Google Error:', err.message);
+      setError(err.message || 'Could not initiate Google Sign Up.');
+    }
+  };
+
+  const isProcessing = authLoading || localLoading;
 
   return (
     <SafeAreaView style={theme.screens.signUpScreen.safeArea}>
@@ -130,7 +106,9 @@ export default function SignUpScreen({ navigation }: Props) {
         </View>
 
         <Text style={theme.screens.signUpScreen.title}>Sign Up</Text>
-      
+
+        {error && <Text style={styles.errorText}>{error}</Text>}
+
         <TextInput
           style={theme.screens.signUpScreen.input}
           placeholder="Email"
@@ -139,6 +117,7 @@ export default function SignUpScreen({ navigation }: Props) {
           autoCapitalize="none"
           keyboardType="email-address"
           placeholderTextColor={colors.textSecondary}
+          editable={!isProcessing}
         />
         <TextInput
           style={theme.screens.signUpScreen.input}
@@ -147,6 +126,7 @@ export default function SignUpScreen({ navigation }: Props) {
           onChangeText={setPassword}
           secureTextEntry
           placeholderTextColor={colors.textSecondary}
+          editable={!isProcessing}
         />
          <TextInput
           style={theme.screens.signUpScreen.input}
@@ -155,28 +135,104 @@ export default function SignUpScreen({ navigation }: Props) {
           onChangeText={setConfirmPassword}
           secureTextEntry
           placeholderTextColor={colors.textSecondary}
+          editable={!isProcessing}
         />
 
-        <TouchableOpacity
-          style={theme.screens.signUpScreen.button}
-          onPress={handleSignUp}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text style={theme.screens.signUpScreen.buttonText}>Sign Up</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[theme.screens.signUpScreen.button, isProcessing && styles.disabledButton]}
+            onPress={handleEmailSignUp}
+            disabled={isProcessing}
+          >
+            {localLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={theme.screens.signUpScreen.buttonText}>Sign Up with Email</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={theme.screens.signUpScreen.loginLinkContainer}
-          onPress={() => navigation.navigate('Login')}
-          disabled={loading}
-        >
-          <Text style={theme.screens.signUpScreen.loginLinkText}>Already have an account? Login</Text>
-        </TouchableOpacity>
+          <View style={styles.dividerContainer}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.googleButton, isProcessing && styles.disabledButton]}
+            onPress={handleGoogleSignUp}
+            disabled={isProcessing}
+          >
+            {authLoading && !localLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color={colors.textPrimary} style={styles.googleIcon}/>
+                <Text style={styles.googleButtonText}>Sign Up with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={theme.screens.signUpScreen.loginLinkContainer}
+            onPress={() => navigation.navigate('Login')}
+            disabled={isProcessing}
+          >
+            <Text style={theme.screens.signUpScreen.loginLinkText}>Already have an account? Login</Text>
+          </TouchableOpacity>
+        </View>
       </KeyboardAwareScrollView>
     </SafeAreaView>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  buttonContainer: {
+    width: '100%',
+    marginTop: 10,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.borderLight,
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+    paddingVertical: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 15,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 15,
+    marginHorizontal: 20,
+  },
+}); 
