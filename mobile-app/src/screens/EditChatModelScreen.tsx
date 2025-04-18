@@ -32,7 +32,7 @@ function EditChatModelScreen(): React.ReactElement {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/master-config`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -78,8 +78,8 @@ function EditChatModelScreen(): React.ReactElement {
         config_chat_model: currentValue.trim()
       };
       console.log("Saving Chat Model:", payload);
-      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
-        method: 'POST',
+      const saveResponse = await fetch(`${API_BASE_URL}/api/master-config`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,

@@ -49,7 +49,7 @@ function EditReportSchemaScreen(): React.ReactElement {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
+      const response = await fetch(`${API_BASE_URL}/api/master-config`, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
       if (!response.ok) throw new Error('Fetch failed');
       const data = await response.json();
       const schemaData = data?.config_report_json_schema;
@@ -98,8 +98,8 @@ function EditReportSchemaScreen(): React.ReactElement {
         config_report_json_schema: parsedSchema
       };
       console.log("Saving Report Schema:", payload);
-      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
-        method: 'POST',
+      const saveResponse = await fetch(`${API_BASE_URL}/api/master-config`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,

@@ -66,9 +66,26 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
         }
 
         console.log(`Found Supabase profile for user ${userId}`);
-        // Exclude the user ID from the response if preferred
-        const { id, ...profileResponseData } = profileData;
-        res.json(profileResponseData);
+        // Exclude the user ID from the response and fetch global configuration
+        // Destructure profileData to remove config fields
+        const { id, config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema, ...profileFields } = profileData;
+        // Fetch master config
+        const { data: masterConfig, error: masterError } = await supabase
+            .from('master_config')
+            .select('*')
+            .single();
+        if (masterError || !masterConfig) {
+            console.error(`Error fetching master config:`, masterError);
+            return res.status(500).json({ error: `Failed to fetch configuration: ${masterError?.message || 'Unknown error'}` });
+        }
+        // Build config object
+        const config = {
+            chatModel: masterConfig.config_chat_model,
+            whisperModel: masterConfig.config_whisper_model,
+            systemPrompt: masterConfig.config_system_prompt,
+            reportJsonSchema: masterConfig.config_report_json_schema,
+        };
+        res.json({ ...profileFields, config });
 
     } catch (error: any) { // Catch unexpected errors
         console.error(`Unexpected error reading profile for user ${userId}:`, error);

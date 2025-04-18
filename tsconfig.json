@@ -12,5 +12,5 @@
     // "noEmit": false // Allow emitting JS files to outDir
   },
   "include": ["server/src/**/*.ts"], 
-  "exclude": ["node_modules", "server/dist", "mobile-app"]
+  "exclude": ["mobile-app/node_modules", "server/dist", "mobile-app"]
 }

@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { ActivityIndicator, View, StyleSheet, Button, Platform } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Button, Platform, TouchableOpacity, Text } from 'react-native';
 import { createNativeStackNavigator, NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NavigatorScreenParams, getFocusedRouteNameFromRoute, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -29,6 +29,7 @@ import EditChatModelScreen from '../screens/EditChatModelScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import UpdatePasswordScreen from '../screens/UpdatePasswordScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
+import { SettingsRow } from '../screens/ProfileScreen';
 
 // --- Define Param Lists ---
 
@@ -72,6 +73,7 @@ export type ProfileStackParamList = {
   EditAddress: undefined;
   EditLogo: { currentLogoUrl: string | null }; // Add EditLogo screen with param
   EditChatModel: undefined;
+  Developer: undefined;
 };
 
 // Params for the main bottom tabs themselves
@@ -261,6 +263,22 @@ function ProfileStackNavigator() {
                 name="EditChatModel"
                 component={EditChatModelScreen}
                 options={{ title: 'Chat Model' }}
+            />
+            <ProfileNavStack.Screen
+                name="Developer"
+                component={require('../screens/DeveloperScreen').default}
+                options={({ navigation }) => ({
+                  title: 'Developer',
+                  headerLeft: () => (
+                    <TouchableOpacity
+                      onPress={() => navigation.goBack()}
+                      style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }}
+                    >
+                      <Ionicons name="chevron-back-outline" size={24} color={colors.textPrimary} />
+                      <Text style={{ color: colors.textPrimary, fontSize: typography.fontSizeM, marginLeft: 2 }}>Profile</Text>
+                    </TouchableOpacity>
+                  ),
+                })}
             />
         </ProfileNavStack.Navigator>
     );

@@ -51,17 +51,5 @@
     "@types/react": "~18.3.12",
     "typescript": "^5.8.3"
   },
-  "private": true,
-  "expo": {
-    "doctor": {
-      "reactNativeDirectoryCheck": {
-        "exclude": [
-          "react-native-keyboard-aware-scroll-view",
-          "@expo/metro-runtime",
-          "cors"
-        ],
-        "listUnknownPackages": false
-      }
-    }
-  }
+  "private": true
 }

@@ -50,6 +50,7 @@ interface ProfileData {
   phone?: string;
   company?: ProfileCompany;
   config?: ProfileConfig;
+  isDev?: boolean;
 }
 
 // --- Utility to safely get/set nested properties (Adding set back) ---
@@ -261,7 +262,8 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                  reportJsonSchema: typeof data.config_report_json_schema === 'string' 
                                     ? JSON.parse(data.config_report_json_schema) 
                                     : data.config_report_json_schema, // Parse schema string
-             }
+             },
+             isDev: data.is_dev, // Map new is_dev flag
          };
          setProfileData(camelCaseData);
          if (isInitialLoad) {
@@ -410,41 +412,38 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                    />
                 </View>
 
+                {/* Configuration section has been moved to Developer screen */}
+
+                {/* Developer access button, only visible for dev users */}
+                {profileData.isDev && (
+                  <View style={theme.screens.profileScreen.section}>
+                    <SettingsRow
+                      icon="construct-outline"
+                      label="Developer"
+                      value=""
+                      onPress={() => {
+                        const parentNav = navigation.getParent();
+                        if (parentNav) {
+                          parentNav.navigate('ProfileTab', { screen: 'Developer' as any });
+                        } else {
+                          (navigation as any).navigate('Developer');
+                        }
+                      }}
+                      showDisclosure={true}
+                      isFirst={true}
+                    />
+                  </View>
+                )}
+                {/* Log Out button, always visible */}
                 <View style={theme.screens.profileScreen.section}>
-                  <Text style={theme.screens.profileScreen.sectionHeader}>Configuration</Text>
-                   <SettingsRow
-                     icon="chatbubbles-outline"
-                     label="Chat Model"
-                     value={profileData.config?.chatModel || 'Not Set'}
-                     isFirst
-                     showDisclosure={true}
-                     onPress={() => navigation.navigate('EditChatModel')}
-                   />
-                   <SettingsRow
-                     icon="reader-outline"
-                     label="System Prompt"
-                     value={profileData.config?.systemPrompt ? 'View/Edit Prompt' : 'Not Set'}
-                     numberOfLines={1}
-                     showDisclosure={true}
-                     onPress={() => navigation.navigate('EditSystemPrompt')}
-                   />
-                   <SettingsRow
-                    icon="document-text-outline"
-                    label="Report Schema"
-                    value={profileData.config?.reportJsonSchema ? 'View/Edit Schema' : 'Not Set'}
-                    numberOfLines={1}
-                    showDisclosure={true}
-                    onPress={() => navigation.navigate('EditReportSchema')}
-                    isLink={false}
-                  />
                   <SettingsRow
                     icon="log-out-outline"
                     label="Log Out"
                     value=""
                     onPress={signOut}
-                    isFirst={false}
                     showDisclosure={true}
                     labelStyle={{ color: colors.error, textAlign: 'center', flex: 1 }}
+                    isFirst={!profileData.isDev}
                   />
                 </View>
               </>
@@ -457,4 +456,5 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
   );
 }
 
-export default ProfileScreen; 
+export default ProfileScreen;
+export { SettingsRow }; 

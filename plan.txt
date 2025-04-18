@@ -1,0 +1,10 @@
+# Grant Application Plan
+
+To complete the OpenAI Codex Open Source Fund application form, I need the following information from you:
+
+1. Your first name
+2. Your last name
+3. Your email address
+4. (Optional) Your LinkedIn URL
+
+Once you provide these details, I will fill in the form fields and submit the application using your GitHub handle and project information. 

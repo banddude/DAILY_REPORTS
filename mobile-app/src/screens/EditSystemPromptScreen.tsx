@@ -41,7 +41,7 @@ function EditSystemPromptScreen(): React.ReactElement {
       if (!token) {
         throw new Error('Token not found');
       }
-      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/master-config`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -82,8 +82,8 @@ function EditSystemPromptScreen(): React.ReactElement {
 
       console.log("Saving System Prompt:", payload);
 
-      const saveResponse = await fetch(`${API_BASE_URL}/api/profile`, {
-        method: 'POST',
+      const saveResponse = await fetch(`${API_BASE_URL}/api/master-config`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,

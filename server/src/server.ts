@@ -13,6 +13,7 @@ import s3AssetsRouter, { initializeS3AssetRoutes } from './routes/s3Assets';
 import reportRouter, { initializeReportRoutes } from './routes/report';
 import profileRouter, { initializeProfileRoutes } from './routes/profile';
 import browseRouter, { initializeBrowseRoutes } from './routes/browse';
+import masterConfigRouter from './routes/masterConfig';
 
 // Configurations
 import { videoUpload, imageUpload } from './fileUploadConfig';
@@ -105,6 +106,7 @@ app.use('/api', authRouter);
 app.use('/api', reportRouter);
 app.use('/api', profileRouter);
 app.use('/api', browseRouter);
+app.use('/api', masterConfigRouter);
 
 // Mount S3 assets under /assets to avoid conflict with root
 app.use('/assets', s3AssetsRouter);
