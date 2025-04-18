@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile-app",
-    "slug": "mobile-app",
+    "name": "ReportKit",
+    "slug": "ReportKit",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,29 +14,28 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.banddude.mobileapp"
+      "bundleIdentifier": "com.banddude.reportkit"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "usesCleartextTraffic": true,
-      "package": "com.banddude.mobileapp"
+      "package": "com.banddude.reportkit"
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "display": "standalone"
     },
-    "extra": {
-      "eas": {
-        "projectId": "6da574b8-924a-4471-bd26-ca490a708c1b"
-      }
-    },
     "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/6da574b8-924a-4471-bd26-ca490a708c1b"
     },
-    "scheme": "com.shaffercon.reports"
+    "scheme": "com.shaffercon.reports",
+    "extra": {
+      "eas": {
+        "projectId": "65949253-03a0-4025-8fa4-4f6963c2ebe9"
+      }
+    }
   }
 }
