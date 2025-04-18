@@ -12,7 +12,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
-      "envFile": ".env"
+      "environmentSecret": "project"
     },
     "production": {
       "autoIncrement": true,
