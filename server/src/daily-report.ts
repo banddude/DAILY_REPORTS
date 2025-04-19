@@ -10,6 +10,8 @@ import { toFile } from 'openai/uploads'; // Add this import
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"; // Import S3 client
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
+import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
+import { supabase } from './config'; // <<< Import Supabase client
 
 // --- Path Constants (relative to project root) ---
 const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
@@ -59,32 +61,77 @@ interface FullTranscription {
   // Potentially other fields from verbose_json if needed
 }
 
-// User-specific profile helper - Get profile from S3
+// User-specific profile helper - Get profile from SUPABASE
 async function getUserProfile(userId: string): Promise<any> {
   try {
-    const userProfileKey = `users/${userId}/profile.json`;
-    console.log(`Fetching user profile from S3: ${userProfileKey}`);
-    
-    const getCommand = new GetObjectCommand({
-      Bucket: s3Bucket,
-      Key: userProfileKey
-    });
-    
-    const response = await s3Client.send(getCommand);
-    if (!response.Body) {
-      throw new Error("Empty response body from S3");
+    console.log(`Fetching user profile from Supabase for user: ${userId}`);
+
+    // Select ALL columns from the profiles table
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('*') // Fetch all columns
+      .eq('id', userId)
+      .single();
+
+    if (profileError) {
+      console.error(`Supabase error fetching profile for user ${userId}:`, profileError);
+      if (profileError.code === 'PGRST116') {
+         throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
+      }
+      throw new Error(`Supabase error: ${profileError.message}`);
+    }
+
+    if (!profileData) {
+       throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
     }
     
-    const profileString = await response.Body.transformToString('utf-8');
-    return JSON.parse(profileString);
+    console.log(`Successfully fetched profile from Supabase for user ${userId}`);
+
+    // Reconstruct the nested profile structure using ALL fetched data
+    const reconstructedProfile = {
+        // Top-level fields (map snake_case to camelCase/expected names)
+        name: profileData.full_name, 
+        username: profileData.username,
+        email: profileData.email, // Assuming email might be needed downstream (though not fetched explicitly before)
+        phone: profileData.phone,
+        
+        // Nested company object
+        company: {
+            name: profileData.company_name,
+            street: profileData.company_street, // Map address fields
+            unit: profileData.company_unit,
+            city: profileData.company_city,
+            state: profileData.company_state,
+            zip: profileData.company_zip,
+            phone: profileData.company_phone,
+            website: profileData.company_website
+        },
+        
+        // Nested config object
+        config: {
+            chatModel: profileData.config_chat_model,
+            whisperModel: profileData.config_whisper_model,
+            systemPrompt: profileData.config_system_prompt,
+            // Parse JSON string back into an object, handle null/undefined
+            reportJsonSchema: profileData.config_report_json_schema 
+                                ? JSON.parse(profileData.config_report_json_schema) 
+                                : null, 
+            logoFilename: profileData.config_logo_filename
+        }
+    };
+
+    return reconstructedProfile;
+
   } catch (error: any) {
-    if (error.name === 'NoSuchKey') {
-      throw new Error(`User profile not found in S3: ${userId}. Initialize the user profile first.`);
-    }
-    console.error(`Error fetching user profile for ${userId}:`, error);
-    throw new Error(`Failed to get user profile: ${error.message}`);
+    // Catch errors from the try block (includes Supabase errors thrown)
+    console.error(`Error in getUserProfile for ${userId}:`, error);
+    // Re-throw the specific error message
+    throw new Error(`Failed to get user profile from Supabase: ${error.message}`);
   }
 }
+
+// --- HARDCODED WHISPER MODEL ---
+const WHISPER_MODEL = "whisper-1";
 
 // Modify getDailyReport to accept the full transcription object AND profileData
 async function getDailyReport(transcription: FullTranscription, profileData: any) {
@@ -92,7 +139,7 @@ async function getDailyReport(transcription: FullTranscription, profileData: any
     // Prepare a more readable transcript format for the LLM, including timestamps
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
-    // --- Read Config from profileData (NO DEFAULTS) ---
+    // --- Read Config from profileData (using reconstructed structure) ---
     const chatModel = profileData.config.chatModel; 
     const systemPromptContent = profileData.config.systemPrompt;
     const reportSchema = profileData.config.reportJsonSchema;
@@ -266,22 +313,11 @@ async function convertVideoToAudio(videoPath: string, audioPath: string): Promis
  */
 async function transcribeAudio(audioPath: string, profileData: any): Promise<any> {
   console.log(`Transcribing audio ${audioPath}...`);
-
-  // --- Read Config from profileData (NO DEFAULTS) ---
-  const whisperModel = profileData.config.whisperModel; 
-  // ---------------------------------------------------
-  
-  console.log(`Using whisper model: ${whisperModel}`); 
-
-  // --- Add check to ensure config value exists --- 
-  if (!whisperModel) {
-    throw new Error('Required configuration (whisperModel) missing in profile.json');
-  }
-  // --------------------------------------------------
-
+  const whisperModel = WHISPER_MODEL;
+  console.log("Using whisper model:", whisperModel);
   const transcription = await openai.audio.transcriptions.create({
-    file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)), // fs.promises doesn't have createReadStream, keep fs
-    model: whisperModel, // Use variable
+    file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)),
+    model: whisperModel,
     response_format: "verbose_json",
     timestamp_granularities: ["word"]
   });
@@ -483,22 +519,30 @@ async function selectFrameTimestamps(transcription: FullTranscription, numFrames
  * video -> audio -> transcription -> report JSON -> frame timestamps -> frame extraction -> PDF (optional) -> S3 upload.
  * Returns the S3 key of the generated report JSON file.
  */
-export async function generateReport(inputVideoPath: string, userId: string, customerName?: string, projectName?: string): Promise<string> { 
-    // ** UPDATED: Added customerName and projectName parameters **
-
-    if (!userId) {
-        throw new Error("User ID is required to generate a report.");
+export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string): Promise<string> { 
+    // Ensure defaults are applied immediately
+    const customerName = customerNameInput || 'UnknownCustomer';
+    const projectName = projectNameInput || 'UnknownProject';
+    
+    const startTime = Date.now();
+    function logStep(msg: string, start?: number) {
+      const now = Date.now();
+      if (start) {
+        console.log(`[${new Date().toISOString()}] ${msg} (${now - start}ms)`);
+      } else {
+        console.log(`[${new Date().toISOString()}] ${msg}`);
+      }
+      return now;
     }
-    console.log(`Generating report for user: ${userId}`);
-    console.log(`Processing video: ${inputVideoPath}`);
-    console.log(`Report path will use customer: ${customerName || 'Unknown'}, project: ${projectName || 'Unknown'}`);
+    logStep(`Generating report for user: ${userId}`);
+    logStep(`Processing video: ${inputVideoPath}`);
+    logStep(`Report path will use customer: ${customerName}, project: ${projectName}`);
 
     // 1. Create a unique directory for this processing job
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    // Include userId in the processing directory path
     const processingDir = path.join(PROCESSING_BASE_DIR, `report_${userId}_${timestamp}`); 
     await ensureDir(processingDir);
-    console.log(`Created processing directory: ${processingDir}`);
+    logStep(`Created processing directory: ${processingDir}`);
 
     // Define paths within the unique processing directory
     const audioOutputPath = path.join(processingDir, 'output_audio.mp3');
@@ -506,56 +550,57 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
     const frameTimestampsPath = path.join(processingDir, 'frame_timestamps.json');
     const reportJsonPath = path.join(processingDir, 'daily_report.json');
     const framesOutputDir = path.join(processingDir, 'extracted_frames');
-    // const pdfOutputPath = path.join(processingDir, 'daily_report.pdf'); // PDF generation currently disabled
 
     try {
-        // 2. Read Profile Data - UPDATED to use user-specific profile
-        console.log(`Fetching profile data for user: ${userId}`);
+        // 2. Read Profile Data
+        let stepStart = logStep('Fetching profile data for user: ' + userId);
         const profileData = await getUserProfile(userId);
+        logStep('Fetched profile data', stepStart);
         if (!profileData) {
             throw new Error("Failed to load profile data for the user");
         }
 
         // 3. Convert Video to Audio
+        stepStart = logStep('Converting video to audio...');
         await convertVideoToAudio(inputVideoPath, audioOutputPath);
+        logStep('Converted video to audio', stepStart);
 
         // 4. Transcribe Audio
         let transcription: FullTranscription;
         if (fs.existsSync(transcriptionJsonPath)) {
-            console.log(`Transcription file ${transcriptionJsonPath} found, loading...`);
+            logStep(`Transcription file ${transcriptionJsonPath} found, loading...`);
             const transData = await readFile(transcriptionJsonPath, 'utf-8');
             transcription = JSON.parse(transData);
         } else {
-            console.log(`Transcription file not found, transcribing audio...`);
+            stepStart = logStep('Transcribing audio...');
             transcription = await transcribeAudio(audioOutputPath, profileData);
             if (!transcription) throw new Error("Transcription failed.");
             await writeFile(transcriptionJsonPath, JSON.stringify(transcription, null, 2));
-            console.log(`Transcription saved to ${transcriptionJsonPath}`);
+            logStep('Transcribed audio', stepStart);
         }
 
         // 5. Generate Daily Report JSON
-        console.log('Generating daily report JSON...');
+        stepStart = logStep('Generating daily report JSON...');
         const reportJson = await getDailyReport(transcription, profileData);
+        logStep('Generated daily report JSON', stepStart);
         if (!reportJson) throw new Error("Daily report generation failed.");
 
-        // 6. Select Timestamps for Frames using report JSON
-        console.log('Selecting timestamps for frame extraction using report JSON...');
+        // 6. Select Timestamps for Frames
+        stepStart = logStep('Selecting timestamps for frame extraction...');
         const selectedTimestamps = await selectFrameTimestamps(transcription, profileData.config.numFrames, reportJson);
         await writeFile(frameTimestampsPath, JSON.stringify({ timestamps: selectedTimestamps }, null, 2));
-        console.log(`Selected ${selectedTimestamps.length} frame timestamps saved to ${frameTimestampsPath}`);
+        logStep(`Selected ${selectedTimestamps.length} frame timestamps`, stepStart);
 
         // 7. Extract Frames
         await ensureDir(framesOutputDir);
-        console.log(`Extracting frames based on ${frameTimestampsPath} to ${framesOutputDir}...`);
+        stepStart = logStep(`Extracting frames to ${framesOutputDir}...`);
         await extractFramesFromData(inputVideoPath, frameTimestampsPath, framesOutputDir);
+        logStep('Extracted frames', stepStart);
 
-        // 8. Construct S3 Keys (USER-SCOPED) - Use provided customer/project or fallback with safe defaults
-        const customer = customerName || profileData.company?.customer;
-        const project = projectName || profileData.company?.project;
-        if (!customer || !project) {
-            throw new Error("Customer and project must be provided either as parameters or in the user profile");
-        }
-        console.log(`Using customer=${customer}, project=${project} for S3 paths`);
+        // 8. Construct S3 Keys
+        const customer = customerName || 'UnknownCustomer';
+        const project = projectName || 'UnknownProject';
+        logStep(`Using customer=${customer}, project=${project} for S3 paths`);
         
         const s3BaseKey = `users/${userId}/${customer}/${project}/report_${timestamp}`;
         const s3ReportJsonKey = `${s3BaseKey}/daily_report.json`;
@@ -563,102 +608,58 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         const s3ViewerHtmlKey = `${s3BaseKey}/report-viewer.html`;
         const s3TranscriptionKey = `${s3BaseKey}/transcription.json`;
         const s3VideoKey = `${s3BaseKey}/source_video${path.extname(inputVideoPath)}`;
+        const s3PdfKey = `${s3BaseKey}/daily_report.pdf`; // S3 Key for PDF
 
-        // Variable to store S3 logo key - will be set to empty string if no logo exists
-        let s3LogoKey = '';
-
-        // Try to find the user's profile logo first
-        try {
-          // Look for user's logo in S3
-          const userProfileLogoKey = `users/${userId}/logo.png`;
-          console.log(`Checking for user logo at S3 key: ${userProfileLogoKey}`);
-          
-          // Check if user logo exists in S3
-          const getLogoCommand = new GetObjectCommand({
-            Bucket: s3Bucket,
-            Key: userProfileLogoKey
-          });
-          
-          await s3Client.send(getLogoCommand);
-          console.log(`User has a custom logo at ${userProfileLogoKey}, using it for the report`);
-          
-          // If we get here, user has their own logo in S3 - use that key
-          s3LogoKey = userProfileLogoKey;
-          
-          // Don't need to upload the file since it already exists in S3
-          console.log(`Will reference existing user logo at s3://${s3Bucket}/${s3LogoKey}`);
-        } catch (error) {
-          console.error(`Error or logo not found: ${error}`);
-          throw new Error("No logo found for user. Cannot proceed without a logo.");
+        // Get logo key directly from profile data (fetched earlier by getUserProfile)
+        const s3LogoKey = profileData.config.logoFilename; 
+        if (s3LogoKey) {
+            logStep(`Found logo filename in profile: ${s3LogoKey}. Will use for PDF.`);
+        } else {
+            logStep(`No logo filename found in profile. Report PDF will not have a logo.`);
+            // DO NOT throw an error here - allow generation without logo
         }
 
         // 9. Add Image URLs to Report JSON (and upload frames)
-        console.log('Adding image URLs to report and uploading frames...');
-        
-        // Store the original AI-generated images array with captions
+        stepStart = logStep('Adding image URLs to report and uploading frames...');
         const aiGeneratedImages = reportJson.images || [];
-        
-        // Create a map of timestamps to captions from the AI response
         const captionMap = new Map();
         for (const img of aiGeneratedImages) {
             if (img.timestamp && img.caption) {
                 captionMap.set(img.timestamp.toFixed(2), img.caption);
             }
         }
-        
-        // Clear and recreate the images array
         reportJson.images = [];
-        
         const frameFiles = await readdir(framesOutputDir);
         for (const frameFile of frameFiles) {
             const localFramePath = path.join(framesOutputDir, frameFile);
-            const frameS3Key = `${s3FramesBaseKey}${frameFile}`; // Use user-scoped base key
-            
-            // Extract timestamp from filename (e.g., "frame_1.06.jpg" -> "1.06")
+            const frameS3Key = `${s3FramesBaseKey}${frameFile}`;
             const timestampMatch = frameFile.match(/frame_(\d+\.\d+)\.jpg/);
             const timestamp = timestampMatch ? timestampMatch[1] : null;
-            
-            // Get caption from the AI-generated data
             if (!timestamp || !captionMap.has(timestamp)) {
-                console.warn(`No caption found for timestamp ${timestamp}, skipping frame ${frameFile}`);
-                continue; // Skip this frame
+                logStep(`No caption found for timestamp ${timestamp}, skipping frame ${frameFile}`);
+                continue;
             }
-
             const caption = captionMap.get(timestamp);
-
             try {
                 const frameS3Url = await uploadFileToS3(localFramePath, frameS3Key, 'image/jpeg');
-                reportJson.images.push({
-                    fileName: frameFile,
-                    caption: caption,
-                    s3Url: frameS3Url // Store the full S3 URL
-                });
+                reportJson.images.push({ fileName: frameFile, caption: caption, s3Url: frameS3Url });
             } catch (uploadError) {
-                console.warn(`Failed to upload frame ${frameFile}. Skipping inclusion in report. Error: ${uploadError}`);
+                logStep(`Failed to upload frame ${frameFile}. Skipping. Error: ${uploadError}`);
             }
         }
-        
-        // Sort images by filename (which includes timestamp)
         reportJson.images.sort((a: { fileName: string }, b: { fileName: string }) => a.fileName.localeCompare(b.fileName));
+        logStep('Uploaded all frames', stepStart);
 
         // 10. Save Final Report JSON Locally (before uploading)
+        stepStart = logStep('Saving final report JSON locally...');
         await writeFile(reportJsonPath, JSON.stringify(reportJson, null, 2));
-        console.log(`Final report JSON (with image URLs) saved locally to ${reportJsonPath}`);
+        logStep('Saved final report JSON locally', stepStart);
 
         // Get the S3 URL for the logo to include in the report (if it exists)
         const region = await s3Client.config.region();
         const logoS3Url = s3LogoKey ? `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3LogoKey}` : '';
-
-        // Validate essential profile data
-        if (!profileData.name) {
-          throw new Error("User name is missing in the profile data");
-        }
-        
-        if (!profileData.company?.name) {
-          throw new Error("Company name is missing in the profile data");
-        }
-
-        // Add user profile data to the report JSON
+        if (!profileData.name) throw new Error("User name is missing in the profile data");
+        if (!profileData.company?.name) throw new Error("Company name is missing in the profile data");
         reportJson.reportMetadata = {
           generatedAt: new Date().toISOString(),
           customer: customer,
@@ -675,67 +676,80 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             website: profileData.company.website || ''
           }
         };
-
-        // Add S3 URLs to the report data for easier frontend access
         reportJson.reportAssetsS3Urls = {
           baseUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3BaseKey}`,
-          logoUrl: logoS3Url, // Will be empty string if no logo
+          logoUrl: logoS3Url,
           viewerUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3ViewerHtmlKey}`,
           transcriptionUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3TranscriptionKey}`,
           videoUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3VideoKey}`
         };
-
-        // Re-save the JSON with the updated URLs
         await writeFile(reportJsonPath, JSON.stringify(reportJson, null, 2));
-        console.log(`Updated report JSON with asset URLs`);
+        logStep('Updated report JSON with metadata and asset URLs');
 
         // 11. Upload Report Files to S3
-        console.log('Uploading report assets to S3...');
-        // Upload report JSON
-        await uploadFileToS3(reportJsonPath, s3ReportJsonKey, 'application/json');
-        // Upload viewer HTML
+        stepStart = logStep('Uploading report assets to S3...');
+        
+        // ---> Add specific logging for the main JSON upload <---
+        logStep(`Attempting to upload: ${reportJsonPath} to S3 key: ${s3ReportJsonKey}`);
+        try {
+            await uploadFileToS3(reportJsonPath, s3ReportJsonKey, 'application/json');
+            logStep(`Successfully completed upload call for: ${s3ReportJsonKey}`);
+        } catch (jsonUploadError) {
+            logStep(`!!! FAILED to upload main report JSON (${s3ReportJsonKey}): ${jsonUploadError}`);
+            // Re-throw the error to ensure the main catch block handles it
+            throw jsonUploadError; 
+        }
+        // ---> End specific logging <---
+        
         await uploadFileToS3(REPORT_VIEWER_HTML_PATH, s3ViewerHtmlKey, 'text/html');
-        // Upload transcription JSON
         await uploadFileToS3(transcriptionJsonPath, s3TranscriptionKey, 'application/json');
-        // Upload frame timestamps JSON
-        await uploadFileToS3(frameTimestampsPath, `${s3BaseKey}/frame_timestamps.json`, 'application/json');
-        // Upload original video - may be large, so check if environment variable allows it
+        if (fs.existsSync(frameTimestampsPath)) { // Only upload if it exists
+             await uploadFileToS3(frameTimestampsPath, `${s3BaseKey}/frame_timestamps.json`, 'application/json');
+        }
         if (process.env.UPLOAD_SOURCE_VIDEO !== 'false') {
-            console.log(`Uploading source video to S3: ${s3VideoKey}`);
+            logStep(`Uploading source video to S3: ${s3VideoKey}`);
             await uploadFileToS3(inputVideoPath, s3VideoKey, `video/${path.extname(inputVideoPath).substring(1)}`);
         }
-        
-        // Update the commented-out PDF generation code to pass the logo URL
-        // if (profileData.config.generatePdf) { // Check if PDF generation is enabled
-        //     const pdfOutputPath = path.join(processingDir, 'daily_report.pdf');
-        //     const s3PdfKey = `${s3BaseKey}/daily_report.pdf`;
-        //     await generatePdfReport(reportJsonPath, framesOutputDir, pdfOutputPath, logoS3Url);
-        //     await uploadFileToS3(pdfOutputPath, s3PdfKey, 'application/pdf');
-        // }
-        console.log(`Report uploaded successfully to S3 bucket: ${s3Bucket}, base key: ${s3BaseKey}`);
+        logStep('Uploaded all report assets to S3', stepStart);
+        logStep(`Report uploaded successfully to S3 bucket: ${s3Bucket}, base key: ${s3BaseKey}`);
 
-        // 12. Return the S3 key of the report JSON
-        return s3ReportJsonKey; // Return the user-scoped S3 key
+        // 12. Generate and Upload Report Viewer HTML using the helper function
+        logStep('Generating and uploading report viewer HTML');
+        if (!s3Bucket) {
+            throw new Error("Internal Server Error: S3 bucket configuration is missing.");
+        }
+        await generateAndUploadViewerHtml(
+            s3Client,
+            s3Bucket,
+            reportJson, 
+            userId,
+            customerName,
+            projectName,
+            processingDir
+        );
+        logStep('Report viewer HTML generated and uploaded', startTime);
+
+        // 13. Return the S3 key of the report JSON
+        logStep('Report generation complete', startTime);
+        return s3ReportJsonKey;
 
     } catch (error: any) {
-        console.error(`Error in generateReport function: ${error.message}`, error.stack);
-        // Attempt to clean up the processing directory even if an error occurs
+        logStep(`Error in generateReport function: ${error.message}`);
         try {
-            console.warn(`Attempting to cleanup failed processing directory: ${processingDir}`);
+            logStep(`Attempting to cleanup failed processing directory: ${processingDir}`);
             await rm(processingDir, { recursive: true, force: true });
-            console.warn(`Cleanup successful for: ${processingDir}`);
+            logStep(`Cleanup successful for: ${processingDir}`);
         } catch (cleanupError) {
-            console.error(`Failed to cleanup processing directory ${processingDir}:`, cleanupError);
+            logStep(`Failed to cleanup processing directory ${processingDir}: ${cleanupError}`);
         }
-        throw error; // Re-throw the original error
+        throw error;
     } finally {
-        // Clean up processing directory to avoid filling disk space
         try {
-            console.log(`Cleaning up processing directory: ${processingDir}`);
+            logStep(`Cleaning up processing directory: ${processingDir}`);
             await rm(processingDir, { recursive: true, force: true });
-            console.log(`Cleanup successful for: ${processingDir}`);
+            logStep(`Cleanup successful for: ${processingDir}`);
         } catch (cleanupError) {
-            console.error(`Error cleaning up processing directory ${processingDir}:`, cleanupError);
+            logStep(`Error cleaning up processing directory ${processingDir}: ${cleanupError}`);
         }
     }
 }
