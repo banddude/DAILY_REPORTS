@@ -2,29 +2,34 @@ import dotenv from 'dotenv';
 dotenv.config(); 
 
 import OpenAI from 'openai';
-import { createWriteStream, createReadStream } from 'fs'; // Specifically import stream functions
-import { exec, spawn } from "child_process";
+import * as fs from "fs";
+import { exec } from "child_process";
 import path from 'path'; // Need path module
 import { promisify } from 'util';
-import { Readable } from 'stream'; // Import Readable for streaming to S3
-import { tmpdir } from 'os'; // Import os.tmpdir for temporary files
 import { toFile } from 'openai/uploads'; // Add this import
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"; // Import S3 client
-import { readFile, writeFile, unlink, access, mkdir, rm } from 'fs/promises'; // Keep necessary ones
-import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
-import { supabase } from './config'; // <<< Import Supabase client
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"; // Import presigner
-import type { ChildProcess } from "child_process";
-import { Upload } from "@aws-sdk/lib-storage";
+import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
 
 // --- Path Constants (relative to project root) ---
-// const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
-// const PROCESSING_BASE_DIR = path.join(PROJECT_ROOT, 'processing_reports');
-// const PUBLIC_DIR = path.join(PROJECT_ROOT, 'public'); // Path to the public directory
-// const DATA_DIR = path.join(PROJECT_ROOT, 'data'); // Path to the data directory
-// const REPORT_VIEWER_HTML_PATH = path.join(PUBLIC_DIR, 'report-viewer.html');
-// const LOGO_PNG_PATH = path.join(PUBLIC_DIR, 'logo.png');
+const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
+const PROCESSING_BASE_DIR = path.join(PROJECT_ROOT, 'processing_reports');
+const PUBLIC_DIR = path.join(PROJECT_ROOT, 'public'); // Path to the public directory
+const DATA_DIR = path.join(PROJECT_ROOT, 'data'); // Path to the data directory
+const REPORT_VIEWER_HTML_PATH = path.join(PUBLIC_DIR, 'report-viewer.html');
+const LOGO_PNG_PATH = path.join(PUBLIC_DIR, 'logo.png');
+
+// Ensure the base processing directory exists on startup
+// Using async IIFE for top-level await compatibility with ensureDir
+(async () => {
+    try {
+        await ensureDir(PROCESSING_BASE_DIR);
+        console.log(`Ensured base processing directory exists: ${PROCESSING_BASE_DIR}`);
+    } catch (error) {
+        console.error(`CRITICAL: Failed to create base processing directory ${PROCESSING_BASE_DIR}. Exiting.`, error);
+        process.exit(1);
+    }
+})();
 
 // --- S3 Setup ---
 const s3Client = new S3Client({}); 
@@ -54,77 +59,32 @@ interface FullTranscription {
   // Potentially other fields from verbose_json if needed
 }
 
-// User-specific profile helper - Get profile from SUPABASE
+// User-specific profile helper - Get profile from S3
 async function getUserProfile(userId: string): Promise<any> {
   try {
-    console.log(`Fetching user profile from Supabase for user: ${userId}`);
-
-    // Select ALL columns from the profiles table
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('*') // Fetch all columns
-      .eq('id', userId)
-      .single();
-
-    if (profileError) {
-      console.error(`Supabase error fetching profile for user ${userId}:`, profileError);
-      if (profileError.code === 'PGRST116') {
-         throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
-      }
-      throw new Error(`Supabase error: ${profileError.message}`);
-    }
-
-    if (!profileData) {
-       throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
+    const userProfileKey = `users/${userId}/profile.json`;
+    console.log(`Fetching user profile from S3: ${userProfileKey}`);
+    
+    const getCommand = new GetObjectCommand({
+      Bucket: s3Bucket,
+      Key: userProfileKey
+    });
+    
+    const response = await s3Client.send(getCommand);
+    if (!response.Body) {
+      throw new Error("Empty response body from S3");
     }
     
-    console.log(`Successfully fetched profile from Supabase for user ${userId}`);
-
-    // Reconstruct the nested profile structure using ALL fetched data
-    const reconstructedProfile = {
-        // Top-level fields (map snake_case to camelCase/expected names)
-        name: profileData.full_name, 
-        username: profileData.username,
-        email: profileData.email, // Assuming email might be needed downstream (though not fetched explicitly before)
-        phone: profileData.phone,
-        
-        // Nested company object
-        company: {
-            name: profileData.company_name,
-            street: profileData.company_street, // Map address fields
-            unit: profileData.company_unit,
-            city: profileData.company_city,
-            state: profileData.company_state,
-            zip: profileData.company_zip,
-            phone: profileData.company_phone,
-            website: profileData.company_website
-        },
-        
-        // Nested config object
-        config: {
-            chatModel: profileData.config_chat_model,
-            whisperModel: profileData.config_whisper_model,
-            systemPrompt: profileData.config_system_prompt,
-            // Parse JSON string back into an object, handle null/undefined
-            reportJsonSchema: profileData.config_report_json_schema 
-                                ? JSON.parse(profileData.config_report_json_schema) 
-                                : null, 
-            logoFilename: profileData.config_logo_filename
-        }
-    };
-
-    return reconstructedProfile;
-
+    const profileString = await response.Body.transformToString('utf-8');
+    return JSON.parse(profileString);
   } catch (error: any) {
-    // Catch errors from the try block (includes Supabase errors thrown)
-    console.error(`Error in getUserProfile for ${userId}:`, error);
-    // Re-throw the specific error message
-    throw new Error(`Failed to get user profile from Supabase: ${error.message}`);
+    if (error.name === 'NoSuchKey') {
+      throw new Error(`User profile not found in S3: ${userId}. Initialize the user profile first.`);
+    }
+    console.error(`Error fetching user profile for ${userId}:`, error);
+    throw new Error(`Failed to get user profile: ${error.message}`);
   }
 }
-
-// --- HARDCODED WHISPER MODEL ---
-const WHISPER_MODEL = "whisper-1";
 
 // Modify getDailyReport to accept the full transcription object AND profileData
 async function getDailyReport(transcription: FullTranscription, profileData: any) {
@@ -132,7 +92,7 @@ async function getDailyReport(transcription: FullTranscription, profileData: any
     // Prepare a more readable transcript format for the LLM, including timestamps
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
-    // --- Read Config from profileData (using reconstructed structure) ---
+    // --- Read Config from profileData (NO DEFAULTS) ---
     const chatModel = profileData.config.chatModel; 
     const systemPromptContent = profileData.config.systemPrompt;
     const reportSchema = profileData.config.reportJsonSchema;
@@ -191,7 +151,7 @@ async function getDailyReport(transcription: FullTranscription, profileData: any
   }
 }
 
-// --- Frame Extraction Logic (Stream output directly to S3) ---
+// --- Frame Extraction Logic --- 
 
 interface TimestampData {
   timestamp: number;
@@ -202,206 +162,146 @@ interface FrameData {
   timestamps: TimestampData[];
 }
 
-// Extracts frame using presigned URL, streams output directly to S3 key
-async function extractAndUploadFrame(videoPresignedUrl: string, timestamp: number, s3Key: string): Promise<string> {
-  const step = `Frame [${timestamp.toFixed(3)}s -> ${s3Key}]`; // For logging
-  console.log(`${step}: Starting extraction and upload...`);
-  
-  const ffmpegArgs = [
-      '-ss', timestamp.toFixed(6),
-      '-i', videoPresignedUrl,
-      '-frames:v', '1',       // Extract only one frame
-      '-q:v', '2',            // Quality setting (2-5 is good for JPEG)
-      '-c:v', 'mjpeg',        // Output codec JPEG
-      '-f', 'image2pipe',    // Output format to pipe
-      'pipe:1'               // Output to stdout
-  ];
-
-  console.log(`${step}: Spawning ffmpeg process...`);
-  const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  let stderrOutput = '';
-  ffmpegProcess.stderr.on('data', (data) => {
-      stderrOutput += data.toString();
-      // console.warn(`ffmpeg frame stderr chunk: ${data}`);
-  });
-  
-  if (!ffmpegProcess.stdout) {
-      throw new Error(`${step}: Failed to get stdout stream from ffmpeg.`);
-  }
-  const frameStream = ffmpegProcess.stdout;
-
-  // --- Setup ffmpeg exit promise FIRST ---
-  // To ensure listeners are attached before process potentially exits quickly
-  const ffmpegExitPromise = new Promise<number | null>((resolve, reject) => {
-      ffmpegProcess.on('close', (code) => {
-           console.log(`${step}: ffmpeg process 'close' event received (code: ${code}).`);
-           resolve(code);
-      });
-      ffmpegProcess.on('error', (err) => {
-           console.error(`${step}: ffmpeg process 'error' event:`, err);
-           console.error(`${step}: ffmpeg stderr before error:\n${stderrOutput}`);
-           reject(err);
-      }); 
-  });
-  // -------------------------------------
-
+/**
+ * Creates a directory if it doesn't exist.
+ */
+async function ensureDir(dirPath: string): Promise<void> {
   try {
-    console.log(`${step}: Configuring S3 upload stream...`);
-    const parallelUploadS3 = new Upload({
-      client: s3Client,
-      params: {
-          Bucket: s3Bucket,
-          Key: s3Key,
-          Body: frameStream, // Pipe ffmpeg stdout directly
-          ContentType: 'image/jpeg'
-      },
-      // Optional: configure queue size and part size for large streams if needed
-      // queueSize: 4,
-      // partSize: 1024 * 1024 * 5, // 5MB
-    });
-
-    // Optional: Log progress
-    // parallelUploadS3.on("httpUploadProgress", (progress) => {
-    //   console.log(`S3 frame upload progress for ${s3Key}:`, progress);
-    // });
-
-    console.log(`${step}: Starting S3 upload (await parallelUploadS3.done())...`);
-    await parallelUploadS3.done();
-    console.log(`${step}: S3 upload finished.`);
-    
-    console.log(`${step}: Waiting for ffmpeg process to exit (await ffmpegExitPromise)...`);
-    const ffmpegExitCode = await ffmpegExitPromise; // Await the promise we set up earlier
-    console.log(`${step}: ffmpeg process exited (code: ${ffmpegExitCode}).`);
-
-    if (ffmpegExitCode !== 0) {
-        console.error(`${step}: ffmpeg extraction process failed. Stderr:\n${stderrOutput}`);
-        throw new Error(`ffmpeg frame extraction failed for timestamp ${timestamp} with exit code ${ffmpegExitCode}.`);
-    }
-
-    const region = await s3Client.config.region(); 
-    const s3Url = `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3Key}`;
-    return s3Url;
-
+    await access(dirPath); // Use fs.promises.access
   } catch (error: any) {
-    console.error(`${step}: Error during frame processing/upload:`, error);
-    if (!ffmpegProcess.killed) ffmpegProcess.kill();
-    throw error; 
+    if (error.code === 'ENOENT') {
+      console.log(`Creating directory (ensureDir): ${dirPath}`); // Log path being created
+      await mkdir(dirPath, { recursive: true }); // Use fs.promises.mkdir
+    } else {
+      throw error;
+    }
   }
 }
-
-// Extracts frames using presigned URL and streams directly to S3
-// No longer uses tempOutputDir
-async function extractAndUploadFramesFromTimestamps(videoPresignedUrl: string, timestampData: TimestampData[], s3FramesBaseKey: string): Promise<{ s3Url: string; fileName: string; caption: string }[]> {
-  console.log(`Starting frame extraction/upload loop for ${timestampData.length} timestamps...`);
-  const uploadedFramesInfo: { s3Url: string; fileName: string; caption: string }[] = [];
-  const uploadPromises: Promise<void>[] = [];
-
-  for (const item of timestampData) {
-      const timestamp = item.timestamp;
-      const frameFileName = `frame_${timestamp.toFixed(3).replace('.', '-')}.jpg`; 
-      const frameS3Key = `${s3FramesBaseKey}${frameFileName}`;
-      
-      console.log(`Queueing processing for frame timestamp ${timestamp} -> ${frameS3Key}`);
-      const uploadPromise = extractAndUploadFrame(videoPresignedUrl, timestamp, frameS3Key)
-          .then(s3Url => {
-              uploadedFramesInfo.push({ 
-                  s3Url: s3Url, 
-                  fileName: frameFileName, 
-                  caption: item.reason 
-              });
-              console.log(`Completed processing for frame ${frameFileName}`);
-          })
-          .catch(error => {
-              // Log error but don't stop other frames
-              console.warn(`Failed to extract/upload frame for timestamp ${timestamp}. Skipping. Error: ${error}`);
-          });
-      uploadPromises.push(uploadPromise);
-  }
-  
-  console.log('Waiting for all frame processing promises (Promise.allSettled)...');
-  const results = await Promise.allSettled(uploadPromises);
-  console.log('Promise.allSettled completed for frames.');
-  console.log('Frame processing results:', JSON.stringify(results, null, 2)); // Log detailed results
-  
-  console.log(`Frame extraction/upload process completed. Successfully processed ${uploadedFramesInfo.length} / ${timestampData.length} frames.`);
-  // Sort results by filename (derived from timestamp) before returning
-  uploadedFramesInfo.sort((a, b) => a.fileName.localeCompare(b.fileName));
-  return uploadedFramesInfo;
-}
-
-// --- Video/Audio Processing Logic (Streaming) ---
-
-// Converts video (from presigned URL) to audio stream (stdout)
-async function convertVideoToAudioStream(videoPresignedUrl: string): Promise<ChildProcess> {
-  console.log(`Converting video from presigned URL to audio stream...`);
-  const ffmpegArgs = [
-      '-i', videoPresignedUrl, 
-      '-vn',                 
-      '-acodec', 'libmp3lame',
-      '-ar', '44100',         
-      '-ac', '2',             
-      '-ab', '192k',         
-      '-f', 'mp3',           
-      'pipe:1'               
-  ];
-  
-  console.log(`Spawning ffmpeg process: ffmpeg ${ffmpegArgs.join(' ')}`);
-  
-  const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'] 
-  });
-
-  ffmpegProcess.stderr.on('data', (data) => {
-      console.warn(`ffmpeg stderr: ${data}`);
-  });
-
-  return ffmpegProcess; 
-}
-
-// Transcribes an audio stream directly
-async function transcribeAudioStream(audioStream: Readable, originalFileName: string, profileData: any): Promise<FullTranscription> {
-  console.log(`Transcribing audio stream (${originalFileName})...`);
-  const whisperModel = WHISPER_MODEL; 
-  console.log("Using whisper model:", whisperModel);
-
-  try {
-      // Use toFile with the stream directly
-      const transcriptionInput = await toFile(audioStream, originalFileName); 
-
-      const transcription = await openai.audio.transcriptions.create({
-        file: transcriptionInput,
-        model: whisperModel,
-        response_format: "verbose_json",
-        timestamp_granularities: ["word"]
-      });
-      console.log('Transcription complete.');
-      return transcription as FullTranscription; 
-  } catch (error) {
-       console.error("Error during audio stream transcription:", error);
-       // Ensure the audio stream is destroyed if transcription fails mid-way
-       if (!audioStream.destroyed) {
-           audioStream.destroy();
-       }
-       throw error; // Re-throw
-  }
-}
-
-// --- S3 Upload Logic (Revised for temp files and in-memory data) ---
 
 /**
- * Uploads a local file (likely from temp dir) to S3.
+ * Extracts a frame from a video file at a specific timestamp using ffmpeg.
+ */
+async function extractFrame(videoPath: string, timestamp: number, outputDir: string, outputFilename: string): Promise<void> {
+  const outputPath = path.join(outputDir, outputFilename); // outputDir is already absolute
+  const command = `ffmpeg -ss ${timestamp.toFixed(6)} -i "${videoPath}" -frames:v 1 -q:v 2 "${outputPath}"`;
+  console.log(`Executing frame extraction command: ${command}`); // Log command
+  try {
+    const { stdout, stderr } = await execAsync(command);
+    if (stdout) console.log(`extractFrame stdout [${timestamp.toFixed(2)}s]:`, stdout);
+    if (stderr) console.warn(`extractFrame stderr [${timestamp.toFixed(2)}s]:`, stderr);
+    console.log(`Extracted frame at ${timestamp.toFixed(2)}s to ${outputPath}`);
+  } catch (error: any) {
+    console.error(`Error extracting frame at ${timestamp.toFixed(2)}s:`, error); // Log full error
+    // Decide if you want to throw or just log and continue
+    // throw error; // Uncomment to stop processing if one frame fails
+  }
+}
+
+/**
+ * Reads frame data and extracts frames from the video.
+ */
+async function extractFramesFromData(videoPath: string, frameDataPath: string, outputDir: string): Promise<void> {
+  try {
+    await ensureDir(outputDir);
+    const jsonData = await readFile(frameDataPath, 'utf-8'); // Use fs.promises.readFile
+    const frameData: FrameData = JSON.parse(jsonData);
+
+    if (!frameData.timestamps || frameData.timestamps.length === 0) {
+      console.log('No timestamps found in the data file.');
+      return;
+    }
+
+    console.log(`Found ${frameData.timestamps.length} timestamps. Starting frame extraction...`);
+
+    const extractionPromises = frameData.timestamps.map((item) => {
+      const timestamp = item.timestamp;
+      const outputFilename = `frame_${timestamp.toFixed(2)}.jpg`;
+      return extractFrame(videoPath, timestamp, outputDir, outputFilename);
+    });
+
+    await Promise.all(extractionPromises);
+    console.log('Frame extraction completed.');
+
+  } catch (err: any) {
+    if (err.code === 'ENOENT' && err.path === frameDataPath) {
+      console.error(`Error: Frame data file not found at ${frameDataPath}.`);
+      console.error('Ensure test.ts was run successfully to generate frame data.');
+    } else {
+      console.error('Error processing frames:', err.message);
+    }
+  }
+}
+
+// --- Video/Audio Processing Logic ---
+
+/**
+ * Convert a video (.mov or .mp4) file to an MP3 audio file using ffmpeg.
+ */
+async function convertVideoToAudio(videoPath: string, audioPath: string): Promise<void> {
+  try {
+    await access(audioPath); // Use fs.promises.access
+    console.log(`Audio file ${audioPath} already exists. Skipping conversion.`);
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      console.log(`Converting video ${videoPath} to audio ${audioPath}...`);
+      const command = `ffmpeg -i "${videoPath}" -vn -acodec libmp3lame -ar 44100 -ac 2 -ab 192k -f mp3 "${audioPath}"`;
+      console.log(`Executing audio conversion command: ${command}`); // Log command
+      try {
+          const { stdout, stderr } = await execAsync(command);
+          if (stdout) console.log('convertVideoToAudio stdout:', stdout);
+          if (stderr) console.warn('convertVideoToAudio stderr:', stderr);
+          console.log('Video to audio conversion complete.');
+      } catch (execError: any) {
+          console.error(`ffmpeg execution failed for audio conversion:`, execError); // Log the actual error object
+          throw execError; // Re-throw after logging to stop the process
+      }
+    } else {
+      throw error; // Re-throw other access errors
+    }
+  }
+}
+
+/**
+ * Transcribe an MP3 audio file using OpenAI's Whisper API.
+ */
+async function transcribeAudio(audioPath: string, profileData: any): Promise<any> {
+  console.log(`Transcribing audio ${audioPath}...`);
+
+  // --- Read Config from profileData (NO DEFAULTS) ---
+  const whisperModel = profileData.config.whisperModel; 
+  // ---------------------------------------------------
+  
+  console.log(`Using whisper model: ${whisperModel}`); 
+
+  // --- Add check to ensure config value exists --- 
+  if (!whisperModel) {
+    throw new Error('Required configuration (whisperModel) missing in profile.json');
+  }
+  // --------------------------------------------------
+
+  const transcription = await openai.audio.transcriptions.create({
+    file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)), // fs.promises doesn't have createReadStream, keep fs
+    model: whisperModel, // Use variable
+    response_format: "verbose_json",
+    timestamp_granularities: ["word"]
+  });
+  console.log('Transcription complete.');
+  return transcription;
+}
+
+// --- S3 Upload Logic (Revised) ---
+
+/**
+ * Uploads a local file to S3.
  */
 async function uploadFileToS3(localPath: string, s3Key: string, contentType: string): Promise<string> {
     console.log(`Uploading ${localPath} to s3://${s3Bucket}/${s3Key}`);
-    let fileStream;
     try {
-        // Use a stream for potentially large temp files (like audio)
-        fileStream = createReadStream(localPath);
+        const fileContent = await readFile(localPath);
         const putCommand = new PutObjectCommand({
             Bucket: s3Bucket,
             Key: s3Key,
-            Body: fileStream,
+            Body: fileContent,
             ContentType: contentType
         });
         await s3Client.send(putCommand);
@@ -412,41 +312,146 @@ async function uploadFileToS3(localPath: string, s3Key: string, contentType: str
     } catch (error: any) {
         console.error(`Error uploading ${localPath} to S3 key ${s3Key}:`, error);
         throw new Error(`S3 upload failed for ${localPath}: ${error.message}`);
-    } finally {
-         // Ensure stream is closed if it was opened
-        if (fileStream && !fileStream.destroyed) {
-            fileStream.destroy();
-        }
     }
 }
 
-/**
- * Uploads in-memory data (like JSON) to S3.
- */
-async function uploadDataToS3(data: string | Buffer | Readable, s3Key: string, contentType: string): Promise<string> {
-    console.log(`Uploading in-memory data to s3://${s3Bucket}/${s3Key}`);
+// --- PDF Generation Logic (Using fs.promises) ---
+
+async function generatePdfReport(reportDataPath: string, imagesDir: string, outputPdfPath: string, logoS3Url?: string): Promise<void> { 
+    console.log(`Generating PDF report: ${outputPdfPath}`);
     try {
-        const putCommand = new PutObjectCommand({
-            Bucket: s3Bucket,
-            Key: s3Key,
-            Body: data,
-            ContentType: contentType
+        const reportJsonString = await readFile(reportDataPath, 'utf-8');
+        const reportData = JSON.parse(reportJsonString);
+        console.log("Report JSON loaded for PDF generation.");
+
+        // Check if logo URL is provided
+        const hasLogo = !!logoS3Url;
+        if (hasLogo) {
+            console.log(`Using logo from S3 URL: ${logoS3Url}`);
+        } else {
+            console.log(`No logo URL provided. PDF will be generated without a logo.`);
+        }
+
+        // --- PDF Generation using pdfkit ---
+        const doc = new PDFDocument({ 
+            margin: 50, // Add margins
+            size: 'A4'
         });
-        await s3Client.send(putCommand);
-        console.log(`Successfully uploaded data to ${s3Key}`);
-        const region = await s3Client.config.region(); 
-        const s3Url = `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3Key}`;
-        return s3Url;
-    } catch (error: any) {
-        console.error(`Error uploading data to S3 key ${s3Key}:`, error);
-        throw new Error(`S3 upload failed for ${s3Key}: ${error.message}`);
+        const writeStream = fs.createWriteStream(outputPdfPath); // Keep fs for streams
+        doc.pipe(writeStream);
+
+        // --- PDF Header ---
+        const pageMargin = 50;
+        const logoWidth = 100; // Desired width
+        const logoHeight = 50; // Desired height
+        
+        // Only try to add logo if URL is provided
+        if (hasLogo) {
+            try {
+                // We'll need to fetch the logo from S3 first
+                const logoResponse = await fetch(logoS3Url!);
+                if (logoResponse.ok) {
+                    const logoBuffer = await logoResponse.arrayBuffer();
+                    
+                    // Calculate position for top-right corner
+                    const logoX = doc.page.width - pageMargin - logoWidth;
+                    const logoY = pageMargin; // Place near top margin
+                    
+                    // Add logo to PDF from buffer
+                    doc.image(Buffer.from(logoBuffer), logoX, logoY, {
+                        fit: [logoWidth, logoHeight], // Fit logo into box
+                        align: 'right'
+                    });
+                    
+                    // Ensure content starts below the logo if placed near the top
+                    doc.y = Math.max(doc.y, logoY + logoHeight + 10); // Move down past logo + padding
+                } else {
+                    console.warn(`Failed to fetch logo from S3: ${logoResponse.status} ${logoResponse.statusText}`);
+                    doc.moveDown(1); // Add some space if logo fetch failed
+                }
+            } catch (logoError) {
+                console.warn(`Error processing logo from S3: ${logoError}`);
+                doc.moveDown(1); // Add some space if logo fetch failed
+            }
+        } else {
+            doc.moveDown(1); // Add some space if no logo
+        }
+
+        doc.fontSize(24).font('Helvetica-Bold').text(reportData.report_title, pageMargin, pageMargin + (hasLogo ? 0 : -logoHeight/2), { // Adjust title Y slightly if no logo
+            align: 'left',
+            width: doc.page.width - (2 * pageMargin) - (hasLogo ? logoWidth + 10 : 0) // Leave space for logo if present
+        });
+        doc.fontSize(12).font('Helvetica').text(`Date: ${reportData.report_date}`, { align: 'left' });
+        doc.moveDown(2);
+
+        // --- PDF Body (Sections) ---
+        if (reportData.sections && Array.isArray(reportData.sections)) {
+            reportData.sections.forEach((section: any, index: number) => {
+                doc.fontSize(16).font('Helvetica-Bold').text(section.title);
+                doc.moveDown(0.5);
+                doc.fontSize(11).font('Helvetica').text(section.summary, { 
+                    paragraphGap: 5,
+                    indent: 15, // Indent paragraphs
+                    lineGap: 2
+                });
+                doc.moveDown(1.5);
+
+                // --- Images within Section (if any) ---
+                if (section.images && Array.isArray(section.images)) {
+                    section.images.forEach((imageInfo: any) => {
+                        const imageFilename = imageInfo.fileName; 
+                        const caption = imageInfo.caption;
+                        const imagePath = path.join(imagesDir, imageFilename); // Construct path to local image
+                        
+                        try {
+                            // Check if the image file exists locally before trying to embed
+                            if (fs.existsSync(imagePath)) { 
+                                console.log(`Embedding image ${imageFilename} in PDF.`);
+                                doc.image(imagePath, {
+                                    fit: [500, 400], // Fit image within page bounds (adjust as needed)
+                                    align: 'center',
+                                    valign: 'center'
+                                });
+                                doc.moveDown(0.5);
+                                if (caption) {
+                                    doc.fontSize(10).font('Helvetica-Oblique').text(caption, { align: 'center' });
+                                    doc.moveDown(0.5);
+                                }
+                                doc.moveDown(1);
+                            } else {
+                                console.warn(`Image file not found locally: ${imagePath}. Skipping embedding.`);
+                                doc.fontSize(10).font('Helvetica-Oblique').fillColor('red').text(`[Image not found: ${imageFilename}]`, { align: 'center' });
+                                doc.fillColor('black').moveDown(1);
+                            }
+                        } catch (imgError) {
+                            console.error(`Error embedding image ${imageFilename}:`, imgError);
+                            doc.fontSize(10).font('Helvetica-Oblique').fillColor('red').text(`[Error loading image: ${imageFilename}]`, { align: 'center' });
+                            doc.fillColor('black').moveDown(1);
+                        }
+                    });
+                    doc.moveDown(1); // Add space after images section
+                }
+            });
+        } else {
+            doc.fontSize(12).font('Helvetica').text('No report sections found.');
+        }
+
+        // --- Finalize PDF ---
+        doc.end();
+
+        // Wait for the stream to finish writing
+        await new Promise<void>((resolve, reject) => { // Explicitly type Promise
+            writeStream.on('finish', () => resolve()); // Wrap resolve
+            writeStream.on('error', reject);
+        });
+
+        console.log(`PDF report generated successfully at ${outputPdfPath}`);
+
+    } catch (error) {
+        console.error("Error generating PDF report:", error);
+        throw error; // Re-throw error to be caught by the main function
     }
 }
-
-// --- PDF Generation Logic (Modified for temp paths and S3 logo) ---
-// Needs modification to accept temp image paths if generatePdfReport is kept.
-// For now, assuming PDF generation might be removed or significantly changed.
-// async function generatePdfReport(...) { ... }
 
 // --- Frame Selection Logic ---
 
@@ -471,168 +476,193 @@ async function selectFrameTimestamps(transcription: FullTranscription, numFrames
     return selectedTimestamps;
 }
 
-// --- Main Orchestration Logic (Adjusted for Frame Streaming) ---
+// --- Main Orchestration Logic --- 
 
-export async function generateReport(videoS3Key: string, userId: string, customerNameInput?: string, projectNameInput?: string): Promise<string> { 
-    const customerName = customerNameInput || 'UnknownCustomer';
-    const projectName = projectNameInput || 'UnknownProject';
-    
-    const startTime = Date.now();
-    function logStep(msg: string, start?: number) {
-      const now = Date.now();
-      if (start) {
-        console.log(`[${new Date().toISOString()}] ${msg} (${now - start}ms)`);
-      } else {
-        console.log(`[${new Date().toISOString()}] ${msg}`);
-      }
-      return now;
+/**
+ * Orchestrates the entire report generation process: 
+ * video -> audio -> transcription -> report JSON -> frame timestamps -> frame extraction -> PDF (optional) -> S3 upload.
+ * Returns the S3 key of the generated report JSON file.
+ */
+export async function generateReport(inputVideoPath: string, userId: string, customerName?: string, projectName?: string): Promise<string> { 
+    // ** UPDATED: Added customerName and projectName parameters **
+
+    if (!userId) {
+        throw new Error("User ID is required to generate a report.");
     }
-    logStep(`Generating report for user: ${userId}`);
-    logStep(`Processing video from S3 Key: ${videoS3Key}`);
-    logStep(`Report path will use customer: ${customerName}, project: ${projectName}`);
+    console.log(`Generating report for user: ${userId}`);
+    console.log(`Processing video: ${inputVideoPath}`);
+    console.log(`Report path will use customer: ${customerName || 'Unknown'}, project: ${projectName || 'Unknown'}`);
 
-    // Temporary directory no longer needed for frames or other files
-    const tempId = `report_${userId}_${Date.now()}`;
-    let s3ReportJsonKey = ''; 
-    let ffmpegAudioProcess: ChildProcess | null = null;
-    let transcription: FullTranscription;
-    let profileData: any;
+    // 1. Create a unique directory for this processing job
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    // Include userId in the processing directory path
+    const processingDir = path.join(PROCESSING_BASE_DIR, `report_${userId}_${timestamp}`); 
+    await ensureDir(processingDir);
+    console.log(`Created processing directory: ${processingDir}`);
+
+    // Define paths within the unique processing directory
+    const audioOutputPath = path.join(processingDir, 'output_audio.mp3');
+    const transcriptionJsonPath = path.join(processingDir, 'transcription.json');
+    const frameTimestampsPath = path.join(processingDir, 'frame_timestamps.json');
+    const reportJsonPath = path.join(processingDir, 'daily_report.json');
+    const framesOutputDir = path.join(processingDir, 'extracted_frames');
+    // const pdfOutputPath = path.join(processingDir, 'daily_report.pdf'); // PDF generation currently disabled
 
     try {
-        // 1. Generate Presigned URL for Video Input
-        let stepStart = logStep(`Generating presigned URL for video: ${videoS3Key}`);
-        const getCommand = new GetObjectCommand({ Bucket: s3Bucket, Key: videoS3Key });
-        const videoPresignedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 900 }); 
-        logStep('Generated presigned URL', stepStart);
-        
-        // --- Start Audio Conversion (Streaming) ---
-        stepStart = logStep('Starting video to audio stream conversion...');
-        ffmpegAudioProcess = await convertVideoToAudioStream(videoPresignedUrl);
-        if (!ffmpegAudioProcess?.stdout) {
-            throw new Error("Failed to get stdout stream from ffmpeg audio process.");
-        }
-        const audioInputStream = ffmpegAudioProcess.stdout;
-        
-        // --- Setup ffmpeg process completion promise --- 
-        const ffmpegCompletionPromise = new Promise<number | null>((resolve, reject) => {
-            let stderrOutput = ''; 
-            ffmpegAudioProcess?.stderr?.on('data', (data) => {
-                stderrOutput += data.toString();
-            });
-            ffmpegAudioProcess?.on('close', (code) => {
-                if (code !== 0) {
-                    console.error(`ffmpeg process closed with non-zero code: ${code}`);
-                    console.error(`ffmpeg full stderr:\n${stderrOutput}`);
-                    reject(new Error(`ffmpeg audio conversion failed with exit code ${code}. Stderr: ${stderrOutput.substring(0, 500)}...`));
-                } else {
-                    resolve(code);
-                }
-            });
-            ffmpegAudioProcess?.on('error', (err) => {
-                console.error('ffmpeg process error event:', err);
-                console.error(`ffmpeg full stderr before error:\n${stderrOutput}`);
-                reject(err);
-            });
-        });
-        // -------------------------------------------
-        logStep('Spawned ffmpeg for audio streaming', stepStart);
-
-        // --- Start Profile Fetch in Parallel --- 
-        stepStart = logStep('Fetching profile data in parallel...');
-        const profilePromise = getUserProfile(userId); // Don't await yet
-        // ------------------------------------
-
-        // 4. Transcribe Audio Stream
-        logStep('Transcribing audio stream...'); 
-        try {
-            transcription = await transcribeAudioStream(audioInputStream, `audio_${tempId}.mp3`, profileData);
-        } catch (transcriptionError) {
-             if (ffmpegAudioProcess && !ffmpegAudioProcess.killed) {
-                 logStep('Killing ffmpeg process due to transcription error...');
-                 ffmpegAudioProcess.kill();
-                 ffmpegAudioProcess = null;
-             }
-             throw transcriptionError; 
-        }
-        logStep('Finished transcription call', stepStart); 
-        
-        // ---- START Transcription Upload in Parallel ----
-        stepStart = logStep('Uploading transcription JSON in parallel...');
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-'); 
-        const s3BaseKey = `users/${userId}/${customerName}/${projectName}/report_${timestamp}`;
-        const s3TranscriptionKey = `${s3BaseKey}/transcription.json`;
-        if (!transcription) throw new Error("Transcription data is missing after processing."); 
-        // Start upload but don't await yet
-        const transcriptionUploadPromise = uploadDataToS3(JSON.stringify(transcription, null, 2), s3TranscriptionKey, 'application/json');
-        // ---------------------------------------------
-        
-        // --- Wait for ffmpeg process completion AFTER transcription ---
-        stepStart = logStep('Waiting for ffmpeg audio process to complete (while transcription uploads)...');
-        const ffmpegAudioExitCode = await ffmpegCompletionPromise; 
-        logStep(`ffmpeg audio process completed with exit code ${ffmpegAudioExitCode}`, stepStart);
-        ffmpegAudioProcess = null; 
-        // ------------------------------------------------------------
-
-        // --- Await Transcription Upload --- 
-        // Ensure transcription upload finished before potentially needing it (though not strictly required by current logic)
-        stepStart = logStep('Waiting for transcription JSON upload...');
-        await transcriptionUploadPromise;
-        logStep('Finished uploading transcription JSON', stepStart); 
-        // --------------------------------
-        
-        // --- Await Profile Data (fetched in parallel) --- 
-        stepStart = logStep('Waiting for profile data...');
-        profileData = await profilePromise; 
-        logStep('Received profile data', stepStart);
+        // 2. Read Profile Data - UPDATED to use user-specific profile
+        console.log(`Fetching profile data for user: ${userId}`);
+        const profileData = await getUserProfile(userId);
         if (!profileData) {
-            throw new Error("Failed to load profile data for the user (fetched in parallel)");
+            throw new Error("Failed to load profile data for the user");
         }
-        // -----------------------------------------------
 
-        // --- Define remaining S3 Keys --- 
-        s3ReportJsonKey = `${s3BaseKey}/daily_report.json`; 
-        const s3FramesBaseKey = `${s3BaseKey}/extracted_frames/`;
-        const s3ViewerHtmlKey = `${s3BaseKey}/report-viewer.html`;
-        // --------------------------------
-        
-        // 5. Generate Daily Report JSON (in memory)
-        stepStart = logStep('Generating daily report JSON...');
+        // 3. Convert Video to Audio
+        await convertVideoToAudio(inputVideoPath, audioOutputPath);
+
+        // 4. Transcribe Audio
+        let transcription: FullTranscription;
+        if (fs.existsSync(transcriptionJsonPath)) {
+            console.log(`Transcription file ${transcriptionJsonPath} found, loading...`);
+            const transData = await readFile(transcriptionJsonPath, 'utf-8');
+            transcription = JSON.parse(transData);
+        } else {
+            console.log(`Transcription file not found, transcribing audio...`);
+            transcription = await transcribeAudio(audioOutputPath, profileData);
+            if (!transcription) throw new Error("Transcription failed.");
+            await writeFile(transcriptionJsonPath, JSON.stringify(transcription, null, 2));
+            console.log(`Transcription saved to ${transcriptionJsonPath}`);
+        }
+
+        // 5. Generate Daily Report JSON
+        console.log('Generating daily report JSON...');
         const reportJson = await getDailyReport(transcription, profileData);
-        logStep('Generated daily report JSON', stepStart);
         if (!reportJson) throw new Error("Daily report generation failed.");
 
-        // 6. Select Timestamps for Frames (in memory)
-        stepStart = logStep('Selecting timestamps for frame extraction...');
+        // 6. Select Timestamps for Frames using report JSON
+        console.log('Selecting timestamps for frame extraction using report JSON...');
         const selectedTimestamps = await selectFrameTimestamps(transcription, profileData.config.numFrames, reportJson);
-        logStep(`Selected ${selectedTimestamps.length} frame timestamps`, stepStart);
+        await writeFile(frameTimestampsPath, JSON.stringify({ timestamps: selectedTimestamps }, null, 2));
+        console.log(`Selected ${selectedTimestamps.length} frame timestamps saved to ${frameTimestampsPath}`);
 
-        // 7. Extract & Upload Frames (using presigned URL input, streams to S3)
-        stepStart = logStep(`Extracting frames and uploading directly to S3...`);
-        const uploadedFramesInfo = await extractAndUploadFramesFromTimestamps(videoPresignedUrl, selectedTimestamps, s3FramesBaseKey);
-        logStep(`Extracted and uploaded ${uploadedFramesInfo.length} frames`, stepStart);
+        // 7. Extract Frames
+        await ensureDir(framesOutputDir);
+        console.log(`Extracting frames based on ${frameTimestampsPath} to ${framesOutputDir}...`);
+        await extractFramesFromData(inputVideoPath, frameTimestampsPath, framesOutputDir);
 
-        // 8. Get logo key and URL (remains same, uses profileData)
-        const s3LogoKey = profileData.config.logoFilename;
+        // 8. Construct S3 Keys (USER-SCOPED) - Use provided customer/project or fallback with safe defaults
+        const customer = customerName || profileData.company?.customer;
+        const project = projectName || profileData.company?.project;
+        if (!customer || !project) {
+            throw new Error("Customer and project must be provided either as parameters or in the user profile");
+        }
+        console.log(`Using customer=${customer}, project=${project} for S3 paths`);
+        
+        const s3BaseKey = `users/${userId}/${customer}/${project}/report_${timestamp}`;
+        const s3ReportJsonKey = `${s3BaseKey}/daily_report.json`;
+        const s3FramesBaseKey = `${s3BaseKey}/extracted_frames/`;
+        const s3ViewerHtmlKey = `${s3BaseKey}/report-viewer.html`;
+        const s3TranscriptionKey = `${s3BaseKey}/transcription.json`;
+        const s3VideoKey = `${s3BaseKey}/source_video${path.extname(inputVideoPath)}`;
+
+        // Variable to store S3 logo key - will be set to empty string if no logo exists
+        let s3LogoKey = '';
+
+        // Try to find the user's profile logo first
+        try {
+          // Look for user's logo in S3
+          const userProfileLogoKey = `users/${userId}/logo.png`;
+          console.log(`Checking for user logo at S3 key: ${userProfileLogoKey}`);
+          
+          // Check if user logo exists in S3
+          const getLogoCommand = new GetObjectCommand({
+            Bucket: s3Bucket,
+            Key: userProfileLogoKey
+          });
+          
+          await s3Client.send(getLogoCommand);
+          console.log(`User has a custom logo at ${userProfileLogoKey}, using it for the report`);
+          
+          // If we get here, user has their own logo in S3 - use that key
+          s3LogoKey = userProfileLogoKey;
+          
+          // Don't need to upload the file since it already exists in S3
+          console.log(`Will reference existing user logo at s3://${s3Bucket}/${s3LogoKey}`);
+        } catch (error) {
+          console.error(`Error or logo not found: ${error}`);
+          throw new Error("No logo found for user. Cannot proceed without a logo.");
+        }
+
+        // 9. Add Image URLs to Report JSON (and upload frames)
+        console.log('Adding image URLs to report and uploading frames...');
+        
+        // Store the original AI-generated images array with captions
+        const aiGeneratedImages = reportJson.images || [];
+        
+        // Create a map of timestamps to captions from the AI response
+        const captionMap = new Map();
+        for (const img of aiGeneratedImages) {
+            if (img.timestamp && img.caption) {
+                captionMap.set(img.timestamp.toFixed(2), img.caption);
+            }
+        }
+        
+        // Clear and recreate the images array
+        reportJson.images = [];
+        
+        const frameFiles = await readdir(framesOutputDir);
+        for (const frameFile of frameFiles) {
+            const localFramePath = path.join(framesOutputDir, frameFile);
+            const frameS3Key = `${s3FramesBaseKey}${frameFile}`; // Use user-scoped base key
+            
+            // Extract timestamp from filename (e.g., "frame_1.06.jpg" -> "1.06")
+            const timestampMatch = frameFile.match(/frame_(\d+\.\d+)\.jpg/);
+            const timestamp = timestampMatch ? timestampMatch[1] : null;
+            
+            // Get caption from the AI-generated data
+            if (!timestamp || !captionMap.has(timestamp)) {
+                console.warn(`No caption found for timestamp ${timestamp}, skipping frame ${frameFile}`);
+                continue; // Skip this frame
+            }
+
+            const caption = captionMap.get(timestamp);
+
+            try {
+                const frameS3Url = await uploadFileToS3(localFramePath, frameS3Key, 'image/jpeg');
+                reportJson.images.push({
+                    fileName: frameFile,
+                    caption: caption,
+                    s3Url: frameS3Url // Store the full S3 URL
+                });
+            } catch (uploadError) {
+                console.warn(`Failed to upload frame ${frameFile}. Skipping inclusion in report. Error: ${uploadError}`);
+            }
+        }
+        
+        // Sort images by filename (which includes timestamp)
+        reportJson.images.sort((a: { fileName: string }, b: { fileName: string }) => a.fileName.localeCompare(b.fileName));
+
+        // 10. Save Final Report JSON Locally (before uploading)
+        await writeFile(reportJsonPath, JSON.stringify(reportJson, null, 2));
+        console.log(`Final report JSON (with image URLs) saved locally to ${reportJsonPath}`);
+
+        // Get the S3 URL for the logo to include in the report (if it exists)
         const region = await s3Client.config.region();
         const logoS3Url = s3LogoKey ? `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3LogoKey}` : '';
 
-        // 9. Add Frame URLs to Report JSON (in memory)
-        stepStart = logStep('Adding frame URLs to report JSON...');
-        reportJson.images = []; 
-        for (const frameInfo of uploadedFramesInfo) {
-            reportJson.images.push({ 
-                fileName: frameInfo.fileName, 
-                caption: frameInfo.caption, 
-                s3Url: frameInfo.s3Url 
-            });
+        // Validate essential profile data
+        if (!profileData.name) {
+          throw new Error("User name is missing in the profile data");
         }
-        logStep('Added frame URLs to report JSON', stepStart);
+        
+        if (!profileData.company?.name) {
+          throw new Error("Company name is missing in the profile data");
+        }
 
-        // 10. Add Metadata and Asset URLs to Report JSON (in memory)
+        // Add user profile data to the report JSON
         reportJson.reportMetadata = {
           generatedAt: new Date().toISOString(),
-          customer: customerName,
-          project: projectName,
+          customer: customer,
+          project: project,
           preparedBy: {
             name: profileData.name,
             email: profileData.email || '',
@@ -640,81 +670,72 @@ export async function generateReport(videoS3Key: string, userId: string, custome
           },
           companyInfo: {
             name: profileData.company.name,
-            address: profileData.company.street ? { 
-              street: profileData.company.street,
-              unit: profileData.company.unit || '',
-              city: profileData.company.city || '',
-              state: profileData.company.state || '',
-              zip: profileData.company.zip || ''
-            } : {},
+            address: profileData.company.address || {},
             phone: profileData.company.phone || '',
             website: profileData.company.website || ''
           }
         };
+
+        // Add S3 URLs to the report data for easier frontend access
         reportJson.reportAssetsS3Urls = {
           baseUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3BaseKey}`,
-          logoUrl: logoS3Url,
+          logoUrl: logoS3Url, // Will be empty string if no logo
           viewerUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3ViewerHtmlKey}`,
           transcriptionUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3TranscriptionKey}`,
-          videoUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${videoS3Key}` 
+          videoUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3VideoKey}`
         };
-        logStep('Added metadata and asset URLs to report JSON');
 
-        // --- Steps 11 & 12: Upload Final JSON and HTML in Parallel ---
-        stepStart = logStep('Starting final report JSON and HTML uploads in parallel...');
-        
-        // Start JSON Upload Promise
-        const reportJsonUploadPromise = uploadDataToS3(JSON.stringify(reportJson, null, 2), s3ReportJsonKey, 'application/json');
-        
-        // Start HTML Generation/Upload Promise
-        if (!s3Bucket) {
-            throw new Error("Internal Server Error: S3 bucket configuration is missing.");
-        }
-        const reportFolderName = s3BaseKey.split('/').pop() || `report_${timestamp}`; 
-        const htmlUploadPromise = generateAndUploadViewerHtml(
-            s3Client,
-            s3Bucket, 
-            reportJson, 
-            userId,
-            customerName,
-            projectName,
-            reportFolderName 
-        );
+        // Re-save the JSON with the updated URLs
+        await writeFile(reportJsonPath, JSON.stringify(reportJson, null, 2));
+        console.log(`Updated report JSON with asset URLs`);
 
-        // Wait for both final uploads to complete
-        const [jsonUploadResult, htmlUploadResult] = await Promise.allSettled([
-             reportJsonUploadPromise,
-             htmlUploadPromise
-        ]);
-        
-        // Check results (optional, but good practice)
-        if (jsonUploadResult.status === 'rejected') {
-            console.error("Final Report JSON upload failed:", jsonUploadResult.reason);
-            // Decide if this should throw an error
-        }
-        if (htmlUploadResult.status === 'rejected') {
-            console.error("HTML Viewer generation/upload failed:", htmlUploadResult.reason);
-             // Decide if this should throw an error
+        // 11. Upload Report Files to S3
+        console.log('Uploading report assets to S3...');
+        // Upload report JSON
+        await uploadFileToS3(reportJsonPath, s3ReportJsonKey, 'application/json');
+        // Upload viewer HTML
+        await uploadFileToS3(REPORT_VIEWER_HTML_PATH, s3ViewerHtmlKey, 'text/html');
+        // Upload transcription JSON
+        await uploadFileToS3(transcriptionJsonPath, s3TranscriptionKey, 'application/json');
+        // Upload frame timestamps JSON
+        await uploadFileToS3(frameTimestampsPath, `${s3BaseKey}/frame_timestamps.json`, 'application/json');
+        // Upload original video - may be large, so check if environment variable allows it
+        if (process.env.UPLOAD_SOURCE_VIDEO !== 'false') {
+            console.log(`Uploading source video to S3: ${s3VideoKey}`);
+            await uploadFileToS3(inputVideoPath, s3VideoKey, `video/${path.extname(inputVideoPath).substring(1)}`);
         }
         
-        logStep('Finished final report JSON and HTML uploads', stepStart);
-        // -----------------------------------------------------------
+        // Update the commented-out PDF generation code to pass the logo URL
+        // if (profileData.config.generatePdf) { // Check if PDF generation is enabled
+        //     const pdfOutputPath = path.join(processingDir, 'daily_report.pdf');
+        //     const s3PdfKey = `${s3BaseKey}/daily_report.pdf`;
+        //     await generatePdfReport(reportJsonPath, framesOutputDir, pdfOutputPath, logoS3Url);
+        //     await uploadFileToS3(pdfOutputPath, s3PdfKey, 'application/pdf');
+        // }
+        console.log(`Report uploaded successfully to S3 bucket: ${s3Bucket}, base key: ${s3BaseKey}`);
 
-        // 13. Return the S3 key of the report JSON
-        logStep('Report generation complete', startTime);
-        return s3ReportJsonKey;
+        // 12. Return the S3 key of the report JSON
+        return s3ReportJsonKey; // Return the user-scoped S3 key
 
     } catch (error: any) {
-        logStep(`Error in generateReport function: ${error.message} ${error.stack}`);
-        // Ensure ffmpeg process is killed if it's still running due to an error elsewhere
-         if (ffmpegAudioProcess && !ffmpegAudioProcess.killed) {
-             logStep('Killing ffmpeg audio process due to error...');
-             ffmpegAudioProcess.kill();
-             ffmpegAudioProcess = null;
-         }
-        throw error; // Re-throw the error after logging
+        console.error(`Error in generateReport function: ${error.message}`, error.stack);
+        // Attempt to clean up the processing directory even if an error occurs
+        try {
+            console.warn(`Attempting to cleanup failed processing directory: ${processingDir}`);
+            await rm(processingDir, { recursive: true, force: true });
+            console.warn(`Cleanup successful for: ${processingDir}`);
+        } catch (cleanupError) {
+            console.error(`Failed to cleanup processing directory ${processingDir}:`, cleanupError);
+        }
+        throw error; // Re-throw the original error
     } finally {
-        // 14. Cleanup Temporary Directory (REMOVED)
-        logStep('GenerateReport finished.'); 
+        // Clean up processing directory to avoid filling disk space
+        try {
+            console.log(`Cleaning up processing directory: ${processingDir}`);
+            await rm(processingDir, { recursive: true, force: true });
+            console.log(`Cleanup successful for: ${processingDir}`);
+        } catch (cleanupError) {
+            console.error(`Error cleaning up processing directory ${processingDir}:`, cleanupError);
+        }
     }
 }
