@@ -54,15 +54,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // --- Network Port --- 
-if (!process.env.PORT) {
-    console.error("CRITICAL ERROR: PORT environment variable is not set.");
-    process.exit(1); // Exit if PORT isn't configured
+// Default to 3000 if PORT is not set or invalid
+const portEnv = process.env.PORT ?? '3000';
+let _port = parseInt(portEnv, 10);
+if (isNaN(_port)) {
+  console.warn(`Invalid PORT env var "${process.env.PORT}". Defaulting to 3000.`);
+  _port = 3000;
 }
-export const port = parseInt(process.env.PORT, 10);
-if (isNaN(port)) {
-    console.error(`CRITICAL ERROR: Invalid PORT environment variable: ${process.env.PORT}. Must be a number.`);
-    process.exit(1);
-}
+export const port = _port;
 
 // --- Other Configs ---
 export const DEFAULT_WHISPER_MODEL = "whisper-1"; // Change as needed for your deployment 

@@ -50,7 +50,7 @@ const generateS3Key = (req: Request, file: Express.Multer.File, cb: (error: any,
         }
     } else if (file.fieldname === 'logo') {
         const extension = path.extname(file.originalname);
-        finalKey = `users/${userId}/profile/config/logo${extension}`; 
+        finalKey = `users/${userId}/logo${extension}`; 
     } else {
          // Reject uploads with unexpected field names instead of using a fallback
          console.error(`Rejected upload: Unexpected file fieldname: ${file.fieldname}`);

@@ -92,13 +92,13 @@ async function getUserProfile(userId: string): Promise<any> {
         // Top-level fields (map snake_case to camelCase/expected names)
         name: profileData.full_name, 
         username: profileData.username,
-        email: profileData.email, // Assuming email might be needed downstream (though not fetched explicitly before)
+        email: profileData.email,
         phone: profileData.phone,
-        
-        // Nested company object
+        subscriptionLevel: profileData.subscription_level,
+        logoFilename: profileData.config_logo_filename,
         company: {
             name: profileData.company_name,
-            street: profileData.company_street, // Map address fields
+            street: profileData.company_street,
             unit: profileData.company_unit,
             city: profileData.company_city,
             state: profileData.company_state,
@@ -106,18 +106,6 @@ async function getUserProfile(userId: string): Promise<any> {
             phone: profileData.company_phone,
             website: profileData.company_website
         },
-        
-        // Nested config object
-        config: {
-            chatModel: profileData.config_chat_model,
-            whisperModel: profileData.config_whisper_model,
-            systemPrompt: profileData.config_system_prompt,
-            // Parse JSON string back into an object, handle null/undefined
-            reportJsonSchema: profileData.config_report_json_schema 
-                                ? JSON.parse(profileData.config_report_json_schema) 
-                                : null, 
-            logoFilename: profileData.config_logo_filename
-        }
     };
 
     return reconstructedProfile;
@@ -130,19 +118,26 @@ async function getUserProfile(userId: string): Promise<any> {
   }
 }
 
-// --- HARDCODED WHISPER MODEL ---
-const WHISPER_MODEL = "whisper-1";
+async function getConfigByTier(tier: string) {
+  const { data: cfg, error } = await supabase
+    .from('config')
+    .select('*')
+    .eq('subscription_level', tier)
+    .single();
+  if (error || !cfg) throw new Error(`No config row for tier ${tier}`);
+  return cfg;  // { whisper_model, chat_model, system_prompt, report_json_schema }
+}
 
 // Modify getDailyReport to accept the full transcription object AND profileData
-async function getDailyReport(transcription: FullTranscription, profileData: any) {
+async function getDailyReport(transcription: FullTranscription, cfg: any) {
   try {
     // Prepare a more readable transcript format for the LLM, including timestamps
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
     // --- Read Config from profileData (using reconstructed structure) ---
-    const chatModel = profileData.config.chatModel; 
-    const systemPromptContent = profileData.config.systemPrompt;
-    const reportSchema = profileData.config.reportJsonSchema;
+    const chatModel = cfg.chat_model;
+    const systemPromptContent = cfg.system_prompt;
+    const reportSchema = cfg.report_json_schema;
     // ---------------------------------------------------
 
     console.log(`Using chat model: ${chatModel}`); 
@@ -311,9 +306,9 @@ async function convertVideoToAudio(videoPath: string, audioPath: string): Promis
 /**
  * Transcribe an MP3 audio file using OpenAI's Whisper API.
  */
-async function transcribeAudio(audioPath: string, profileData: any): Promise<any> {
+async function transcribeAudio(audioPath: string, cfg: any): Promise<any> {
   console.log(`Transcribing audio ${audioPath}...`);
-  const whisperModel = WHISPER_MODEL;
+  const whisperModel = cfg.whisper_model;
   console.log("Using whisper model:", whisperModel);
   const transcription = await openai.audio.transcriptions.create({
     file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)),
@@ -470,7 +465,7 @@ async function generatePdfReport(reportDataPath: string, imagesDir: string, outp
             });
         } else {
             doc.fontSize(12).font('Helvetica').text('No report sections found.');
-        }
+          }
 
         // --- Finalize PDF ---
         doc.end();
@@ -486,8 +481,7 @@ async function generatePdfReport(reportDataPath: string, imagesDir: string, outp
     } catch (error) {
         console.error("Error generating PDF report:", error);
         throw error; // Re-throw error to be caught by the main function
-    }
-}
+        }}
 
 // --- Frame Selection Logic ---
 
@@ -495,22 +489,20 @@ async function generatePdfReport(reportDataPath: string, imagesDir: string, outp
  * Simply uses the timestamps provided by the AI in the report JSON.
  * No additional processing or selection - just convert to the expected format.
  */
-async function selectFrameTimestamps(transcription: FullTranscription, numFrames: number = 5, reportJson: any = null): Promise<TimestampData[]> {
+async function selectFrameTimestamps(transcription: FullTranscription, reportJson: any): Promise<TimestampData[]> {
     if (!reportJson || !reportJson.images || !Array.isArray(reportJson.images) || reportJson.images.length === 0) {
-        throw new Error("No valid images with timestamps in the report JSON");
-    }
+        throw new Error("No valid images with timestamps in the report JSON");}
 
     console.log(`Using ${reportJson.images.length} timestamps directly from the AI-generated report`);
     
-    // Simply convert the AI-provided timestamps to the expected format
+    // Convert the AI-provided timestamps to the expected format
     const selectedTimestamps: TimestampData[] = reportJson.images.map((img: { timestamp: number; caption: string }) => ({
         timestamp: img.timestamp,
         reason: img.caption
     }));
     
     console.log(`Selected ${selectedTimestamps.length} timestamps from AI report data`);
-    return selectedTimestamps;
-}
+    return selectedTimestamps;}
 
 // --- Main Orchestration Logic --- 
 
@@ -560,6 +552,18 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             throw new Error("Failed to load profile data for the user");
         }
 
+        // Ensure subscription level exists in the profile
+        const userSubscriptionLevel = profileData.subscriptionLevel;
+        if (!userSubscriptionLevel) {
+            throw new Error(`User profile (${userId}) is missing the required subscription_level.`);
+        }
+        logStep(`User subscription level: ${userSubscriptionLevel}`);
+
+        // Fetch config based on the user's specific subscription level
+        stepStart = logStep(`Fetching configuration for level: ${userSubscriptionLevel}...`);
+        const cfg = await getConfigByTier(userSubscriptionLevel);
+        logStep('Fetched configuration', stepStart);
+
         // 3. Convert Video to Audio
         stepStart = logStep('Converting video to audio...');
         await convertVideoToAudio(inputVideoPath, audioOutputPath);
@@ -573,7 +577,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             transcription = JSON.parse(transData);
         } else {
             stepStart = logStep('Transcribing audio...');
-            transcription = await transcribeAudio(audioOutputPath, profileData);
+            transcription = await transcribeAudio(audioOutputPath, cfg);
             if (!transcription) throw new Error("Transcription failed.");
             await writeFile(transcriptionJsonPath, JSON.stringify(transcription, null, 2));
             logStep('Transcribed audio', stepStart);
@@ -581,13 +585,13 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
 
         // 5. Generate Daily Report JSON
         stepStart = logStep('Generating daily report JSON...');
-        const reportJson = await getDailyReport(transcription, profileData);
+        const reportJson = await getDailyReport(transcription, cfg);
         logStep('Generated daily report JSON', stepStart);
         if (!reportJson) throw new Error("Daily report generation failed.");
 
         // 6. Select Timestamps for Frames
         stepStart = logStep('Selecting timestamps for frame extraction...');
-        const selectedTimestamps = await selectFrameTimestamps(transcription, profileData.config.numFrames, reportJson);
+        const selectedTimestamps = await selectFrameTimestamps(transcription, reportJson);
         await writeFile(frameTimestampsPath, JSON.stringify({ timestamps: selectedTimestamps }, null, 2));
         logStep(`Selected ${selectedTimestamps.length} frame timestamps`, stepStart);
 
@@ -611,7 +615,8 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         const s3PdfKey = `${s3BaseKey}/daily_report.pdf`; // S3 Key for PDF
 
         // Get logo key directly from profile data (fetched earlier by getUserProfile)
-        const s3LogoKey = profileData.config.logoFilename; 
+        // getUserProfile returns a flat property 'logoFilename'
+        const s3LogoKey = profileData.logoFilename; 
         if (s3LogoKey) {
             logStep(`Found logo filename in profile: ${s3LogoKey}. Will use for PDF.`);
         } else {

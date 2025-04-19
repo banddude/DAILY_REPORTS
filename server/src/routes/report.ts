@@ -1,9 +1,10 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from 'stream';
-// Remove fs import related to local file handling
-// import * as fs from 'fs';
-import path from 'path'; // Re-add path import
+import path from 'path';
+import * as fs from 'fs';
+import os from 'os';
+import { pipeline } from 'stream/promises';
 import type { Multer } from 'multer'; // Import Multer type for dependency injection
 import { generateAndUploadViewerHtml } from '../reportUtils'; // Import the helper
 
@@ -230,7 +231,18 @@ const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Respons
     try {
         console.log(`User ${userId}: Starting report generation process from S3 video key: ${uploadedVideoS3Key}`);
         // Pass the S3 key instead of the local path
-        const reportJsonKey = await generateReportFunction(uploadedVideoS3Key, userId, customer, project);
+        // const reportJsonKey = await generateReportFunction(uploadedVideoS3Key, userId, customer, project);
+        // Download the video from S3 to a local temporary file so ffmpeg can read it
+        const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'report-'));
+        const localVideoPath = path.join(tempDir, path.basename(uploadedVideoS3Key));
+        console.log(`Downloading video ${uploadedVideoS3Key} from S3 to ${localVideoPath}`);
+        const getObject = new GetObjectCommand({ Bucket: s3Bucket, Key: uploadedVideoS3Key });
+        const s3Response = await s3Client.send(getObject);
+        if (!s3Response.Body) throw new Error('Empty S3 response body for video download');
+        await pipeline(s3Response.Body as Readable, fs.createWriteStream(localVideoPath));
+        console.log(`Downloaded video to ${localVideoPath}`);
+        // Use the local file path for report generation
+        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
         // Return only the key of the generated report JSON

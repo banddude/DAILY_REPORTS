@@ -40,7 +40,7 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
     try {
         const { data: profileData, error } = await supabase
             .from('profiles')
-            .select('*') // Select all columns, or specify needed ones
+            .select('*, subscription_level') // Ensure subscription_level is selected
             .eq('id', userId)
             .single(); // Expecting only one profile per user ID
 
@@ -66,26 +66,43 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
         }
 
         console.log(`Found Supabase profile for user ${userId}`);
-        // Exclude the user ID from the response and fetch global configuration
-        // Destructure profileData to remove config fields
-        const { id, config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema, ...profileFields } = profileData;
-        // Fetch master config
-        const { data: masterConfig, error: masterError } = await supabase
-            .from('master_config')
-            .select('*')
-            .single();
-        if (masterError || !masterConfig) {
-            console.error(`Error fetching master config:`, masterError);
-            return res.status(500).json({ error: `Failed to fetch configuration: ${masterError?.message || 'Unknown error'}` });
+        // --- Fetch Config based on Profile's Subscription Level ---
+        const userSubscriptionLevel = profileData.subscription_level; // Get level directly
+
+        // Check if the subscription level is set on the profile
+        if (!userSubscriptionLevel) {
+            console.error(`User ${userId} profile is missing the 'subscription_level'.`);
+            return res.status(400).json({ error: 'User profile is missing the required subscription level.' });
         }
-        // Build config object
-        const config = {
-            chatModel: masterConfig.config_chat_model,
-            whisperModel: masterConfig.config_whisper_model,
-            systemPrompt: masterConfig.config_system_prompt,
-            reportJsonSchema: masterConfig.config_report_json_schema,
+
+        console.log(`User ${userId} subscription level: ${userSubscriptionLevel}. Fetching corresponding config.`);
+
+        const { data: config, error: configError } = await supabase
+            .from('config')
+            .select('*') // Select all columns for the user's specific level
+            .eq('subscription_level', userSubscriptionLevel) // Filter using the user's level
+            .single(); // Expect exactly one row for the user's level
+
+        if (configError || !config) {
+            console.error(`Error fetching config for '${userSubscriptionLevel}' level:`, configError);
+            // Provide a more specific error message if the config for the level is missing
+            const errorMessage = configError?.code === 'PGRST116' // No rows found
+                ? `Configuration for subscription level '${userSubscriptionLevel}' not found.`
+                : `Failed to fetch configuration: ${configError?.message || 'Unknown error'}`;
+            return res.status(500).json({ error: errorMessage });
+        }
+
+        // Exclude internal/supabase fields from the profile before sending
+        const { id, created_at, updated_at, subscription_level, ...profileFieldsToSend } = profileData;
+
+        // Build configuration object using data from the fetched config row
+        const configuration = {
+            chatModel: config.chat_model,
+            whisperModel: config.whisper_model,
+            systemPrompt: config.system_prompt,
+            reportJsonSchema: config.report_json_schema,
         };
-        res.json({ ...profileFields, config });
+        res.json({ ...profileFieldsToSend, config: configuration }); // Pass the correct config
 
     } catch (error: any) { // Catch unexpected errors
         console.error(`Unexpected error reading profile for user ${userId}:`, error);
@@ -105,8 +122,8 @@ router.post('/profile', (req, res, next) => protectMiddleware(req, res, next), (
     const allowedColumns = [
         'username', 'full_name', 'phone', 'company_name', 'company_street',
         'company_unit', 'company_city', 'company_state', 'company_zip', 'company_phone',
-        'company_website', 'config_chat_model', 'config_whisper_model',
-        'config_logo_filename', 'config_system_prompt', 'config_report_json_schema'
+        'company_website', 'chat_model', 'whisper_model',
+        'config_logo_filename', 'system_prompt', 'report_json_schema'
         // Do NOT include 'id', 'created_at', 'updated_at' here
     ];
     const profileUpdateData: { [key: string]: any } = {};
