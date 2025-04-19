@@ -414,27 +414,6 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
 
                 {/* Configuration section has been moved to Developer screen */}
 
-                {/* Developer access button, only visible for dev users */}
-                {profileData.isDev && (
-                  <View style={theme.screens.profileScreen.section}>
-                    <SettingsRow
-                      icon="construct-outline"
-                      label="Developer"
-                      value=""
-                      onPress={() => {
-                        const parentNav = navigation.getParent();
-                        if (parentNav) {
-                          parentNav.navigate('ProfileTab', { screen: 'Developer' as any });
-                        } else {
-                          (navigation as any).navigate('Developer');
-                        }
-                      }}
-                      showDisclosure={true}
-                      isFirst={true}
-                    />
-                  </View>
-                )}
-                {/* Log Out button, always visible */}
                 <View style={theme.screens.profileScreen.section}>
                   <SettingsRow
                     icon="log-out-outline"

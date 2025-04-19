@@ -14,8 +14,6 @@ import BrowseScreen from '../screens/BrowseScreen';
 import ReportEditorScreen from '../screens/ReportEditorScreen';
 import WebViewerScreen from '../screens/WebViewerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import EditSystemPromptScreen from '../screens/EditSystemPromptScreen';
-import EditReportSchemaScreen from '../screens/EditReportSchemaScreen';
 import EditNameScreen from '../screens/EditNameScreen';
 import EditEmailScreen from '../screens/EditEmailScreen';
 import EditPhoneScreen from '../screens/EditPhoneScreen';
@@ -25,7 +23,6 @@ import EditCompanyWebsiteScreen from '../screens/EditCompanyWebsiteScreen';
 import EditAddressScreen from '../screens/EditAddressScreen';
 import EditLogoScreen from '../screens/EditLogoScreen';
 import ProjectReportsScreen from '../screens/ProjectReportsScreen';
-import EditChatModelScreen from '../screens/EditChatModelScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import UpdatePasswordScreen from '../screens/UpdatePasswordScreen';
 import { colors, spacing, typography, borders } from '../theme/theme';
@@ -62,8 +59,6 @@ export type BrowseStackParamList = {
 // New Stack for Profile/Settings Tab
 export type ProfileStackParamList = {
   ProfileBase: undefined;
-  EditSystemPrompt: undefined; // Screen to edit the system prompt
-  EditReportSchema: undefined; // Screen to edit the JSON schema
   EditName: undefined;
   EditEmail: undefined;
   EditPhone: undefined;
@@ -72,8 +67,6 @@ export type ProfileStackParamList = {
   EditCompanyWebsite: undefined;
   EditAddress: undefined;
   EditLogo: { currentLogoUrl: string | null }; // Add EditLogo screen with param
-  EditChatModel: undefined;
-  Developer: undefined;
 };
 
 // Params for the main bottom tabs themselves
@@ -92,8 +85,6 @@ export type BrowseScreenProps = NativeStackScreenProps<BrowseStackParamList, 'Br
 export type WebViewerScreenProps = NativeStackScreenProps<BrowseStackParamList, 'WebViewer'>;
 export type ReportEditorScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ReportEditor'>;
 export type ProfileScreenProps = NativeStackScreenProps<ProfileStackParamList, 'ProfileBase'>;
-export type EditSystemPromptScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditSystemPrompt'>;
-export type EditReportSchemaScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditReportSchema'>;
 export type EditNameScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditName'>;
 export type EditEmailScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditEmail'>;
 export type EditPhoneScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditPhone'>;
@@ -103,7 +94,6 @@ export type EditCompanyWebsiteScreenProps = NativeStackScreenProps<ProfileStackP
 export type EditAddressScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditAddress'>;
 export type EditLogoScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditLogo'>;
 export type ProjectReportsScreenProps = NativeStackScreenProps<BrowseStackParamList, 'ProjectReports'>;
-export type EditChatModelScreenProps = NativeStackScreenProps<ProfileStackParamList, 'EditChatModel'>;
 export type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>; // For navigating *out* to modals
 export type HomeScreenRouteProp = RouteProp<HomeStackParamList, 'HomeBase'>; // For receiving params
 
@@ -210,16 +200,6 @@ function ProfileStackNavigator() {
                 options={{ title: 'Settings' }} // Main title for the base screen
             />
             <ProfileNavStack.Screen
-                name="EditSystemPrompt"
-                component={EditSystemPromptScreen}
-                options={{ title: 'System Prompt' }} // Change title
-            />
-             <ProfileNavStack.Screen
-                name="EditReportSchema"
-                component={EditReportSchemaScreen}
-                options={{ title: 'Report Schema' }} // Change title
-            />
-            <ProfileNavStack.Screen
                 name="EditName"
                 component={EditNameScreen}
                 options={{ title: 'Name' }}
@@ -258,27 +238,6 @@ function ProfileStackNavigator() {
                 name="EditLogo"
                 component={EditLogoScreen}
                 options={{ title: 'Company Logo' }}
-            />
-            <ProfileNavStack.Screen
-                name="EditChatModel"
-                component={EditChatModelScreen}
-                options={{ title: 'Chat Model' }}
-            />
-            <ProfileNavStack.Screen
-                name="Developer"
-                component={require('../screens/DeveloperScreen').default}
-                options={({ navigation }) => ({
-                  title: 'Developer',
-                  headerLeft: () => (
-                    <TouchableOpacity
-                      onPress={() => navigation.goBack()}
-                      style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }}
-                    >
-                      <Ionicons name="chevron-back-outline" size={24} color={colors.textPrimary} />
-                      <Text style={{ color: colors.textPrimary, fontSize: typography.fontSizeM, marginLeft: 2 }}>Profile</Text>
-                    </TouchableOpacity>
-                  ),
-                })}
             />
         </ProfileNavStack.Navigator>
     );
@@ -409,8 +368,6 @@ function getTabBarVisibility(route: any) {
         'WebViewer',
         'ReportEditor',
         'ProjectReports',
-        'EditSystemPrompt',
-        'EditReportSchema',
         'EditName',
         'EditEmail',
         'EditPhone',
@@ -418,8 +375,7 @@ function getTabBarVisibility(route: any) {
         'EditCompanyPhone',
         'EditCompanyWebsite',
         'EditAddress',
-        'EditLogo',
-        'EditChatModel'
+        'EditLogo'
     ];
     if (screensToHideTabBar.includes(routeName)) {
         return false;
