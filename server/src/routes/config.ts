@@ -39,12 +39,13 @@ router.get('/master-config', protect, async (req: Request, res: Response) => {
 router.put('/master-config', protect, async (req: Request, res: Response) => {
   if (!(await requireDev(req, res))) return;
   // Acceptable fields
-  const { config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema } = req.body;
+  const { config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema, use_gemini } = req.body;
   const updates: any = {};
   if (config_chat_model !== undefined) updates.config_chat_model = config_chat_model;
   if (config_whisper_model !== undefined) updates.config_whisper_model = config_whisper_model;
   if (config_system_prompt !== undefined) updates.config_system_prompt = config_system_prompt;
   if (config_report_json_schema !== undefined) updates.config_report_json_schema = config_report_json_schema;
+  if (use_gemini !== undefined) updates.use_gemini = use_gemini;
 
   // Fetch the single master_config row ID to use in WHERE clause
   const { data: existing, error: idError } = await supabase

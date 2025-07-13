@@ -12,6 +12,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
 import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
 import { supabase } from './config'; // <<< Import Supabase client
+import { generateReportWithGemini, isGeminiAvailable } from './gemini-service'; // Import Gemini service
 
 // --- Path Constants (relative to project root) ---
 const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
@@ -128,19 +129,30 @@ async function getConfigByTier(tier: string) {
   return cfg;  // { whisper_model, chat_model, system_prompt, report_json_schema }
 }
 
+// Get master config with Gemini settings
+async function getMasterConfig() {
+  const { data: cfg, error } = await supabase
+    .from('master_config')
+    .select('*')
+    .single();
+  if (error || !cfg) throw new Error(`No master config found: ${error?.message}`);
+  return cfg;  // { config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema, use_gemini }
+}
+
 // Modify getDailyReport to accept the full transcription object AND profileData
 async function getDailyReport(transcription: FullTranscription, cfg: any) {
   try {
     // Prepare a more readable transcript format for the LLM, including timestamps
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
-    // --- Read Config from profileData (using reconstructed structure) ---
-    const chatModel = cfg.chat_model;
-    const systemPromptContent = cfg.system_prompt;
-    const reportSchema = cfg.report_json_schema;
+    // --- Read Config from master config (using new structure) ---
+    const chatModel = cfg.config_chat_model;
+    const systemPromptContent = cfg.config_system_prompt;
+    const reportSchema = cfg.config_report_json_schema;
+    const useGemini = cfg.use_gemini || false; // New setting to choose between OpenAI and Gemini
     // ---------------------------------------------------
 
-    console.log(`Using chat model: ${chatModel}`); 
+    console.log(`Using chat model: ${chatModel}${useGemini ? ' (via Gemini)' : ' (via OpenAI)'}`); 
 
     // --- Add checks to ensure config values exist --- 
     if (!chatModel || !systemPromptContent || !reportSchema) {
@@ -148,43 +160,55 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     }
     // --------------------------------------------------
 
-    const response = await openai.chat.completions.create({
-      model: chatModel,
-      messages: [
-        {
-          role: "system",
-          content: systemPromptContent, // Use variable
+    let reportJson;
+
+    if (useGemini) {
+      // Use Gemini API
+      if (!isGeminiAvailable()) {
+        throw new Error('Gemini API is not available. Please check GEMINI_API_KEY environment variable.');
+      }
+      
+      reportJson = await generateReportWithGemini(
+        transcription,
+        systemPromptContent,
+        reportSchema,
+        { model: chatModel }
+      );
+    } else {
+      // Use OpenAI API (original behavior)
+      const response = await openai.chat.completions.create({
+        model: chatModel,
+        messages: [
+          {
+            role: "system",
+            content: systemPromptContent, // Use variable
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `Here is the timed transcript of a video walkthrough:\n\n---\n${timedTranscript}\n---\n\nPlease generate a daily report in JSON based *only* on the content of this transcript and adhering strictly to the following JSON schema. Never mention the transcript or video walkthrough directly. Your report is to be as though it was writteen by the person doing the walkthrough.:` },
+              { type: "text", text: JSON.stringify(reportSchema) }
+            ]
+          },
+        ],
+        response_format: {
+          type: "json_object",
         },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: `Here is the timed transcript of a video walkthrough:\n\n---\n${timedTranscript}\n---\n\nPlease generate a daily report in JSON based *only* on the content of this transcript and adhering strictly to the following JSON schema. Never mention the transcript or video walkthrough directly. Your report is to be as though it was writteen by the person doing the walkthrough.:` },
-            { type: "text", text: JSON.stringify(reportSchema) }
-          ]
-        },
-      ],
-      response_format: {
-        type: "json_object",
-      },
-    });
+      });
 
-    // Ensure a response is received
-    if (!response.choices || response.choices.length === 0 || !response.choices[0].message) {
-      throw new Error("No valid response message received from OpenAI");
+      // Ensure a response is received
+      if (!response.choices || response.choices.length === 0 || !response.choices[0].message) {
+        throw new Error("No valid response message received from OpenAI");
+      }
+
+      // Extract and parse the content from the first choice (corrected access)
+      const messageContent = response.choices[0].message.content;
+      if (!messageContent) {
+        throw new Error("No content in response message from OpenAI");
+      }
+      
+      reportJson = JSON.parse(messageContent);
     }
-
-    // Extract and parse the content from the first choice (corrected access)
-    const messageContent = response.choices[0].message.content;
-    if (!messageContent) {
-      throw new Error("No content in response message from OpenAI");
-    }
-    
-    const reportJson = JSON.parse(messageContent);
-
-    // DON'T save the report yet - we need to modify image filenames first
-    // const reportFilePath = 'daily_report.json';
-    // await fs.promises.writeFile(reportFilePath, JSON.stringify(reportJson, null, 2));
-    // console.log(`Daily report saved to ${reportFilePath}`);
 
     return reportJson; // Return the parsed JSON object
   } catch (error) {
@@ -308,7 +332,7 @@ async function convertVideoToAudio(videoPath: string, audioPath: string): Promis
  */
 async function transcribeAudio(audioPath: string, cfg: any): Promise<any> {
   console.log(`Transcribing audio ${audioPath}...`);
-  const whisperModel = cfg.whisper_model;
+  const whisperModel = cfg.config_whisper_model;
   console.log("Using whisper model:", whisperModel);
   const transcription = await openai.audio.transcriptions.create({
     file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)),
@@ -576,17 +600,10 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             throw new Error("Failed to load profile data for the user");
         }
 
-        // Ensure subscription level exists in the profile
-        const userSubscriptionLevel = profileData.subscriptionLevel;
-        if (!userSubscriptionLevel) {
-            throw new Error(`User profile (${userId}) is missing the required subscription_level.`);
-        }
-        logStep(`User subscription level: ${userSubscriptionLevel}`);
-
-        // Fetch config based on the user's specific subscription level
-        stepStart = logStep(`Fetching configuration for level: ${userSubscriptionLevel}...`);
-        const cfg = await getConfigByTier(userSubscriptionLevel);
-        logStep('Fetched configuration', stepStart);
+        // Fetch master config (includes Gemini settings)
+        stepStart = logStep('Fetching master configuration...');
+        const cfg = await getMasterConfig();
+        logStep('Fetched master configuration', stepStart);
 
         // 3. Convert Video to Audio
         stepStart = logStep('Converting video to audio...');
