@@ -28,7 +28,7 @@ interface RequestWithS3File extends Request {
 
 
 // Type for the generateReport function dependency - accepts local path and S3 key
-type GenerateReportFunction = (localVideoPath: string, userId: string, customer: string, project: string, videoS3Key?: string) => Promise<string>;
+type GenerateReportFunction = (localVideoPath: string, userId: string, customer: string, project: string, videoS3Key?: string, useGemini?: boolean) => Promise<string>;
 
 const router = Router();
 
