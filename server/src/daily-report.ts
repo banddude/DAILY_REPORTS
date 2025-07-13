@@ -139,32 +139,44 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     const chatModel = cfg.chat_model;
     const systemPromptContent = cfg.system_prompt;
     const reportSchema = cfg.report_json_schema;
-    const useGemini = cfg.use_gemini || false; // Setting passed from client
+    let useGemini = cfg.use_gemini || false; // Setting passed from client (let for fallback)
     // ---------------------------------------------------
 
     console.log(`Using chat model: ${chatModel}${useGemini ? ' (via Gemini)' : ' (via OpenAI)'}`); 
 
     // --- Add checks to ensure config values exist --- 
     if (!chatModel || !systemPromptContent || !reportSchema) {
-      throw new Error('Required configuration (chatModel, systemPrompt, reportJsonSchema) missing in profile.json');
+      throw new Error('Required configuration (chatModel, systemPrompt, reportJsonSchema) missing in config');
     }
     // --------------------------------------------------
 
     let reportJson;
 
     if (useGemini) {
+      console.log('Using Gemini API path...');
       // Use Gemini API
       if (!isGeminiAvailable()) {
-        throw new Error('Gemini API is not available. Please check GEMINI_API_KEY environment variable.');
+        console.error('Gemini API not available, falling back to OpenAI');
+        // Fall back to OpenAI instead of throwing error
+        useGemini = false;
+      } else {
+        try {
+          reportJson = await generateReportWithGemini(
+            transcription,
+            systemPromptContent,
+            reportSchema,
+            { model: chatModel }
+          );
+        } catch (geminiError) {
+          console.error('Gemini API failed, falling back to OpenAI:', geminiError);
+          // Fall back to OpenAI on Gemini failure
+          useGemini = false;
+        }
       }
-      
-      reportJson = await generateReportWithGemini(
-        transcription,
-        systemPromptContent,
-        reportSchema,
-        { model: chatModel }
-      );
-    } else {
+    }
+    
+    if (!useGemini) {
+      console.log('Using OpenAI API path...');
       // Use OpenAI API (original behavior)
       const response = await openai.chat.completions.create({
         model: chatModel,
@@ -203,6 +215,11 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     return reportJson; // Return the parsed JSON object
   } catch (error) {
     console.error("Error generating daily report:", error);
+    console.error("Error details:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     return null; // Indicate failure by returning null
   }
 }
