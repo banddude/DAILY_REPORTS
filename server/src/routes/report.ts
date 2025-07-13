@@ -223,7 +223,8 @@ const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Respons
 
     const customer = req.body.customer as string || 'UnknownCustomer';
     const project = req.body.project as string || 'UnknownProject';
-    console.log(`User ${userId}: Using customer=${customer}, project=${project}`);
+    const useGemini = req.body.use_gemini === 'true' || req.body.use_gemini === true;
+    console.log(`User ${userId}: Using customer=${customer}, project=${project}, useGemini=${useGemini}`);
 
     // Use the S3 key from multer-s3
     const uploadedVideoS3Key = req.file.key; 
@@ -242,7 +243,7 @@ const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Respons
         await pipeline(s3Response.Body as Readable, fs.createWriteStream(localVideoPath));
         console.log(`Downloaded video to ${localVideoPath}`);
         // Use the local file path for report generation
-        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project, uploadedVideoS3Key);
+        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project, uploadedVideoS3Key, useGemini);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
         // Return only the key of the generated report JSON

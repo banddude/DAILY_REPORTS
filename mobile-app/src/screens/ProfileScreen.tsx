@@ -53,6 +53,15 @@ interface ProfileData {
   isDev?: boolean;
 }
 
+// Master config interface for developer settings
+interface MasterConfig {
+  config_chat_model?: string;
+  config_whisper_model?: string;
+  config_system_prompt?: string;
+  config_report_json_schema?: object;
+  use_gemini?: boolean;
+}
+
 // --- Utility to safely get/set nested properties (Adding set back) ---
 const getNestedValue = (obj: any, path: string): any => {
     if (!obj) return undefined;
@@ -192,6 +201,8 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
   const [isEditing, setIsEditing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [logoTimestamp, setLogoTimestamp] = useState(Date.now()); // For cache busting
+  const [masterConfig, setMasterConfig] = useState<MasterConfig | null>(null);
+  const [isLoadingMasterConfig, setIsLoadingMasterConfig] = useState(false);
 
   const fetchProfile = useCallback(async ({ isInitialLoad = false } = {}) => {
     // Use isAuthenticated
@@ -281,6 +292,66 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
     }
   }, [session?.access_token, user?.email]);
 
+  // Fetch master config for dev users
+  const fetchMasterConfig = useCallback(async () => {
+    if (!isAuthenticated || !session?.access_token) return;
+    
+    setIsLoadingMasterConfig(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/master-config`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setMasterConfig(data);
+      } else {
+        console.error('Failed to fetch master config:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching master config:', error);
+    } finally {
+      setIsLoadingMasterConfig(false);
+    }
+  }, [isAuthenticated, session?.access_token]);
+
+  // Update master config
+  const updateMasterConfig = useCallback(async (updates: Partial<MasterConfig>) => {
+    if (!isAuthenticated || !session?.access_token) return;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/master-config`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+      
+      if (response.ok) {
+        const updatedData = await response.json();
+        setMasterConfig(updatedData);
+        setSaveStatus({ message: 'Settings updated successfully', type: 'success' });
+        // Clear status after 3 seconds
+        setTimeout(() => setSaveStatus(null), 3000);
+      } else {
+        setSaveStatus({ message: 'Failed to update settings', type: 'error' });
+        // Clear error status after 5 seconds
+        setTimeout(() => setSaveStatus(null), 5000);
+      }
+    } catch (error) {
+      console.error('Error updating master config:', error);
+      setSaveStatus({ message: 'Error updating settings', type: 'error' });
+      // Clear error status after 5 seconds
+      setTimeout(() => setSaveStatus(null), 5000);
+    }
+  }, [isAuthenticated, session?.access_token]);
+
   // Initial fetch on mount
   useEffect(() => {
     console.log("ProfileScreen useEffect: isFocused, isAuthenticated:", isFocused, isAuthenticated);
@@ -306,6 +377,13 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
       }
     }
   }, [isFocused, isLoading, fetchProfile, session?.access_token]);
+
+  // Fetch master config for all authenticated users
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchMasterConfig();
+    }
+  }, [isAuthenticated, fetchMasterConfig]);
 
   // --- Loading State (Only shows on initial mount) ---
   if (authLoading || (isLoading && !profileData && !error)) {
@@ -412,8 +490,6 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
                    />
                 </View>
 
-                {/* Configuration section has been moved to Developer screen */}
-
                 <View style={theme.screens.profileScreen.section}>
                   <SettingsRow
                     icon="log-out-outline"
@@ -428,6 +504,57 @@ function ProfileScreen({ navigation }: ProfileScreenProps): React.ReactElement {
               </>
             ) : (
                  <Text style={{textAlign: 'center', color: colors.textSecondary, marginTop: spacing.xl}}>Profile data unavailable.</Text>
+            )}
+
+            {/* AI Settings section for all authenticated users - always show */}
+            {isAuthenticated && (
+              <View style={theme.screens.profileScreen.section}>
+                <Text style={theme.screens.profileScreen.sectionHeader}>AI Settings</Text>
+                <View style={[theme.screens.profileScreen.rowContainer, theme.screens.profileScreen.firstRowInSection]}>
+                  <View style={theme.screens.profileScreen.iconContainer}>
+                    <Ionicons name="sparkles-outline" size={22} color={colors.textSecondary} />
+                  </View>
+                  <Text style={theme.screens.profileScreen.rowLabel}>Use Gemini API</Text>
+                  <View style={theme.screens.profileScreen.valueContainer}>
+                    {isLoadingMasterConfig ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Switch
+                        value={masterConfig?.use_gemini || false}
+                        onValueChange={(value) => updateMasterConfig({ use_gemini: value })}
+                        trackColor={{ false: colors.borderLight, true: colors.primary }}
+                        thumbColor={colors.surface}
+                        ios_backgroundColor={colors.borderLight}
+                      />
+                    )}
+                  </View>
+                </View>
+                <Text style={[theme.screens.profileScreen.rowLabel, { 
+                  fontSize: 12, 
+                  color: colors.textSecondary, 
+                  paddingHorizontal: spacing.lg,
+                  paddingBottom: spacing.md,
+                  fontStyle: 'italic'
+                }]}>
+                  Toggle between OpenAI and Google Gemini for report generation
+                </Text>
+              </View>
+            )}
+
+            {/* Status message for save operations */}
+            {saveStatus && (
+              <View style={[theme.screens.profileScreen.section, { paddingVertical: spacing.sm }]}>
+                <Text style={[
+                  theme.screens.profileScreen.sectionHeader,
+                  { 
+                    color: saveStatus.type === 'success' ? colors.success || '#10B981' : colors.error,
+                    fontSize: 14,
+                    textAlign: 'center'
+                  }
+                ]}>
+                  {saveStatus.message}
+                </Text>
+              </View>
             )}
 
           </ScrollView>

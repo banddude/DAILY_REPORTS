@@ -129,27 +129,17 @@ async function getConfigByTier(tier: string) {
   return cfg;  // { whisper_model, chat_model, system_prompt, report_json_schema }
 }
 
-// Get master config with Gemini settings
-async function getMasterConfig() {
-  const { data: cfg, error } = await supabase
-    .from('master_config')
-    .select('*')
-    .single();
-  if (error || !cfg) throw new Error(`No master config found: ${error?.message}`);
-  return cfg;  // { config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema, use_gemini }
-}
-
 // Modify getDailyReport to accept the full transcription object AND profileData
 async function getDailyReport(transcription: FullTranscription, cfg: any) {
   try {
     // Prepare a more readable transcript format for the LLM, including timestamps
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
-    // --- Read Config from master config (using new structure) ---
-    const chatModel = cfg.config_chat_model;
-    const systemPromptContent = cfg.config_system_prompt;
-    const reportSchema = cfg.config_report_json_schema;
-    const useGemini = cfg.use_gemini || false; // New setting to choose between OpenAI and Gemini
+    // --- Read Config from tier config (using subscription structure) ---
+    const chatModel = cfg.chat_model;
+    const systemPromptContent = cfg.system_prompt;
+    const reportSchema = cfg.report_json_schema;
+    const useGemini = cfg.use_gemini || false; // Setting passed from client
     // ---------------------------------------------------
 
     console.log(`Using chat model: ${chatModel}${useGemini ? ' (via Gemini)' : ' (via OpenAI)'}`); 
@@ -332,7 +322,7 @@ async function convertVideoToAudio(videoPath: string, audioPath: string): Promis
  */
 async function transcribeAudio(audioPath: string, cfg: any): Promise<any> {
   console.log(`Transcribing audio ${audioPath}...`);
-  const whisperModel = cfg.config_whisper_model;
+  const whisperModel = cfg.whisper_model;
   console.log("Using whisper model:", whisperModel);
   const transcription = await openai.audio.transcriptions.create({
     file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)),
@@ -535,7 +525,7 @@ async function selectFrameTimestamps(transcription: FullTranscription, reportJso
  * video -> audio -> transcription -> report JSON -> frame timestamps -> frame extraction -> PDF (optional) -> S3 upload.
  * Returns the S3 key of the generated report JSON file.
  */
-export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string, videoS3Key?: string): Promise<string> { 
+export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string, videoS3Key?: string, useGemini?: boolean): Promise<string> { 
     // Ensure defaults are applied immediately
     const customerName = customerNameInput || 'UnknownCustomer';
     const projectName = projectNameInput || 'UnknownProject';
@@ -600,10 +590,18 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             throw new Error("Failed to load profile data for the user");
         }
 
-        // Fetch master config (includes Gemini settings)
-        stepStart = logStep('Fetching master configuration...');
-        const cfg = await getMasterConfig();
-        logStep('Fetched master configuration', stepStart);
+        // Fetch tier-based config for model settings
+        const userSubscriptionLevel = profileData.subscriptionLevel;
+        if (!userSubscriptionLevel) {
+            throw new Error(`User profile (${userId}) is missing the required subscription_level.`);
+        }
+        logStep(`User subscription level: ${userSubscriptionLevel}`);
+
+        stepStart = logStep(`Fetching configuration for level: ${userSubscriptionLevel}...`);
+        const cfg = await getConfigByTier(userSubscriptionLevel);
+        // Add the Gemini setting from the parameter passed from the client
+        cfg.use_gemini = useGemini || false;
+        logStep(`Fetched configuration, using Gemini: ${cfg.use_gemini}`, stepStart);
 
         // 3. Convert Video to Audio
         stepStart = logStep('Converting video to audio...');

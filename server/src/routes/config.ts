@@ -22,7 +22,8 @@ async function requireDev(req: Request, res: Response): Promise<string | null> {
 
 // GET current master configuration
 router.get('/master-config', protect, async (req: Request, res: Response) => {
-  if (!(await requireDev(req, res))) return;
+  const userId = ensureAuthenticated(req, res);
+  if (!userId) return;
   const { data, error } = await supabase
     .from('master_config')
     .select('*')
@@ -37,7 +38,8 @@ router.get('/master-config', protect, async (req: Request, res: Response) => {
 
 // PUT update master configuration
 router.put('/master-config', protect, async (req: Request, res: Response) => {
-  if (!(await requireDev(req, res))) return;
+  const userId = ensureAuthenticated(req, res);
+  if (!userId) return;
   // Acceptable fields
   const { config_chat_model, config_whisper_model, config_system_prompt, config_report_json_schema, use_gemini } = req.body;
   const updates: any = {};
