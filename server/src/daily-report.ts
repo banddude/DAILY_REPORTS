@@ -167,7 +167,7 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
             reportSchema,
             { model: chatModel }
           );
-        } catch (geminiError) {
+        } catch (geminiError: any) {
           console.error('Gemini API failed, falling back to OpenAI:', geminiError);
           // Fall back to OpenAI on Gemini failure
           useGemini = false;
@@ -213,12 +213,12 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     }
 
     return reportJson; // Return the parsed JSON object
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating daily report:", error);
     console.error("Error details:", {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack
     });
     return null; // Indicate failure by returning null
   }
