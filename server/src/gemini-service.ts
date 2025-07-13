@@ -40,7 +40,8 @@ export async function generateReportWithGemini(
         throw new Error("Gemini API is not configured. Please set GEMINI_API_KEY environment variable.");
     }
 
-    const model = options.model || "gemini-2.5-flash";
+    // Always use gemini-2.5-flash regardless of config model
+    const model = "gemini-2.5-flash";
     
     try {
         // Prepare the timed transcript format for Gemini
