@@ -511,7 +511,7 @@ async function selectFrameTimestamps(transcription: FullTranscription, reportJso
  * video -> audio -> transcription -> report JSON -> frame timestamps -> frame extraction -> PDF (optional) -> S3 upload.
  * Returns the S3 key of the generated report JSON file.
  */
-export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string): Promise<string> { 
+export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string, videoS3Key?: string): Promise<string> { 
     // Ensure defaults are applied immediately
     const customerName = customerNameInput || 'UnknownCustomer';
     const projectName = projectNameInput || 'UnknownProject';
@@ -530,9 +530,33 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
     logStep(`Processing video: ${inputVideoPath}`);
     logStep(`Report path will use customer: ${customerName}, project: ${projectName}`);
 
+    // Extract existing folder name from S3 key if provided, otherwise create new timestamp
+    let timestamp: string;
+    let reportFolderName: string;
+    
+    if (videoS3Key) {
+        // Extract folder name from S3 key: users/{userId}/{customer}/{project}/report_{timestamp}/original_video.ext
+        const pathParts = videoS3Key.split('/');
+        const folderNameWithPrefix = pathParts[pathParts.length - 2]; // Get the folder name (report_timestamp)
+        if (folderNameWithPrefix && folderNameWithPrefix.startsWith('report_')) {
+            reportFolderName = folderNameWithPrefix;
+            timestamp = folderNameWithPrefix.substring('report_'.length); // Extract just the timestamp part
+            logStep(`Using existing folder from S3 key: ${reportFolderName}`);
+        } else {
+            // Fallback if S3 key format is unexpected
+            timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            reportFolderName = `report_${timestamp}`;
+            logStep(`Could not extract folder from S3 key, creating new timestamp: ${reportFolderName}`);
+        }
+    } else {
+        // Original behavior when no S3 key provided
+        timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        reportFolderName = `report_${timestamp}`;
+        logStep(`No S3 key provided, creating new timestamp: ${reportFolderName}`);
+    }
+
     // 1. Create a unique directory for this processing job
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const processingDir = path.join(PROCESSING_BASE_DIR, `report_${userId}_${timestamp}`); 
+    const processingDir = path.join(PROCESSING_BASE_DIR, `${reportFolderName}_${userId}`); 
     await ensureDir(processingDir);
     logStep(`Created processing directory: ${processingDir}`);
 
@@ -606,7 +630,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         const project = projectName || 'UnknownProject';
         logStep(`Using customer=${customer}, project=${project} for S3 paths`);
         
-        const s3BaseKey = `users/${userId}/${customer}/${project}/report_${timestamp}`;
+        const s3BaseKey = `users/${userId}/${customer}/${project}/${reportFolderName}`;
         const s3ReportJsonKey = `${s3BaseKey}/daily_report.json`;
         const s3FramesBaseKey = `${s3BaseKey}/extracted_frames/`;
         const s3ViewerHtmlKey = `${s3BaseKey}/report-viewer.html`;

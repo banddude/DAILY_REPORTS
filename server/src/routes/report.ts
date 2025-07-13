@@ -27,8 +27,8 @@ interface RequestWithS3File extends Request {
 }
 
 
-// Type for the generateReport function dependency - accepts S3 key now
-type GenerateReportFunction = (videoS3Key: string, userId: string, customer: string, project: string) => Promise<string>; // Changed videoPath to videoS3Key
+// Type for the generateReport function dependency - accepts local path and S3 key
+type GenerateReportFunction = (localVideoPath: string, userId: string, customer: string, project: string, videoS3Key?: string) => Promise<string>;
 
 const router = Router();
 
@@ -242,7 +242,7 @@ const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Respons
         await pipeline(s3Response.Body as Readable, fs.createWriteStream(localVideoPath));
         console.log(`Downloaded video to ${localVideoPath}`);
         // Use the local file path for report generation
-        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project);
+        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project, uploadedVideoS3Key);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
         // Return only the key of the generated report JSON
