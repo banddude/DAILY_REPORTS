@@ -15,6 +15,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.787.0",
     "@aws-sdk/s3-request-presigner": "^3.787.0",
+    "@google/genai": "^1.9.0",
     "@react-navigation/native-stack": "^7.3.10",
     "@react-navigation/stack": "^7.2.10",
     "@supabase/supabase-js": "^2.49.4",
