@@ -6,7 +6,7 @@ if (!geminiApiKey) {
     console.warn("GEMINI_API_KEY environment variable is not set. Gemini service will not be available.");
 }
 
-const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+const genAI = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
 export interface GeminiTranscriptionOptions {
     model?: string;
@@ -36,12 +36,12 @@ export async function generateReportWithGemini(
     reportSchema: any,
     options: GeminiChatOptions = {}
 ): Promise<any> {
-    if (!ai) {
+    if (!genAI) {
         throw new Error("Gemini API is not configured. Please set GEMINI_API_KEY environment variable.");
     }
 
     // Always use gemini-2.5-flash regardless of config model
-    const model = "gemini-2.5-flash";
+    const modelName = "gemini-2.5-flash";
     
     try {
         // Prepare the timed transcript format for Gemini
@@ -61,10 +61,34 @@ Please generate a daily report in JSON based *only* on the content of this trans
 
 ${JSON.stringify(reportSchema, null, 2)}`;
 
-        console.log(`Using Gemini model: ${model}`);
+        console.log(`Using Gemini model: ${modelName}`);
         
-        // TODO: Fix Gemini API integration
-        throw new Error("Gemini API temporarily disabled - needs proper implementation");
+        // Generate content using the new SDK format
+        const result = await genAI.models.generateContent({
+            model: modelName,
+            contents: prompt
+        });
+        
+        const responseText = result.text;
+        
+        if (!responseText) {
+            throw new Error("No response text received from Gemini API");
+        }
+
+        // Try to extract JSON from the response
+        let reportJson;
+        try {
+            // Gemini might wrap JSON in markdown code blocks
+            const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+            const jsonText = jsonMatch ? jsonMatch[1] : responseText;
+            reportJson = JSON.parse(jsonText);
+        } catch (parseError) {
+            console.error("Failed to parse Gemini response as JSON:", parseError);
+            console.error("Raw response:", responseText);
+            throw new Error("Gemini response could not be parsed as valid JSON");
+        }
+
+        return reportJson;
 
     } catch (error: any) {
         console.error("Error generating report with Gemini:", error);
@@ -76,5 +100,5 @@ ${JSON.stringify(reportSchema, null, 2)}`;
  * Check if Gemini API is available
  */
 export function isGeminiAvailable(): boolean {
-    return false; // Temporarily disable Gemini until API is fixed
+    return genAI !== null;
 }
