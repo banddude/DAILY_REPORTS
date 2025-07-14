@@ -63,29 +63,8 @@ ${JSON.stringify(reportSchema, null, 2)}`;
 
         console.log(`Using Gemini model: ${model}`);
         
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: prompt
-        });
-
-        if (!response.text) {
-            throw new Error("No response text received from Gemini API");
-        }
-
-        // Try to extract JSON from the response
-        let reportJson;
-        try {
-            // Gemini might wrap JSON in markdown code blocks
-            const jsonMatch = response.text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-            const jsonText = jsonMatch ? jsonMatch[1] : response.text;
-            reportJson = JSON.parse(jsonText);
-        } catch (parseError) {
-            console.error("Failed to parse Gemini response as JSON:", parseError);
-            console.error("Raw response:", response.text);
-            throw new Error("Gemini response could not be parsed as valid JSON");
-        }
-
-        return reportJson;
+        // TODO: Fix Gemini API integration
+        throw new Error("Gemini API temporarily disabled - needs proper implementation");
 
     } catch (error: any) {
         console.error("Error generating report with Gemini:", error);
@@ -97,5 +76,5 @@ ${JSON.stringify(reportSchema, null, 2)}`;
  * Check if Gemini API is available
  */
 export function isGeminiAvailable(): boolean {
-    return ai !== null;
+    return false; // Temporarily disable Gemini until API is fixed
 }

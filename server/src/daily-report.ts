@@ -154,18 +154,26 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
 
     if (useGemini) {
       console.log('Using Gemini API path...');
-      // Use Gemini API - no fallback, throw errors directly
+      // Use Gemini API
       if (!isGeminiAvailable()) {
-        throw new Error('Gemini API not available. Please check GEMINI_API_KEY environment variable.');
+        console.error('Gemini API not available, falling back to OpenAI');
+        useGemini = false;
+      } else {
+        try {
+          reportJson = await generateReportWithGemini(
+            transcription,
+            systemPromptContent,
+            reportSchema,
+            { model: chatModel }
+          );
+        } catch (geminiError: any) {
+          console.error('Gemini API failed, falling back to OpenAI:', geminiError);
+          useGemini = false;
+        }
       }
-      
-      reportJson = await generateReportWithGemini(
-        transcription,
-        systemPromptContent,
-        reportSchema,
-        { model: chatModel }
-      );
-    } else {
+    }
+    
+    if (!useGemini) {
       console.log('Using OpenAI API path...');
       // Use OpenAI API (original behavior)
       const response = await openai.chat.completions.create({
