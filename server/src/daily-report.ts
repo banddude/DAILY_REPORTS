@@ -44,17 +44,15 @@ if (!s3Bucket) {
 // Dynamic OpenAI client configuration - will be created per request
 function createOpenAIClient(useGemini: boolean = false) {
   if (useGemini) {
-    // Use Google Vertex AI endpoint with OpenAI SDK
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-    const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
+    // Use Gemini API with OpenAI compatibility endpoint
     const geminiApiKey = process.env.GEMINI_API_KEY;
     
-    if (!projectId || !geminiApiKey) {
-      throw new Error("GOOGLE_CLOUD_PROJECT_ID and GEMINI_API_KEY must be set for Gemini API");
+    if (!geminiApiKey) {
+      throw new Error("GEMINI_API_KEY must be set for Gemini API");
     }
     
     return new OpenAI({
-      baseURL: `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/endpoints/openapi`,
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       apiKey: geminiApiKey,
     });
   } else {
@@ -159,7 +157,7 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     const useGemini = cfg.use_gemini || false; // Setting passed from client
     
     // Dynamic model selection based on API choice
-    const model = useGemini ? "google/gemini-2.5-flash" : cfg.chat_model;
+    const model = useGemini ? "gemini-2.5-flash" : cfg.chat_model;
     // ---------------------------------------------------
 
     console.log(`Using model: ${model} ${useGemini ? '(via Gemini/Vertex AI)' : '(via OpenAI)'}`); 
