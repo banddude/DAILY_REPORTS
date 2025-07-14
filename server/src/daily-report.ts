@@ -12,7 +12,6 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
 import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
 import { supabase } from './config'; // <<< Import Supabase client
-import { generateReportWithGemini, isGeminiAvailable } from './gemini-service'; // Import Gemini service
 
 // --- Path Constants (relative to project root) ---
 const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
@@ -42,10 +41,29 @@ if (!s3Bucket) {
     process.exit(1); 
 }
 
-// Configuration for OpenAI API
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Dynamic OpenAI client configuration - will be created per request
+function createOpenAIClient(useGemini: boolean = false) {
+  if (useGemini) {
+    // Use Google Vertex AI endpoint with OpenAI SDK
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+    const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    
+    if (!projectId || !geminiApiKey) {
+      throw new Error("GOOGLE_CLOUD_PROJECT_ID and GEMINI_API_KEY must be set for Gemini API");
+    }
+    
+    return new OpenAI({
+      baseURL: `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/endpoints/openapi`,
+      apiKey: geminiApiKey,
+    });
+  } else {
+    // Use standard OpenAI configuration
+    return new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+}
 
 const execAsync = promisify(exec);
 
@@ -136,70 +154,66 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
     // --- Read Config from tier config (using subscription structure) ---
-    const chatModel = cfg.chat_model;
     const systemPromptContent = cfg.system_prompt;
     const reportSchema = cfg.report_json_schema;
-    let useGemini = cfg.use_gemini || false; // Setting passed from client (let for fallback)
+    const useGemini = cfg.use_gemini || false; // Setting passed from client
+    
+    // Dynamic model selection based on API choice
+    const model = useGemini ? "google/gemini-2.5-flash" : cfg.chat_model;
     // ---------------------------------------------------
 
-    console.log(`Using chat model: ${chatModel}${useGemini ? ' (via Gemini)' : ' (via OpenAI)'}`); 
+    console.log(`Using model: ${model} ${useGemini ? '(via Gemini/Vertex AI)' : '(via OpenAI)'}`); 
 
     // --- Add checks to ensure config values exist --- 
-    if (!chatModel || !systemPromptContent || !reportSchema) {
-      throw new Error('Required configuration (chatModel, systemPrompt, reportJsonSchema) missing in config');
+    if (!model || !systemPromptContent || !reportSchema) {
+      throw new Error('Required configuration (model, systemPrompt, reportJsonSchema) missing in config');
     }
     // --------------------------------------------------
 
-    let reportJson;
-
-    if (useGemini) {
-      console.log('Using Gemini API path...');
-      // Use Gemini API - no fallback, throw errors directly
-      if (!isGeminiAvailable()) {
-        throw new Error('Gemini API not available. Please check GEMINI_API_KEY environment variable.');
-      }
-      
-      reportJson = await generateReportWithGemini(
-        transcription,
-        systemPromptContent,
-        reportSchema,
-        { model: chatModel }
-      );
-    } else {
-      console.log('Using OpenAI API path...');
-      // Use OpenAI API (original behavior)
-      const response = await openai.chat.completions.create({
-        model: chatModel,
-        messages: [
-          {
-            role: "system",
-            content: systemPromptContent, // Use variable
-          },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Here is the timed transcript of a video walkthrough:\n\n---\n${timedTranscript}\n---\n\nPlease generate a daily report in JSON based *only* on the content of this transcript and adhering strictly to the following JSON schema. Never mention the transcript or video walkthrough directly. Your report is to be as though it was writteen by the person doing the walkthrough.:` },
-              { type: "text", text: JSON.stringify(reportSchema) }
-            ]
-          },
-        ],
-        response_format: {
-          type: "json_object",
+    // Create the appropriate client based on useGemini flag
+    const client = createOpenAIClient(useGemini);
+    
+    // Single code path for both APIs using OpenAI SDK format
+    const response = await client.chat.completions.create({
+      model: model,
+      messages: [
+        {
+          role: "system",
+          content: systemPromptContent,
         },
-      });
+        {
+          role: "user",
+          content: `Here is the timed transcript of a video walkthrough:\n\n---\n${timedTranscript}\n---\n\nPlease generate a daily report in JSON based *only* on the content of this transcript and adhering strictly to the following JSON schema. Never mention the transcript or video walkthrough directly. Your report is to be as though it was written by the person doing the walkthrough.:\n\n${JSON.stringify(reportSchema, null, 2)}`
+        },
+      ],
+      ...(useGemini ? {} : { response_format: { type: "json_object" } }) // Only add response_format for OpenAI
+    });
 
-      // Ensure a response is received
-      if (!response.choices || response.choices.length === 0 || !response.choices[0].message) {
-        throw new Error("No valid response message received from OpenAI");
-      }
+    // Ensure a response is received
+    if (!response.choices || response.choices.length === 0 || !response.choices[0].message) {
+      throw new Error("No valid response message received from API");
+    }
 
-      // Extract and parse the content from the first choice (corrected access)
-      const messageContent = response.choices[0].message.content;
-      if (!messageContent) {
-        throw new Error("No content in response message from OpenAI");
+    // Extract and parse the content from the first choice
+    const messageContent = response.choices[0].message.content;
+    if (!messageContent) {
+      throw new Error("No content in response message from API");
+    }
+    
+    let reportJson;
+    try {
+      // For Gemini, might need to extract JSON from markdown code blocks
+      if (useGemini) {
+        const jsonMatch = messageContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonText = jsonMatch ? jsonMatch[1] : messageContent;
+        reportJson = JSON.parse(jsonText);
+      } else {
+        reportJson = JSON.parse(messageContent);
       }
-      
-      reportJson = JSON.parse(messageContent);
+    } catch (parseError) {
+      console.error("Failed to parse API response as JSON:", parseError);
+      console.error("Raw response:", messageContent);
+      throw new Error("API response could not be parsed as valid JSON");
     }
 
     return reportJson; // Return the parsed JSON object
@@ -331,6 +345,10 @@ async function transcribeAudio(audioPath: string, cfg: any): Promise<any> {
   console.log(`Transcribing audio ${audioPath}...`);
   const whisperModel = cfg.whisper_model;
   console.log("Using whisper model:", whisperModel);
+  
+  // Always use OpenAI for transcription (Whisper), even when Gemini is enabled for chat
+  const openai = createOpenAIClient(false); // false = use OpenAI for transcription
+  
   const transcription = await openai.audio.transcriptions.create({
     file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)),
     model: whisperModel,
