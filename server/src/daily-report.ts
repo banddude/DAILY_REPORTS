@@ -6,7 +6,7 @@ import * as fs from "fs";
 import { exec } from "child_process";
 import path from 'path'; // Need path module
 import { promisify } from 'util';
-import { toFile } from 'openai/uploads'; // Add this import
+import { getDailyReportFromVideo } from './gemini-video-simple';
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"; // Import S3 client
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
@@ -309,53 +309,9 @@ async function extractFramesFromData(videoPath: string, frameDataPath: string, o
 
 // --- Video/Audio Processing Logic ---
 
-/**
- * Convert a video (.mov or .mp4) file to an MP3 audio file using ffmpeg.
- */
-async function convertVideoToAudio(videoPath: string, audioPath: string): Promise<void> {
-  try {
-    await access(audioPath); // Use fs.promises.access
-    console.log(`Audio file ${audioPath} already exists. Skipping conversion.`);
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      console.log(`Converting video ${videoPath} to audio ${audioPath}...`);
-      const command = `ffmpeg -i "${videoPath}" -vn -acodec libmp3lame -ar 44100 -ac 2 -ab 192k -f mp3 "${audioPath}"`;
-      console.log(`Executing audio conversion command: ${command}`); // Log command
-      try {
-          const { stdout, stderr } = await execAsync(command);
-          if (stdout) console.log('convertVideoToAudio stdout:', stdout);
-          if (stderr) console.warn('convertVideoToAudio stderr:', stderr);
-          console.log('Video to audio conversion complete.');
-      } catch (execError: any) {
-          console.error(`ffmpeg execution failed for audio conversion:`, execError); // Log the actual error object
-          throw execError; // Re-throw after logging to stop the process
-      }
-    } else {
-      throw error; // Re-throw other access errors
-    }
-  }
-}
+// Video to audio conversion removed - now using direct video processing with Gemini
 
-/**
- * Transcribe an MP3 audio file using OpenAI's Whisper API.
- */
-async function transcribeAudio(audioPath: string, cfg: any): Promise<any> {
-  console.log(`Transcribing audio ${audioPath}...`);
-  const whisperModel = cfg.whisper_model;
-  console.log("Using whisper model:", whisperModel);
-  
-  // Always use OpenAI for transcription (Whisper), even when Gemini is enabled for chat
-  const openai = createOpenAIClient(false); // false = use OpenAI for transcription
-  
-  const transcription = await openai.audio.transcriptions.create({
-    file: await toFile(fs.createReadStream(audioPath), path.basename(audioPath)),
-    model: whisperModel,
-    response_format: "verbose_json",
-    timestamp_granularities: ["word"]
-  });
-  console.log('Transcription complete.');
-  return transcription;
-}
+// Audio transcription removed - now using direct video processing with Gemini
 
 // --- S3 Upload Logic (Revised) ---
 
@@ -599,7 +555,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
 
     // Define paths within the unique processing directory
     const audioOutputPath = path.join(processingDir, 'output_audio.mp3');
-    const transcriptionJsonPath = path.join(processingDir, 'transcription.json');
+    // transcriptionJsonPath removed - not used with Gemini video processing
     const frameTimestampsPath = path.join(processingDir, 'frame_timestamps.json');
     const reportJsonPath = path.join(processingDir, 'daily_report.json');
     const framesOutputDir = path.join(processingDir, 'extracted_frames');
@@ -626,35 +582,17 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         cfg.use_gemini = useGemini || false;
         logStep(`Fetched configuration, using Gemini: ${cfg.use_gemini}`, stepStart);
 
-        // 3. Convert Video to Audio
-        stepStart = logStep('Converting video to audio...');
-        await convertVideoToAudio(inputVideoPath, audioOutputPath);
-        logStep('Converted video to audio', stepStart);
-
-        // 4. Transcribe Audio
-        let transcription: FullTranscription;
-        if (fs.existsSync(transcriptionJsonPath)) {
-            logStep(`Transcription file ${transcriptionJsonPath} found, loading...`);
-            const transData = await readFile(transcriptionJsonPath, 'utf-8');
-            transcription = JSON.parse(transData);
-        } else {
-            stepStart = logStep('Transcribing audio...');
-            transcription = await transcribeAudio(audioOutputPath, cfg);
-            if (!transcription) throw new Error("Transcription failed.");
-            await writeFile(transcriptionJsonPath, JSON.stringify(transcription, null, 2));
-            logStep('Transcribed audio', stepStart);
-        }
-
-        // 5. Generate Daily Report JSON
-        stepStart = logStep('Generating daily report JSON...');
-        const reportJson = await getDailyReport(transcription, cfg);
-        logStep('Generated daily report JSON', stepStart);
+        // 3. Generate Daily Report JSON directly from video using Gemini
+        stepStart = logStep('Generating daily report JSON from video using Gemini...');
+        const reportJson = await getDailyReportFromVideo(inputVideoPath, cfg);
+        logStep('Generated daily report JSON from video', stepStart);
         if (!reportJson) throw new Error("Daily report generation failed.");
 
-        // 6. Select Timestamps for Frames
+        // 6. Select Timestamps for Frames (using AI-selected timestamps from report)
         stepStart = logStep('Selecting timestamps for frame extraction...');
-        const selectedTimestamps = await selectFrameTimestamps(transcription, reportJson);
-        await writeFile(frameTimestampsPath, JSON.stringify({ timestamps: selectedTimestamps }, null, 2));
+        const selectedTimestamps = await selectFrameTimestamps({} as FullTranscription, reportJson);
+        const frameData = { timestamps: selectedTimestamps };
+        await writeFile(frameTimestampsPath, JSON.stringify(frameData, null, 2));
         logStep(`Selected ${selectedTimestamps.length} frame timestamps`, stepStart);
 
         // 7. Extract Frames
@@ -672,7 +610,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         const s3ReportJsonKey = `${s3BaseKey}/daily_report.json`;
         const s3FramesBaseKey = `${s3BaseKey}/extracted_frames/`;
         const s3ViewerHtmlKey = `${s3BaseKey}/report-viewer.html`;
-        const s3TranscriptionKey = `${s3BaseKey}/transcription.json`;
+        // s3TranscriptionKey removed - not used with Gemini video processing
         const s3VideoKey = `${s3BaseKey}/source_video${path.extname(inputVideoPath)}`;
         const s3PdfKey = `${s3BaseKey}/daily_report.pdf`; // S3 Key for PDF
 
@@ -747,7 +685,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
           baseUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3BaseKey}`,
           logoUrl: logoS3Url,
           viewerUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3ViewerHtmlKey}`,
-          transcriptionUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3TranscriptionKey}`,
+          // transcriptionUrl removed - not available with Gemini video processing
           videoUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${s3VideoKey}`
         };
         await writeFile(reportJsonPath, JSON.stringify(reportJson, null, 2));
@@ -769,7 +707,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         // ---> End specific logging <---
         
         await uploadFileToS3(REPORT_VIEWER_HTML_PATH, s3ViewerHtmlKey, 'text/html');
-        await uploadFileToS3(transcriptionJsonPath, s3TranscriptionKey, 'application/json');
+        // Transcription.json upload removed - not created when using Gemini video processing
         if (fs.existsSync(frameTimestampsPath)) { // Only upload if it exists
              await uploadFileToS3(frameTimestampsPath, `${s3BaseKey}/frame_timestamps.json`, 'application/json');
         }
@@ -792,7 +730,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             userId,
             customerName,
             projectName,
-            processingDir
+            reportFolderName
         );
         logStep('Report viewer HTML generated and uploaded', startTime);
 
