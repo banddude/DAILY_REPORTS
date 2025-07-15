@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction, RequestHandler } from 'express
 import path from 'path';
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from 'stream';
+import { convertHtmlToPdfAndUpload } from '../pdfUtils';
 
 const router = Router();
 
@@ -52,6 +53,63 @@ const streamS3Object = async (req: Request, res: Response, purpose: 'view' | 'ed
         if (!s3Client || !s3Bucket) {
             throw new Error("S3 client or bucket not initialized in s3Assets module.");
         }
+
+        // Special handling for PDF requests - generate if missing
+        if (s3Key.endsWith('.pdf') && s3Key.includes('report-viewer.pdf')) {
+            try {
+                const command = new GetObjectCommand(getObjectParams);
+                const data = await s3Client.send(command);
+                
+                if (!data.Body || !(data.Body instanceof Readable)) {
+                    throw new Error("S3 GetObject response body is missing or not readable.");
+                }
+                
+                // PDF exists, serve it normally
+                res.setHeader('Content-Type', 'application/pdf');
+                if (data.ContentLength) {
+                    res.setHeader('Content-Length', data.ContentLength.toString());
+                }
+                data.Body.pipe(res);
+                return;
+                
+            } catch (pdfError: any) {
+                if (pdfError.name === 'NoSuchKey') {
+                    // PDF doesn't exist, try to generate it from HTML
+                    console.log(`PDF not found at ${s3Key}, attempting to generate from HTML...`);
+                    
+                    const htmlKey = s3Key.replace('/report-viewer.pdf', '/report-viewer.html');
+                    const htmlUrl = `https://${s3Bucket}.s3.us-east-1.amazonaws.com/${htmlKey}`;
+                    
+                    try {
+                        // Generate PDF and upload to S3
+                        await convertHtmlToPdfAndUpload(s3Client, s3Bucket, htmlUrl, s3Key);
+                        
+                        // Now fetch the newly created PDF
+                        const newPdfCommand = new GetObjectCommand(getObjectParams);
+                        const newPdfData = await s3Client.send(newPdfCommand);
+                        
+                        if (!newPdfData.Body || !(newPdfData.Body instanceof Readable)) {
+                            throw new Error("Generated PDF response body is missing or not readable.");
+                        }
+                        
+                        res.setHeader('Content-Type', 'application/pdf');
+                        if (newPdfData.ContentLength) {
+                            res.setHeader('Content-Length', newPdfData.ContentLength.toString());
+                        }
+                        newPdfData.Body.pipe(res);
+                        return;
+                        
+                    } catch (generationError: any) {
+                        console.error(`Failed to generate PDF for ${s3Key}:`, generationError);
+                        throw pdfError; // Fall back to original error
+                    }
+                } else {
+                    throw pdfError;
+                }
+            }
+        }
+
+        // Normal file handling for non-PDF files
         const command = new GetObjectCommand(getObjectParams);
         const data = await s3Client.send(command);
 

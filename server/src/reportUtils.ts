@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { convertHtmlToPdfAndUpload } from './pdfUtils';
 
 // --- Path Constants (relative to project root) ---
 // Assuming this file lives in server/src/, like daily-report.ts
@@ -97,6 +98,14 @@ export async function generateAndUploadViewerHtml(
     console.log(`[generateAndUploadViewerHtml] Uploading generated HTML to S3 bucket: ${s3Bucket}, Key: ${viewerHtmlS3Key} with Cache-Control`);
     await s3Client.send(putHtmlCommand);
     console.log(`[generateAndUploadViewerHtml] Successfully uploaded report viewer HTML to ${viewerHtmlS3Key}`);
+
+    // 5. Generate PDF from the uploaded HTML
+    const htmlUrl = `https://${s3Bucket}.s3.us-east-1.amazonaws.com/${viewerHtmlS3Key}`;
+    const pdfS3Key = `${reportBaseKey}/report-viewer.pdf`;
+    
+    console.log(`[generateAndUploadViewerHtml] Converting HTML to PDF: ${htmlUrl}`);
+    await convertHtmlToPdfAndUpload(s3Client, s3Bucket, htmlUrl, pdfS3Key);
+    console.log(`[generateAndUploadViewerHtml] Successfully uploaded PDF to ${pdfS3Key}`);
 
     return viewerHtmlS3Key;
 } 
