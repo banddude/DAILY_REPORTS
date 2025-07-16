@@ -106,8 +106,8 @@ async function getUserProfile(userId: string): Promise<any> {
             whisperModel: profileData.config_whisper_model,
             systemPrompt: profileData.config_system_prompt,
             // Parse JSON string back into an object, handle null/undefined
-            reportJsonSchema: profileData.config_report_json_schema 
-                                ? JSON.parse(profileData.config_report_json_schema) 
+            reportJsonSchema: profileData.report_json_schema 
+                                ? JSON.parse(profileData.report_json_schema) 
                                 : null, 
             logoFilename: profileData.config_logo_filename
         }
@@ -537,12 +537,12 @@ export async function generateReport(videoS3Key: string, userId: string, custome
         stepStart = logStep('Fetching master_config settings...');
         const { data: masterRow, error: masterError } = await supabase
             .from('master_config')
-            .select('config_chat_model, config_system_prompt, config_report_json_schema')
+            .select('config_chat_model, config_system_prompt, report_json_schema')
             .single();
         if (masterError || !masterRow) {
             throw new Error(masterError?.message || 'Failed to load master_config');
         }
-        const rawSchema = masterRow.config_report_json_schema;
+        const rawSchema = masterRow.report_json_schema;
         const parsedSchema = rawSchema
             ? (typeof rawSchema === 'string' ? JSON.parse(rawSchema) : rawSchema)
             : null;

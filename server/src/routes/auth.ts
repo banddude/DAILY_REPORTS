@@ -127,7 +127,7 @@ router.post('/signup', (async (req: Request, res: Response, next: NextFunction) 
             config_whisper_model: config.whisperModel, // Use nested config object
             config_logo_filename: config.logoFilename, // Use nested config object
             config_system_prompt: config.systemPrompt, // Use nested config object
-            config_report_json_schema: config.reportJsonSchema ? JSON.stringify(config.reportJsonSchema) : null, // Use nested config object
+            report_json_schema: config.reportJsonSchema ? JSON.stringify(config.reportJsonSchema) : null, // Use nested config object
             // created_at and updated_at will be handled by DB defaults
         };
 
