@@ -130,7 +130,25 @@ async function askGemini(fileUri: string, mimeType: string, systemPrompt: string
     }
   );
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  
+  // Log the full response for debugging
+  console.log("Gemini API response status:", res.status);
+  console.log("Gemini API response data:", JSON.stringify(data, null, 2));
+  
+  if (!res.ok) {
+    throw new Error(`Gemini API request failed with status ${res.status}: ${JSON.stringify(data)}`);
+  }
+  
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  
+  if (!text) {
+    console.log("No text content found in Gemini response");
+    if (data.error) {
+      throw new Error(`Gemini API error: ${JSON.stringify(data.error)}`);
+    }
+  }
+  
+  return text;
 }
 
 export async function getDailyReportFromVideo(
@@ -188,6 +206,9 @@ Additional required field to add:
     return reportJson;
   } catch (error: any) {
     console.error("Error generating daily report from video:", error);
-    return null;
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+    // Don't return null, throw the error so we can see what's actually failing
+    throw new Error(`Daily report generation failed: ${error.message}`);
   }
 }
