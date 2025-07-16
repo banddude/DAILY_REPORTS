@@ -156,14 +156,14 @@ export async function getDailyReportFromVideo(
   cfg: any
 ): Promise<any> {
   try {
-    const systemPromptContent = cfg.system_prompt;
+    const systemPromptContent = cfg.daily_report_system_prompt;
     const reportSchema = cfg.report_json_schema;
     
     console.log(`Using Gemini 2.5 for video analysis`);
     console.log(`Video path: ${videoPath}`); 
 
     if (!systemPromptContent || !reportSchema) {
-      throw new Error('Required configuration (systemPrompt, reportJsonSchema) missing in config');
+      throw new Error('Required configuration (daily_report_system_prompt, report_json_schema) missing in config');
     }
     
     const mimeType = getVideoMimeType(videoPath);
