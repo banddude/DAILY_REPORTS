@@ -13,6 +13,7 @@ import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } fro
 import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
 import { supabase } from './config'; // <<< Import Supabase client
 import { configService } from './services/ConfigurationService';
+import { userProfileRepository } from './repositories/UserProfileRepository';
 import puppeteer from 'puppeteer';
 // import chromium from 'chrome-aws-lambda';
 
@@ -81,20 +82,8 @@ async function getUserProfile(userId: string): Promise<any> {
   try {
     console.log(`Fetching user profile from Supabase for user: ${userId}`);
 
-    // Select ALL columns from the profiles table
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('*') // Fetch all columns
-      .eq('id', userId)
-      .single();
-
-    if (profileError) {
-      console.error(`Supabase error fetching profile for user ${userId}:`, profileError);
-      if (profileError.code === 'PGRST116') {
-         throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
-      }
-      throw new Error(`Supabase error: ${profileError.message}`);
-    }
+    // Fetch profile using repository
+    const profileData = await userProfileRepository.getProfile(userId);
 
     if (!profileData) {
        throw new Error(`User profile not found in Supabase: ${userId}. Ensure profile exists.`);
