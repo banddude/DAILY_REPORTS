@@ -12,6 +12,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
 import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
 import { supabase } from './config'; // <<< Import Supabase client
+import { configService } from './services/ConfigurationService';
 import puppeteer from 'puppeteer';
 // import chromium from 'chrome-aws-lambda';
 
@@ -36,31 +37,26 @@ const LOGO_PNG_PATH = path.join(PUBLIC_DIR, 'logo.png');
 })();
 
 // --- S3 Setup ---
-const s3Client = new S3Client({}); 
-const s3Bucket = process.env.AWS_S3_BUCKET;
-if (!s3Bucket) {
-    console.error("CRITICAL ERROR: AWS_S3_BUCKET environment variable is not set. Cannot upload reports.");
-    process.exit(1); 
-}
+// Use centralized S3 configuration from config.ts
+import { s3Client, s3Bucket } from './config';
 
 // Dynamic OpenAI client configuration - will be created per request
 function createOpenAIClient(useGemini: boolean = false) {
+  const aiConfig = configService.getAIConfig(useGemini);
+  
+  // Validate that we have the required API key
+  configService.validateAIConfig(useGemini);
+  
   if (useGemini) {
     // Use Gemini API with OpenAI compatibility endpoint
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    
-    if (!geminiApiKey) {
-      throw new Error("GEMINI_API_KEY must be set for Gemini API");
-    }
-    
     return new OpenAI({
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      apiKey: geminiApiKey,
+      apiKey: aiConfig.apiKey,
     });
   } else {
     // Use standard OpenAI configuration
     return new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: aiConfig.apiKey,
     });
   }
 }
@@ -137,15 +133,7 @@ async function getUserProfile(userId: string): Promise<any> {
   }
 }
 
-async function getConfigByTier(tier: string) {
-  const { data: cfg, error } = await supabase
-    .from('config')
-    .select('*')
-    .eq('subscription_level', tier)
-    .single();
-  if (error || !cfg) throw new Error(`No config row for tier ${tier}`);
-  return cfg;  // { whisper_model, chat_model, system_prompt, report_json_schema }
-}
+// Configuration management moved to ConfigurationService
 
 // Modify getDailyReport to accept the full transcription object AND profileData
 async function getDailyReport(transcription: FullTranscription, cfg: any) {
@@ -647,7 +635,7 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         logStep(`User subscription level: ${userSubscriptionLevel}`);
 
         stepStart = logStep(`Fetching configuration for level: ${userSubscriptionLevel}...`);
-        const cfg = await getConfigByTier(userSubscriptionLevel);
+        const cfg = await configService.getConfigByTier(userSubscriptionLevel);
         // Add the Gemini setting from the parameter passed from the client
         cfg.use_gemini = useGemini || false;
         logStep(`Fetched configuration, using Gemini: ${cfg.use_gemini}`, stepStart);
