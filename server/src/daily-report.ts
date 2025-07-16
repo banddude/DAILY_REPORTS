@@ -12,6 +12,8 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import { readFile, writeFile, access, mkdir, copyFile, unlink, readdir, rm } from 'fs/promises'; // Use fs.promises consistently
 import { generateAndUploadViewerHtml } from './reportUtils'; // Import the new helper
 import { supabase } from './config'; // <<< Import Supabase client
+import puppeteer from 'puppeteer';
+// import chromium from 'chrome-aws-lambda';
 
 // --- Path Constants (relative to project root) ---
 const PROJECT_ROOT = path.resolve(__dirname, '..'); // Resolve to the root directory (one level up from dist/src/)
@@ -152,7 +154,7 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     const timedTranscript = transcription.words.map(w => `[${w.start.toFixed(2)}] ${w.word}`).join(' ');
 
     // --- Read Config from tier config (using subscription structure) ---
-    const systemPromptContent = cfg.system_prompt;
+    const systemPromptContent = cfg.daily_report_system_prompt;
     const reportSchema = cfg.report_json_schema;
     const useGemini = cfg.use_gemini || false; // Setting passed from client
     
@@ -336,6 +338,74 @@ async function uploadFileToS3(localPath: string, s3Key: string, contentType: str
     } catch (error: any) {
         console.error(`Error uploading ${localPath} to S3 key ${s3Key}:`, error);
         throw new Error(`S3 upload failed for ${localPath}: ${error.message}`);
+    }
+}
+
+// --- HTML to PDF Conversion Logic ---
+
+/**
+ * Converts HTML content to PDF using puppeteer with chrome-aws-lambda for serverless compatibility
+ */
+async function convertHtmlToPdf(htmlFilePath: string, outputPdfPath: string): Promise<void> {
+    console.log(`Converting HTML to PDF: ${htmlFilePath} -> ${outputPdfPath}`);
+    
+    try {
+        // Detect if we're running in AWS Lambda environment
+        const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+        
+        let browser;
+        
+        if (isLambda) {
+            // Use chrome-aws-lambda for serverless environments (disabled for now)
+            // browser = await chromium.puppeteer.launch({
+            //     args: chromium.args,
+            //     defaultViewport: chromium.defaultViewport,
+            //     executablePath: await chromium.executablePath,
+            //     headless: chromium.headless,
+            //     ignoreHTTPSErrors: true,
+            // });
+            throw new Error('Lambda deployment not configured for PDF generation');
+        } else {
+            // Use regular puppeteer for local development
+            browser = await puppeteer.launch({ 
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                headless: true 
+            });
+        }
+        
+        const page = await browser.newPage();
+        
+        // Read the HTML file
+        const htmlContent = await readFile(htmlFilePath, 'utf-8');
+        
+        // Set the HTML content and wait for it to load completely
+        await page.setContent(htmlContent, { 
+            waitUntil: 'networkidle0' // Wait until no network requests for 500ms
+        });
+        
+        // Generate PDF with the same styling as the HTML
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true, // Include background colors and images
+            margin: {
+                top: '20px',
+                right: '20px',
+                bottom: '20px',
+                left: '20px'
+            }
+        });
+        
+        // Save the PDF to the output path
+        await writeFile(outputPdfPath, pdfBuffer);
+        
+        // Close the browser
+        await browser.close();
+        
+        console.log(`Successfully converted HTML to PDF: ${outputPdfPath}`);
+        
+    } catch (error) {
+        console.error(`Error converting HTML to PDF:`, error);
+        throw error;
     }
 }
 

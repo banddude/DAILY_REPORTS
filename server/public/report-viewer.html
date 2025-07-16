@@ -238,7 +238,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            fetch('daily_report.json')
+            fetch(`daily_report.json?t=${Date.now()}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error loading report data! status: ${response.status}`);

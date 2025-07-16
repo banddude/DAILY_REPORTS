@@ -99,7 +99,7 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
         const configuration = {
             chatModel: config.chat_model,
             whisperModel: config.whisper_model,
-            systemPrompt: config.system_prompt,
+            systemPrompt: config.daily_report_system_prompt,
             reportJsonSchema: config.report_json_schema,
         };
         res.json({ ...profileFieldsToSend, config: configuration }); // Pass the correct config
@@ -123,7 +123,7 @@ router.post('/profile', (req, res, next) => protectMiddleware(req, res, next), (
         'username', 'full_name', 'phone', 'company_name', 'company_street',
         'company_unit', 'company_city', 'company_state', 'company_zip', 'company_phone',
         'company_website', 'chat_model', 'whisper_model',
-        'config_logo_filename', 'system_prompt', 'report_json_schema'
+        'config_logo_filename', 'daily_report_system_prompt', 'report_json_schema'
         // Do NOT include 'id', 'created_at', 'updated_at' here
     ];
     const profileUpdateData: { [key: string]: any } = {};
