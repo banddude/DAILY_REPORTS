@@ -11,12 +11,6 @@ const router = Router();
 const CORRECT_DATA_DIR = path.resolve(__dirname, '..', '..', 'data'); 
 const DEFAULT_PROFILE_PATH = path.join(CORRECT_DATA_DIR, 'profile.json');
 
-// S3 client injection might be removed if not used in this file anymore
-// export const initializeAuthRoutes = (client: S3Client, bucket: string) => {
-//     s3Client = client;
-//     s3Bucket = bucket;
-// };
-// If no initialization needed, remove the function entirely
 export const initializeAuthRoutes = () => {
     // No initialization needed here now
 };
@@ -38,7 +32,6 @@ router.post('/login', (async (req: Request, res: Response, next: NextFunction) =
 
     if (error) {
         console.error(`Supabase login error for ${email}:`, error.message);
-        // Check for specific Supabase error types if needed
         if (error.message.includes('Invalid login credentials')) {
             return res.status(401).json({ success: false, message: 'Invalid credentials.' });
         }
@@ -51,7 +44,6 @@ router.post('/login', (async (req: Request, res: Response, next: NextFunction) =
     }
 
     console.log(`Login successful: ${data.user.email} (User ID: ${data.user.id})`);
-    // Return the JWT access token and relevant user info
     res.json({
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
@@ -70,7 +62,6 @@ router.post('/signup', (async (req: Request, res: Response, next: NextFunction) 
 
     console.log(`Signup attempt for email: ${email}`);
 
-    // 1. Sign up the user with Supabase Auth
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: email,
         password: password,
@@ -84,19 +75,13 @@ router.post('/signup', (async (req: Request, res: Response, next: NextFunction) 
         return res.status(400).json({ success: false, message: signUpError.message });
     }
 
-    // Handle cases where user needs confirmation or something went wrong (no session/user returned)
     if (!signUpData.user) {
          console.error(`Supabase signup failed for ${email}: No user object returned.`);
-         // Even if user needs confirmation, the user object should exist.
-         // If it doesn't, treat it as a failure.
          return res.status(500).json({ success: false, message: 'Signup failed. Unable to retrieve user details.' });
     }
-    
-    // At this point, we have a user ID, even if confirmation is needed
     const newUserId = signUpData.user.id;
     console.log(`Supabase auth user created: ${email} (User ID: ${newUserId})`);
 
-    // 2. Initialize user profile in the database using profile.json template
     try {
         console.log(`Initializing profile in DB for user ${newUserId} using ${DEFAULT_PROFILE_PATH}`);
         const defaultProfileContent = await readFile(DEFAULT_PROFILE_PATH, 'utf-8');

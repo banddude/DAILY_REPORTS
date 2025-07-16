@@ -1,0 +1,65 @@
+{
+  "timestamp": "2025-07-16T15:17:11.013Z",
+  "summary": {
+    "passed": 9,
+    "failed": 0,
+    "total": 9,
+    "successRate": 100
+  },
+  "results": [
+    {
+      "name": "Server Health",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-07-16T15:17:10.024Z"
+    },
+    {
+      "name": "Auth Login Endpoint",
+      "status": "PASS",
+      "details": "Endpoint accessible",
+      "timestamp": "2025-07-16T15:17:10.520Z"
+    },
+    {
+      "name": "Auth Signup Endpoint",
+      "status": "PASS",
+      "details": "Endpoint accessible",
+      "timestamp": "2025-07-16T15:17:10.996Z"
+    },
+    {
+      "name": "Browse Reports Endpoint",
+      "status": "PASS",
+      "details": "Status: 401",
+      "timestamp": "2025-07-16T15:17:10.999Z"
+    },
+    {
+      "name": "Profile GET Endpoint",
+      "status": "PASS",
+      "details": "Status: 401",
+      "timestamp": "2025-07-16T15:17:11.002Z"
+    },
+    {
+      "name": "Profile POST Endpoint",
+      "status": "PASS",
+      "details": "Status: 401",
+      "timestamp": "2025-07-16T15:17:11.005Z"
+    },
+    {
+      "name": "Report Generation Endpoint",
+      "status": "PASS",
+      "details": "Status: 401",
+      "timestamp": "2025-07-16T15:17:11.008Z"
+    },
+    {
+      "name": "Config Tiers Endpoint",
+      "status": "PASS",
+      "details": "Status: 401",
+      "timestamp": "2025-07-16T15:17:11.010Z"
+    },
+    {
+      "name": "S3 Asset Endpoint",
+      "status": "PASS",
+      "details": "Status: 401",
+      "timestamp": "2025-07-16T15:17:11.013Z"
+    }
+  ]
+}
