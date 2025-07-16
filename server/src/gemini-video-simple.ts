@@ -108,7 +108,7 @@ async function waitUntilActive(fileUri: string): Promise<void> {
   throw new Error('Timed out waiting for Gemini');
 }
 
-async function askGemini(fileUri: string, mimeType: string, systemPrompt: string, userPrompt: string): Promise<string> {
+async function askGemini(fileUri: string, mimeType: string, systemPrompt: string): Promise<string> {
   const res = await fetch(
     `${GEMINI_BASE}/v1beta/models/gemini-2.5-flash:generateContent`,
     {
@@ -122,7 +122,7 @@ async function askGemini(fileUri: string, mimeType: string, systemPrompt: string
           {
             parts: [
               { file_data: { mime_type: mimeType, file_uri: fileUri } },
-              { text: `${systemPrompt}\n\n${userPrompt}` }
+              { text: systemPrompt }
             ]
           }
         ]
@@ -170,23 +170,7 @@ export async function getDailyReportFromVideo(
     const fileUri = await uploadVideoToGemini(videoPath);
     await waitUntilActive(fileUri);
     
-    const userPrompt = `Please analyze this video and generate a daily report in JSON based on what you see and hear. Never mention the video directly. Your report should be as though it was written by the person in the video.
-
-IMPORTANT: You MUST include an "images" array in your response with 3-5 specific timestamps where interesting visual moments occur (like showing work progress, materials, issues, etc.). Each image entry should have:
-- timestamp: number (in seconds from start of video)  
-- caption: string (description of what's happening at that moment)
-
-Schema to follow:\n\n${JSON.stringify(reportSchema, null, 2)}
-
-Additional required field to add:
-"images": [
-  {
-    "timestamp": 15.5,
-    "caption": "Description of what's happening at this moment"
-  }
-]`;
-    
-    const messageContent = await askGemini(fileUri, mimeType, systemPromptContent, userPrompt);
+    const messageContent = await askGemini(fileUri, mimeType, systemPromptContent);
     
     if (!messageContent) {
       throw new Error("No content in response message from Gemini API");
