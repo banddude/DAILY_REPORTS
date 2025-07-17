@@ -38,7 +38,7 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
     console.log(`GET /api/profile - Attempting to read profile for user ${userId} from Supabase`);
 
     try {
-        const { data: profileData, error } = await supabase
+        let { data: profileData, error } = await supabase
             .from('profiles')
             .select('*, subscription_level') // Ensure subscription_level is selected
             .eq('id', userId)
@@ -79,7 +79,7 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
                     }
 
                     console.log(`Profile created successfully for user: ${userId}`);
-                    // Continue with the rest of the function using newProfile as profileData
+                    // Use the newly created profile
                     profileData = newProfile;
                     
                 } catch (profileError) {
