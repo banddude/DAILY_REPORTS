@@ -48,12 +48,47 @@ router.get('/profile', (req, res, next) => protectMiddleware(req, res, next), (a
             console.error(`Supabase error reading profile for user ${userId}:`, error);
             // Handle specific errors like PostgREST 'PGRST116' for no rows found
             if (error.code === 'PGRST116') {
-                return res.status(404).json({ 
-                    error: 'User profile not found. Please initialize your profile first.',
-                    needsInitialization: true
-                });
+                // Profile not found - create one for social login users
+                console.log(`Profile not found for user ${userId}, creating default profile...`);
+                
+                try {
+                    const profileToInsert = {
+                        id: userId,
+                        full_name: ' ',
+                        phone: ' ',
+                        subscription_level: 'free',
+                        company_name: ' ',
+                        company_street: ' ',
+                        company_unit: ' ',
+                        company_city: ' ',
+                        company_state: ' ',
+                        company_zip: ' ',
+                        company_phone: ' ',
+                        company_website: ' ',
+                    };
+
+                    const { data: newProfile, error: insertError } = await supabase
+                        .from('profiles')
+                        .insert(profileToInsert)
+                        .select()
+                        .single();
+
+                    if (insertError) {
+                        console.error(`Failed to create profile for user ${userId}:`, insertError);
+                        return res.status(500).json({ error: 'Failed to create user profile.' });
+                    }
+
+                    console.log(`Profile created successfully for user: ${userId}`);
+                    // Continue with the rest of the function using newProfile as profileData
+                    profileData = newProfile;
+                    
+                } catch (profileError) {
+                    console.error(`Error creating profile for user ${userId}:`, profileError);
+                    return res.status(500).json({ error: 'Failed to initialize user profile.' });
+                }
+            } else {
+                return res.status(500).json({ error: `Failed to read profile configuration: ${error.message}` });
             }
-            return res.status(500).json({ error: `Failed to read profile configuration: ${error.message}` });
         }
 
         if (!profileData) {
