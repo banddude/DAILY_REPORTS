@@ -95,11 +95,12 @@ router.post('/signup', (async (req: Request, res: Response, next: NextFunction) 
         const companyAddress = company.address || {};
 
         // Manually map keys from JSON (with nesting) to snake_case columns in DB
+        // Only include basic fields that exist in the database schema
         const profileToInsert = {
             id: newUserId, // Link to the auth user
-            username: defaultProfileData.username, // Assuming username might be in json?
             full_name: defaultProfileData.name, // Map top-level name to full_name
             phone: defaultProfileData.phone,
+            subscription_level: defaultProfileData.subscription_level || 'free', // Add subscription level
             company_name: company.name,
             company_street: companyAddress.street,
             company_unit: companyAddress.unit,
@@ -108,11 +109,7 @@ router.post('/signup', (async (req: Request, res: Response, next: NextFunction) 
             company_zip: companyAddress.zip,
             company_phone: company.phone,
             company_website: company.website,
-            config_chat_model: config.chatModel, // Use nested config object
-            config_whisper_model: config.whisperModel, // Use nested config object
-            config_logo_filename: config.logoFilename, // Use nested config object
-            config_system_prompt: config.systemPrompt, // Use nested config object
-            report_json_schema: config.reportJsonSchema ? JSON.stringify(config.reportJsonSchema) : null, // Use nested config object
+            // Skip config fields if they don't exist in schema
             // created_at and updated_at will be handled by DB defaults
         };
 
@@ -172,6 +169,79 @@ router.post('/signup', (async (req: Request, res: Response, next: NextFunction) 
         });
     }
 
+}) as RequestHandler);
+
+// --- Manual Profile Creation Endpoint for Testing ---
+router.post('/create-profile/:userId', (async (req: Request, res: Response, next: NextFunction) => {
+    const { userId } = req.params;
+    
+    if (!userId) {
+        res.status(400).json({ success: false, message: 'User ID is required.' });
+        return;
+    }
+    
+    console.log(`Manual profile creation attempt for user: ${userId}`);
+    
+    try {
+        console.log(`Initializing profile in DB for user ${userId} using ${DEFAULT_PROFILE_PATH}`);
+        const defaultProfileContent = await readFile(DEFAULT_PROFILE_PATH, 'utf-8');
+        const defaultProfileData = JSON.parse(defaultProfileContent);
+
+        // Extract nested config or default to empty object
+        const config = defaultProfileData.config || {};
+
+        // Extract nested company data or default to empty object
+        const company = defaultProfileData.company || {};
+        const companyAddress = company.address || {};
+
+        // Manually map keys from JSON (with nesting) to snake_case columns in DB
+        // Only include basic fields that exist in the database schema
+        const profileToInsert = {
+            id: userId, // Link to the auth user
+            full_name: defaultProfileData.name, // Map top-level name to full_name
+            phone: defaultProfileData.phone,
+            subscription_level: defaultProfileData.subscription_level || 'free', // Add subscription level
+            company_name: company.name,
+            company_street: companyAddress.street,
+            company_unit: companyAddress.unit,
+            company_city: companyAddress.city,
+            company_state: companyAddress.state,
+            company_zip: companyAddress.zip,
+            company_phone: company.phone,
+            company_website: company.website,
+            // Skip config fields if they don't exist in schema
+            // created_at and updated_at will be handled by DB defaults
+        };
+
+        // Remove undefined/null fields before inserting
+        Object.keys(profileToInsert).forEach(key => {
+            const k = key as keyof typeof profileToInsert;
+            if (profileToInsert[k] === undefined || profileToInsert[k] === null) {
+                delete profileToInsert[k];
+            }
+        });
+
+        console.log('Profile data prepared for insertion:', profileToInsert);
+
+        const { error: insertError } = await supabase
+            .from('profiles')
+            .insert(profileToInsert);
+
+        if (insertError) {
+            console.error(`Failed to initialize profile in DB for user ${userId}:`, insertError);
+            res.status(500).json({ success: false, message: `Failed to create profile: ${insertError.message}` });
+            return;
+        } else {
+            console.log(`Successfully initialized profile in DB for user ${userId}`);
+            res.status(201).json({ success: true, message: 'Profile created successfully' });
+            return;
+        }
+
+    } catch (profileError: any) {
+        console.error(`Error initializing profile from file for user ${userId}:`, profileError);
+        res.status(500).json({ success: false, message: `Error creating profile: ${profileError.message}` });
+        return;
+    }
 }) as RequestHandler);
 
 export default router; 
