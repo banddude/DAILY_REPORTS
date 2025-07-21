@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction, RequestHandler } from 'express
 import { supabase } from '../config'; // Import initialized Supabase client
 import { readFile } from 'fs/promises'; // Import readFile
 import path from 'path'; // Import path
+import { S3Client, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 const router = Router();
 
@@ -242,6 +243,92 @@ router.post('/create-profile/:userId', (async (req: Request, res: Response, next
         res.status(500).json({ success: false, message: `Error creating profile: ${profileError.message}` });
         return;
     }
+}) as RequestHandler);
+
+// --- Delete Account Endpoint ---
+router.delete('/delete-account', (async (req: Request, res: Response, next: NextFunction) => {
+    const userId = (req as any).user?.id;
+    
+    if (!userId) {
+        return res.status(401).json({ success: false, error: 'User not authenticated.' });
+    }
+
+    console.log(`Account deletion request for user: ${userId}`);
+
+    try {
+        // Step 1: Delete all S3 objects for this user
+        const s3Client = new S3Client({
+            region: process.env.AWS_REGION || 'us-east-1',
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || ''
+            }
+        });
+        
+        const bucketName = process.env.AWS_S3_BUCKET || 'shaffer-reports';
+        const userPrefix = `users/${userId}/`;
+        
+        console.log(`Deleting S3 objects for user ${userId} with prefix: ${userPrefix}`);
+        
+        // List all objects with the user prefix
+        const listCommand = new ListObjectsV2Command({
+            Bucket: bucketName,
+            Prefix: userPrefix
+        });
+        
+        const listResponse = await s3Client.send(listCommand);
+        
+        if (listResponse.Contents && listResponse.Contents.length > 0) {
+            console.log(`Found ${listResponse.Contents.length} S3 objects to delete for user ${userId}`);
+            
+            // Delete each object
+            for (const object of listResponse.Contents) {
+                if (object.Key) {
+                    const deleteCommand = new DeleteObjectCommand({
+                        Bucket: bucketName,
+                        Key: object.Key
+                    });
+                    
+                    try {
+                        await s3Client.send(deleteCommand);
+                        console.log(`Deleted S3 object: ${object.Key}`);
+                    } catch (s3Error) {
+                        console.error(`Failed to delete S3 object ${object.Key}:`, s3Error);
+                        // Continue with deletion even if some S3 objects fail
+                    }
+                }
+            }
+        } else {
+            console.log(`No S3 objects found for user ${userId}`);
+        }
+
+        // Step 2: Delete user's profile (due to foreign key constraints)
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', userId);
+
+        if (profileError) {
+            console.error(`Failed to delete profile for user ${userId}:`, profileError);
+            return res.status(500).json({ success: false, error: 'Failed to delete user profile.' });
+        }
+
+        // Step 3: Delete the auth user account
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+
+        if (authError) {
+            console.error(`Failed to delete auth account for user ${userId}:`, authError);
+            return res.status(500).json({ success: false, error: 'Failed to delete user account.' });
+        }
+
+        console.log(`Successfully deleted account and all data for user: ${userId}`);
+        res.json({ success: true, message: 'Account and all associated data deleted successfully.' });
+
+    } catch (error: any) {
+        console.error('Error deleting account:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete account.' });
+    }
+
 }) as RequestHandler);
 
 export default router; 
