@@ -3,6 +3,7 @@ import { supabase } from '../config'; // Import initialized Supabase client
 import { readFile } from 'fs/promises'; // Import readFile
 import path from 'path'; // Import path
 import { S3Client, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { protect, ensureAuthenticated } from '../authMiddleware';
 
 const router = Router();
 
@@ -246,12 +247,9 @@ router.post('/create-profile/:userId', (async (req: Request, res: Response, next
 }) as RequestHandler);
 
 // --- Delete Account Endpoint ---
-router.delete('/delete-account', (async (req: Request, res: Response, next: NextFunction) => {
-    const userId = (req as any).user?.id;
-    
-    if (!userId) {
-        return res.status(401).json({ success: false, error: 'User not authenticated.' });
-    }
+router.delete('/delete-account', protect, (async (req: Request, res: Response) => {
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     console.log(`Account deletion request for user: ${userId}`);
 
