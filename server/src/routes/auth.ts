@@ -4,6 +4,7 @@ import { readFile } from 'fs/promises'; // Import readFile
 import path from 'path'; // Import path
 import { S3Client, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { protect, ensureAuthenticated } from '../authMiddleware';
+import { createClient } from '@supabase/supabase-js';
 
 const router = Router();
 
@@ -311,8 +312,13 @@ router.delete('/delete-account', protect, (async (req: Request, res: Response) =
             return res.status(500).json({ success: false, error: 'Failed to delete user profile.' });
         }
 
-        // Step 3: Delete the auth user account
-        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+        // Step 3: Delete the auth user account using service role
+        const supabaseServiceRole = createClient(
+            process.env.SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        
+        const { error: authError } = await supabaseServiceRole.auth.admin.deleteUser(userId);
 
         if (authError) {
             console.error(`Failed to delete auth account for user ${userId}:`, authError);
