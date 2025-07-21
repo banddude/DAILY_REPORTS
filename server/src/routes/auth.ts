@@ -315,7 +315,7 @@ router.delete('/delete-account', protect, (async (req: Request, res: Response) =
         // Step 3: Delete the auth user account using service role
         const supabaseServiceRole = createClient(
             process.env.SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
+            process.env.SUPABASE_SERVICE_ROLL_SECRET!
         );
         
         const { error: authError } = await supabaseServiceRole.auth.admin.deleteUser(userId);
