@@ -677,7 +677,9 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
         const captionMap = new Map();
         for (const img of aiGeneratedImages) {
             if (img.timestamp && img.caption) {
-                captionMap.set(img.timestamp.toFixed(2), img.caption);
+                // Ensure consistent precision for timestamp matching
+                const timestampKey = parseFloat(img.timestamp).toFixed(2);
+                captionMap.set(timestampKey, img.caption);
             }
         }
         reportJson.images = [];
@@ -687,11 +689,18 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
             const frameS3Key = `${s3FramesBaseKey}${frameFile}`;
             const timestampMatch = frameFile.match(/frame_(\d+\.\d+)\.jpg/);
             const timestamp = timestampMatch ? timestampMatch[1] : null;
-            if (!timestamp || !captionMap.has(timestamp)) {
-                logStep(`No caption found for timestamp ${timestamp}, skipping frame ${frameFile}`);
+            if (!timestamp) {
+                logStep(`Could not extract timestamp from filename ${frameFile}, skipping`);
                 continue;
             }
-            const caption = captionMap.get(timestamp);
+            
+            // Normalize timestamp to same precision for lookup
+            const normalizedTimestamp = parseFloat(timestamp).toFixed(2);
+            if (!captionMap.has(normalizedTimestamp)) {
+                logStep(`No caption found for timestamp ${normalizedTimestamp}, skipping frame ${frameFile}`);
+                continue;
+            }
+            const caption = captionMap.get(normalizedTimestamp);
             try {
                 const frameS3Url = await uploadFileToS3(localFramePath, frameS3Key, 'image/jpeg');
                 reportJson.images.push({ fileName: frameFile, caption: caption, s3Url: frameS3Url });
