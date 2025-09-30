@@ -136,7 +136,7 @@ async function getDailyReport(transcription: FullTranscription, cfg: any) {
     const useGemini = cfg.use_gemini || false; // Setting passed from client
     
     // Dynamic model selection based on API choice
-    const model = useGemini ? "gemini-2.5-flash" : cfg.chat_model;
+    const model = useGemini ? "gemini-2.5-flash" : cfg.report_model;
     // ---------------------------------------------------
 
     console.log(`Using model: ${model} ${useGemini ? '(via Gemini/Vertex AI)' : '(via OpenAI)'}`); 
@@ -288,9 +288,56 @@ async function extractFramesFromData(videoPath: string, frameDataPath: string, o
 
 // --- Video/Audio Processing Logic ---
 
-// Video to audio conversion removed - now using direct video processing with Gemini
+// --- Video to Audio Conversion ---
 
-// Audio transcription removed - now using direct video processing with Gemini
+async function convertVideoToAudio(videoPath: string, audioOutputPath: string): Promise<void> {
+    const command = `ffmpeg -i "${videoPath}" -vn -acodec mp3 -ab 192k -ar 44100 "${audioOutputPath}"`;
+    console.log(`Converting video to audio: ${command}`);
+    try {
+        const { stdout, stderr } = await execAsync(command);
+        if (stdout) console.log('Video-to-audio stdout:', stdout);
+        if (stderr) console.log('Video-to-audio stderr:', stderr);
+        console.log(`Audio extracted successfully to ${audioOutputPath}`);
+    } catch (error) {
+        console.error('Error during video-to-audio conversion:', error);
+        throw new Error(`Video-to-audio conversion failed: ${error}`);
+    }
+}
+
+// --- Audio Transcription ---
+
+async function transcribeAudio(audioPath: string, cfg: any): Promise<FullTranscription> {
+    console.log(`Transcribing audio: ${audioPath}`);
+
+    // Create OpenAI client for transcription
+    const client = createOpenAIClient(false); // Always use OpenAI for Whisper transcription
+
+    try {
+        const transcription = await client.audio.transcriptions.create({
+            file: fs.createReadStream(audioPath),
+            model: cfg.whisper_model || "whisper-1",
+            response_format: "verbose_json",
+            timestamp_granularities: ["word"]
+        });
+
+        // Convert to our FullTranscription format
+        const result: FullTranscription = {
+            text: transcription.text,
+            words: (transcription.words || []).map((word: any) => ({
+                word: word.word,
+                start: word.start,
+                end: word.end
+            }))
+        };
+
+        console.log(`Audio transcribed successfully. Text length: ${result.text.length} chars, Words: ${result.words.length}`);
+        return result;
+
+    } catch (error) {
+        console.error('Error during audio transcription:', error);
+        throw new Error(`Audio transcription failed: ${error}`);
+    }
+}
 
 // --- S3 Upload Logic (Revised) ---
 
@@ -551,7 +598,7 @@ async function selectFrameTimestamps(transcription: FullTranscription, reportJso
  * video -> audio -> transcription -> report JSON -> frame timestamps -> frame extraction -> PDF (optional) -> S3 upload.
  * Returns the S3 key of the generated report JSON file.
  */
-export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string, videoS3Key?: string, useGemini?: boolean): Promise<string> { 
+export async function generateReport(inputVideoPath: string, userId: string, customerNameInput?: string, projectNameInput?: string, videoS3Key?: string, useGemini?: boolean, transcriptionWithTimestamps?: string | null): Promise<string> { 
     // Ensure defaults are applied immediately
     const customerName = customerNameInput || 'UnknownCustomer';
     const projectName = projectNameInput || 'UnknownProject';
@@ -625,14 +672,40 @@ export async function generateReport(inputVideoPath: string, userId: string, cus
 
         stepStart = logStep(`Fetching configuration for level: ${userSubscriptionLevel}...`);
         const cfg = await configService.getConfigByTier(userSubscriptionLevel);
-        // Add the Gemini setting from the parameter passed from the client
-        cfg.use_gemini = useGemini || false;
+        // Use the configuration from the database, with client override if provided
+        if (useGemini !== undefined) {
+            cfg.use_gemini = useGemini;
+        }
+        // If not specified by client and not in config, check if we should infer from report_model
+        if (cfg.use_gemini === undefined) {
+            cfg.use_gemini = cfg.report_model?.includes('gemini') || false;
+        }
         logStep(`Fetched configuration, using Gemini: ${cfg.use_gemini}`, stepStart);
 
-        // 3. Generate Daily Report JSON directly from video using Gemini
-        stepStart = logStep('Generating daily report JSON from video using Gemini...');
-        const reportJson = await getDailyReportFromVideo(inputVideoPath, cfg);
-        logStep('Generated daily report JSON from video', stepStart);
+        // 3. Generate Daily Report JSON - choose processing path based on useGemini flag
+        let reportJson: any;
+        let transcription: FullTranscription | null = null;
+
+        if (cfg.use_gemini) {
+            // Use Gemini video processing
+            stepStart = logStep('Generating daily report JSON from video using Gemini...');
+            reportJson = await getDailyReportFromVideo(inputVideoPath, cfg, transcriptionWithTimestamps);
+            logStep('Generated daily report JSON from video', stepStart);
+        } else {
+            // Use traditional OpenAI audio transcription + text processing
+            stepStart = logStep('Converting video to audio for OpenAI processing...');
+            await convertVideoToAudio(inputVideoPath, audioOutputPath);
+            logStep('Converted video to audio', stepStart);
+
+            stepStart = logStep('Transcribing audio with Whisper...');
+            transcription = await transcribeAudio(audioOutputPath, cfg);
+            logStep('Transcribed audio', stepStart);
+
+            stepStart = logStep('Generating daily report JSON from transcription...');
+            reportJson = await getDailyReport(transcription, cfg);
+            logStep('Generated daily report JSON from transcription', stepStart);
+        }
+
         if (!reportJson) throw new Error("Daily report generation failed.");
 
         // 6. Select Timestamps for Frames (using AI-selected timestamps from report)

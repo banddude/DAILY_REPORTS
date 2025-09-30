@@ -5,6 +5,7 @@ export interface TierConfig {
     subscription_level: string;
     whisper_model: string;
     chat_model: string;
+    report_model: string;
     daily_report_system_prompt: string;
     report_json_schema: any;
     use_gemini?: boolean;
@@ -130,7 +131,7 @@ export class ConfigurationService {
             }
 
             // Validate required config fields
-            const requiredFields = ['whisper_model', 'chat_model', 'daily_report_system_prompt', 'report_json_schema'];
+            const requiredFields = ['whisper_model', 'chat_model', 'report_model', 'daily_report_system_prompt', 'report_json_schema'];
             const missingFields = requiredFields.filter(field => !cfg[field]);
             
             if (missingFields.length > 0) {

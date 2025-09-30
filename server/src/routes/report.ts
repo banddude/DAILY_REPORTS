@@ -28,7 +28,7 @@ interface RequestWithS3File extends Request {
 
 
 // Type for the generateReport function dependency - accepts local path and S3 key
-type GenerateReportFunction = (localVideoPath: string, userId: string, customer: string, project: string, videoS3Key?: string, useGemini?: boolean) => Promise<string>;
+type GenerateReportFunction = (localVideoPath: string, userId: string, customer: string, project: string, videoS3Key?: string, useGemini?: boolean, transcriptionWithTimestamps?: string | null) => Promise<string>;
 
 const router = Router();
 
@@ -224,7 +224,14 @@ const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Respons
     const customer = req.body.customer as string || 'UnknownCustomer';
     const project = req.body.project as string || 'UnknownProject';
     const useGemini = req.body.use_gemini === 'true' || req.body.use_gemini === true;
+    const transcriptionWithTimestamps = req.body.transcription_with_timestamps as string || null;
+    
     console.log(`User ${userId}: Using customer=${customer}, project=${project}, useGemini=${useGemini}`);
+    if (transcriptionWithTimestamps) {
+        console.log(`User ${userId}: Received transcription data with ${transcriptionWithTimestamps.split('\n').length} lines`);
+    } else {
+        console.log(`User ${userId}: No transcription data received`);
+    }
 
     // Use the S3 key from multer-s3
     const uploadedVideoS3Key = req.file.key; 
@@ -243,7 +250,7 @@ const handleVideoUploadAndGenerate = async (req: RequestWithS3File, res: Respons
         await pipeline(s3Response.Body as Readable, fs.createWriteStream(localVideoPath));
         console.log(`Downloaded video to ${localVideoPath}`);
         // Use the local file path for report generation
-        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project, uploadedVideoS3Key, useGemini);
+        const reportJsonKey = await generateReportFunction(localVideoPath, userId, customer, project, uploadedVideoS3Key, useGemini, transcriptionWithTimestamps);
         console.log(`User ${userId}: Report generated successfully. User-scoped JSON Key: ${reportJsonKey}`);
 
         // Return only the key of the generated report JSON

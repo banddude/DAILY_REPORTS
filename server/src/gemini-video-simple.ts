@@ -108,7 +108,7 @@ async function waitUntilActive(fileUri: string): Promise<void> {
   throw new Error('Timed out waiting for Gemini');
 }
 
-async function askGemini(fileUri: string, mimeType: string, systemPrompt: string): Promise<string> {
+async function askGemini(fileUri: string, mimeType: string, systemPrompt: string, transcriptionWithTimestamps?: string | null): Promise<string> {
   const res = await fetch(
     `${GEMINI_BASE}/v1beta/models/gemini-2.5-flash:generateContent`,
     {
@@ -122,7 +122,7 @@ async function askGemini(fileUri: string, mimeType: string, systemPrompt: string
           {
             parts: [
               { file_data: { mime_type: mimeType, file_uri: fileUri } },
-              { text: systemPrompt }
+              { text: createCombinedPrompt(systemPrompt, transcriptionWithTimestamps) }
             ]
           }
         ]
@@ -151,9 +151,25 @@ async function askGemini(fileUri: string, mimeType: string, systemPrompt: string
   return text;
 }
 
+function createCombinedPrompt(systemPrompt: string, transcriptionWithTimestamps?: string | null): string {
+  if (transcriptionWithTimestamps) {
+    return `${systemPrompt}
+
+ADDITIONAL CONTEXT: Here is a timestamped transcription of the video audio to help with accuracy:
+
+---
+${transcriptionWithTimestamps}
+---
+
+Please use this transcription alongside the video content to generate a more accurate report. The timestamps in the transcription correspond to the video timeline.`;
+  }
+  return systemPrompt;
+}
+
 export async function getDailyReportFromVideo(
   videoPath: string,
-  cfg: any
+  cfg: any,
+  transcriptionWithTimestamps?: string | null
 ): Promise<any> {
   try {
     const systemPromptContent = cfg.daily_report_system_prompt;
@@ -170,7 +186,7 @@ export async function getDailyReportFromVideo(
     const fileUri = await uploadVideoToGemini(videoPath);
     await waitUntilActive(fileUri);
     
-    const messageContent = await askGemini(fileUri, mimeType, systemPromptContent);
+    const messageContent = await askGemini(fileUri, mimeType, systemPromptContent, transcriptionWithTimestamps);
     
     if (!messageContent) {
       throw new Error("No content in response message from Gemini API");
