@@ -1,5 +1,7 @@
 # Daily Reports AI - Video-to-Report Automation Platform
 
+> **Retired prototype / reference only.** Daily Reports is now a shipped OfficeAdmin feature with canonical database storage, project integration, media handling, permissions, and SaaS packaging. Do not start new product work in this standalone repository.
+
 **Transform your field video walkthroughs into structured, actionable reports effortlessly.**
 
 ## 1. Overview
